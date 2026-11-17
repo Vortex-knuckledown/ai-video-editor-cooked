@@ -39,24 +39,19 @@ shows at a glance which lines are ours:
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
-| studio 0.2.0 | Clip a stream; the IPv4 retry for downloads |
+| studio 0.2.0 | Clip a stream; the IPv4 retry for downloads; notes on a finished video work with Claude hidden (released 2026-11-18, tag `studio-v0.2.0`) |
 
 ## Next, in order
 
-1. **Release 0.2 on the fork.** Merge `feature/studio-animated-video` and `fix/idle-banner-while-listening` into the
-   fork's `main` with a pull request on the fork, then tag `studio-v0.2.0` and write a GitHub release from the
-   CHANGELOG lines. The app's Update button stays off for a fork (it says "ask Claude Code: update my editor").
-2. **Notes on a finished video, hidden.** Send a note on a clip or an animated video and check that the hidden
-   Claude picks it up (it types into its background session, or a new one resumes it).
-3. **Clip a stream, better moments.** Twitch chat replay as a third signal (a burst of messages is a moment), and
+1. **Clip a stream, better moments.** Twitch chat replay as a third signal (a burst of messages is a moment), and
    more than one video's most replayed weighed fairly against another's.
-4. **Clips in your style.** Run each clip through the original style-edit (your profile's captions, zooms and
+2. **Clips in your style.** Run each clip through the original style-edit (your profile's captions, zooms and
    cards) as an option on the Clip a stream panel.
-5. **"Make one like this" from a link.** Paste a video you like; the analysis that already measures a creator's
+3. **"Make one like this" from a link.** Paste a video you like; the analysis that already measures a creator's
    look (creator-teardown quick mode) sets the script's pace and look for Create from a prompt, without a prompt box
    first. Today the prompt panel's reference links already do the measuring.
-6. **Export all.** One button that saves every approved clip of a stream to a folder, named by title.
-7. **Report the music bug upstream.** `product-video/scripts/sound.py score` fails when given a voice (a shape
+4. **Export all.** One button that saves every approved clip of a stream to a folder, named by title.
+5. **Report the music bug upstream.** `product-video/scripts/sound.py score` fails when given a voice (a shape
    mismatch). The studio mixes its own music round it; the fix belongs in the original.
 
 ## Keeping up with the original
