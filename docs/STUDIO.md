@@ -39,12 +39,13 @@ shows at a glance which lines are ours:
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.3.0 | Clip a stream reads a YouTube stream replay's live chat (released 2026-11-18, tag `studio-v0.3.0`) |
 | studio 0.2.0 | Clip a stream; the IPv4 retry for downloads; notes on a finished video work with Claude hidden (released 2026-11-18, tag `studio-v0.2.0`) |
 
 ## Next, in order
 
-1. **Clip a stream, better moments.** Done for YouTube stream replays: the live chat's surges are a third signal
-   (branch `feature/stream-chat-signal`). Left: Twitch chat (Twitch's chat API needs a signed-in client now), and
+1. **Clip a stream, better moments.** Done for YouTube stream replays in 0.3: the live chat's surges are a third
+   signal. Left: Twitch chat (Twitch's chat API needs a signed-in client now), and
    more than one video's most replayed weighed fairly against another's.
 2. **Clips in your style.** Run each clip through the original style-edit (your profile's captions, zooms and
    cards) as an option on the Clip a stream panel.

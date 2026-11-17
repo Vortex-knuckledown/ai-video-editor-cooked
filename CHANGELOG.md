@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.3.0 (this fork, 2026-11-18)
 - Clip a stream reads the live chat of a YouTube stream replay. A burst of messages, laughing and "W" counting double, now helps pick the moments, next to the most replayed and how loud it gets. A chat too big to download in 10 minutes is left out and the other two still score. Twitch and Kick chat cannot be downloaded, so those are scored on the sound.
 
 ## studio 0.2.0 (this fork, 2026-11-18)
