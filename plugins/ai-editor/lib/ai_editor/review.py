@@ -2489,6 +2489,9 @@ def who_claude():
         ppid, tty, comm = row[0], row[1], row[2].strip()
         if not out and Path(comm).name == "claude":
             out = {"pid": pid, "tty": "/dev/" + tty if tty not in ("?", "??") else ""}
+        elif out and Path(comm).name.lower() == "screen":   # hidden: a Claude in a detached screen session (launcher.hidden)
+            out.update(app="screen", screen=str(pid))
+            break
         elif out and ".app/" in comm:
             out["app"] = comm.split(".app/")[0].rsplit("/", 1)[-1]
             break
@@ -2545,7 +2548,7 @@ def claude_state(folder):
     if where == "desktop" and not lis:   # a desktop session hears notes only through a background `wait`
         st = "working" if b and rec.get("by") != "round" else "idle"
     name = (who.get("host_session") or "").removeprefix("local_")[:8] or (who.get("session") or w.get("session") or "")[:8]
-    return {"state": st, "show": bool(alive and w.get("app") == "Terminal" and w.get("tty")), "last": last,
+    return {"state": st, "show": bool(alive and (w.get("app") == "Terminal" and w.get("tty") or w.get("app") == "screen")), "last": last,
             "resume": resume_cmd(w), "where": where, "name": name, "how": c.get("how") if st == "idle" else None}
 
 
@@ -2553,6 +2556,8 @@ def show_claude(folder):
     """Show Claude: its Terminal tab to the front. True when it was found."""
     import launcher
     w = last_claude(folder)
+    if claude_alive(w) and w.get("app") == "screen":   # hidden: a Terminal window attached to its screen session
+        return launcher.show_screen(w.get("screen"))
     return bool(claude_alive(w) and w.get("app") == "Terminal" and launcher.show_tab(w.get("tty")))
 
 
@@ -2597,6 +2602,8 @@ def reopen(folder, rj, force=False):
     prompt, w = f"/ai-editor:start carry on edits/{folder.name}", last_claude(folder)
     alive = claude_alive(w)
     if alive and w.get("app") == "Terminal" and launcher.type_into(w.get("tty"), prompt):
+        r = {"opened": True, "how": "typed", "command": resume_cmd(w), "session": w.get("session")}
+    elif alive and w.get("app") == "screen" and launcher.type_into_screen(w.get("screen"), prompt):   # hidden
         r = {"opened": True, "how": "typed", "command": resume_cmd(w), "session": w.get("session")}
     elif not alive and w.get("session") and w.get("cwd"):
         opened, cmd = launcher.open_claude(Path(w["cwd"]), prompt, session=w["session"], resume=True)

@@ -136,9 +136,53 @@ def show(cmd, os_name):
     return subprocess.list2cmdline(cmd) if os_name == "Windows" else shlex.join(cmd)
 
 
-def terminal(folder, cmd, os_name):
+SCREEN_PREFIX = "cooked-"   # hidden: the name of every hidden Claude's screen session
+SCREEN_MAX_AGE_S = 12 * 3600   # hidden: a hidden Claude older than this is ended when the next one starts
+
+
+def hidden():
+    """hidden: Claude runs in a detached `screen` session, no Terminal window to watch or close by accident (macOS with
+    screen). AI_EDITOR_WINDOWS=1 brings the windows back."""
+    return platform.system() == "Darwin" and bool(shutil.which("screen")) and not os.environ.get("AI_EDITOR_WINDOWS")
+
+
+def screen_sessions():
+    """hidden: [(id "<pid>.<name>", started epoch s)] of the hidden Claudes running now."""
+    try:
+        out = subprocess.run(["screen", "-ls"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    rows = []
+    for ln in out.splitlines():
+        sid = ln.strip().split("\t")[0]
+        if "." in sid and sid.split(".", 1)[1].startswith(SCREEN_PREFIX):
+            try:
+                rows.append((sid, int(sid.split(".", 1)[1][len(SCREEN_PREFIX):].split("-")[0])))   # cooked-<epoch>-<pid>
+            except ValueError:
+                rows.append((sid, 0))
+    return rows
+
+
+def reap(now=None):
+    """hidden: end hidden Claudes started over SCREEN_MAX_AGE_S ago (an idle Claude Code keeps running until closed)."""
+    now = now or time.time()
+    for sid, at in screen_sessions():
+        if at and now - at > SCREEN_MAX_AGE_S:
+            subprocess.run(["screen", "-S", sid, "-X", "quit"], capture_output=True, timeout=10)
+
+
+def terminal(folder, cmd, os_name, hide=False):
     """The command that opens a new terminal window running cmd in folder, or None when this computer has no
-    terminal to open (Linux without x-terminal-emulator): the page then shows the command to copy."""
+    terminal to open (Linux without x-terminal-emulator): the page then shows the command to copy.
+    hide (macOS): a detached screen session instead of a window; a login, interactive shell (.zprofile and .zshrc), so Homebrew and claude are on PATH."""
+    if os_name == "Darwin" and hide:
+        line = f"cd {shlex.quote(str(folder))} && {shlex.join(cmd)}"
+        # a clean environment, as a new Terminal window has: a page server started from inside a Claude Code session would
+        # otherwise hand that session's CLAUDE_CODE_* markers to this Claude, which then acts as that session's child
+        keep = [f"{k}={os.environ[k]}" for k in ("HOME", "USER", "LOGNAME", "LANG", "AI_EDITOR_HOME", "AI_EDITOR_LIBRARY")
+                if os.environ.get(k)]
+        return ["screen", "-dmS", f"{SCREEN_PREFIX}{int(time.time())}-{os.getpid()}", "/usr/bin/env", "-i", *keep,
+                "TERM=xterm-256color", "/bin/zsh", "-lic", line]
     if os_name == "Darwin":
         line = f"cd {shlex.quote(str(folder))} && {shlex.join(cmd)}"
         esc = line.replace("\\", "\\\\").replace('"', '\\"')   # inside an AppleScript string
@@ -179,6 +223,7 @@ def open_claude(folder, prompt, os_name=None, run=start, session=None, resume=Fa
     """(opened, the command as the user would type it, for the page to show when nothing opened).
     session: resume=True carries that conversation on; else the new Claude takes that id.
     run(argv, folder, os_name) -> bool; the demos pass a recorder so no real window opens."""
+    hide = os_name is None and hidden()   # hidden: only for a real start on this Mac, never the demos' recorded ones
     os_name = os_name or platform.system()
     cmd = plan(os_name, prompt=prompt, session=session, resume=resume)
     # the window's own folders: a Terminal opened by osascript does not inherit them, so the new Claude would
@@ -188,7 +233,9 @@ def open_claude(folder, prompt, os_name=None, run=start, session=None, resume=Fa
         cmd = ["env", *pairs] + cmd
     text = (f"cd /d {show([str(folder)], os_name)} && " if os_name == "Windows" else f"cd {show([str(folder)], os_name)} && ") \
         + show(cmd, os_name)
-    argv = terminal(folder, cmd, os_name)
+    if hide:
+        reap()
+    argv = terminal(folder, cmd, os_name, hide)
     return (bool(argv) and run(argv, folder, os_name)), text
 
 
@@ -206,6 +253,29 @@ def type_into(tty, text, os_name=None, run=None):
     except (OSError, subprocess.TimeoutExpired):
         return False
     return "typed" in (out or "")
+
+
+def type_into_screen(sid, text):
+    """hidden: type text and Enter into a hidden Claude's screen session. True when the session took it."""
+    full = next((x for x, _ in screen_sessions() if sid and x.split(".")[0] == str(sid).split(".")[0]), None)
+    if not full:
+        return False
+    try:   # -p 0: macOS's screen 4.00 drops `stuff` sent to a session with no window named
+        return subprocess.run(["screen", "-S", full, "-p", "0", "-X", "stuff", text + "\r"], capture_output=True, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def show_screen(sid):
+    """hidden: the page's Show Claude for a hidden Claude: a Terminal window attached to its screen session (closing
+    that window only detaches it; Claude keeps working)."""
+    if not sid or os.environ.get("AI_EDITOR_NO_REOPEN"):
+        return False
+    try:
+        return subprocess.run(["osascript", "-e", f'tell application "Terminal" to do script "screen -x {int(str(sid).split(".")[0])}"',
+                               "-e", 'tell application "Terminal" to activate'], capture_output=True, timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return False
 
 
 def show_tab(tty, os_name=None, run=None):
@@ -397,6 +467,14 @@ def demo():
     finally:
         open_claude, (home.running, webbrowser.open) = real_open, real
     shutil.rmtree(tmp, ignore_errors=True)
+    # hidden: a detached screen session in a login shell, never a window; parsed back with its start time
+    hid = terminal(Path("/lib/My Videos"), ["claude", "x"], "Darwin", hide=True)
+    assert hid[:2] == ["screen", "-dmS"] and hid[2].startswith(SCREEN_PREFIX) and hid[3:5] == ["/usr/bin/env", "-i"], hid
+    assert hid[-3:] == ["/bin/zsh", "-lic", "cd '/lib/My Videos' && claude x"] and "TERM=xterm-256color" in hid, hid
+    assert not any(x.startswith("CLAUDE") for x in hid), "never a Claude Code session's markers"
+    assert terminal(Path("/lib"), ["claude"], "Darwin")[0] == "osascript", "no hide: the Terminal window as before"
+    at = int(hid[2][len(SCREEN_PREFIX):].split("-")[0])
+    assert abs(at - time.time()) < 5, "the name carries its start time, so reap() can age it"
     print("launcher demo ok")
 
 
