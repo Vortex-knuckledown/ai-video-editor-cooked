@@ -68,9 +68,49 @@ def ours(payload, sid):
     return bool(askhook.asking_edit(payload, sid))
 
 
+LISTEN_S = 30   # a `wait` heartbeat (home/.listening, review/.listening) newer than this: that session is listening
+
+
+def fresh(f):
+    try:
+        return time.time() - f.stat().st_mtime < LISTEN_S
+    except OSError:
+        return False
+
+
+def listening(sid):
+    """That session's `wait` is listening now: for home page jobs (home/.listening holds its session) or on a video's
+    review page (review/.listening, {"session", ...}). The pages reach it without the Terminal."""
+    f = askhook.pages().parent / "home" / ".listening"
+    try:
+        if fresh(f) and f.read_text(encoding="utf-8").strip() == sid:
+            return True
+    except OSError:
+        pass
+    edits = {Path(j["args"]["edit"]) for j in askhook.home_jobs()
+             if isinstance((j.get("args") or {}).get("edit"), str) and j["args"]["edit"]}
+    edits |= {Path(d["folder"]) for d in askhook.live_pages("review") if isinstance(d.get("folder"), str)}
+    for e in edits:
+        f = e / "review" / ".listening"
+        try:
+            if fresh(f) and (json.loads(f.read_text(encoding="utf-8") or "{}") or {}).get("session") == sid:
+                return True
+        except (OSError, ValueError, AttributeError):
+            continue
+    return False
+
+
+def idle(payload):
+    """Claude Code's "waiting for your input" ping, sent a minute after a turn ends: not a question or a prompt."""
+    return payload.get("notification_type") == "idle_prompt" \
+        or str(payload.get("message") or "").startswith("Claude is waiting for your input")
+
+
 def notify(payload):
     sid = payload.get("session_id") or ""
     if not sid or not ours(payload, sid):
+        return None
+    if idle(payload) and listening(sid):   # it ended its turn listening: notes and jobs on the pages still reach it
         return None
     return askhook.say_terminal(sid, payload.get("message") or "")
 
@@ -195,6 +235,19 @@ def demo():
     assert terminal_file().exists()
     clear("s3")
     assert not terminal_file().exists()
+    # the idle ping while that Claude's `wait` listens: no notice; a permission prompt still shows; not listening: shown
+    idle_ping = {"session_id": "s3", "message": "Claude is waiting for your input", "notification_type": "idle_prompt"}
+    (tmp / "home" / ".listening").write_text("s3", encoding="utf-8")
+    assert notify(idle_ping) is None and not terminal_file().exists(), "listening on the home page: no notice"
+    assert notify({"session_id": "s3", "message": "Claude needs your permission to use Bash"}), "a real prompt shows"
+    clear("s3")
+    (tmp / "home" / ".listening").unlink()
+    (edit / "review").mkdir(parents=True, exist_ok=True)
+    (edit / "review" / ".listening").write_text(json.dumps({"session": "s3"}), encoding="utf-8")
+    assert notify(idle_ping) is None and not terminal_file().exists(), "listening on its review page: no notice"
+    os.utime(edit / "review" / ".listening", (time.time() - LISTEN_S - 5,) * 2)
+    assert notify(idle_ping) and terminal_file().exists(), "its wait stopped: the idle ping shows"
+    clear("s3")
     # a turn that ends on a typed question: the pages say so; one that does not: nothing
     tr = tmp / "t.jsonl"
     tr.write_text("\n".join(json.dumps({"message": {"role": "assistant", "content": [{"type": "text", "text": t}]}})

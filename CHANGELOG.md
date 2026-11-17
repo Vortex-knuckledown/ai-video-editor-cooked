@@ -2,6 +2,9 @@
 
 What changed for every user, newest first.
 
+## Unreleased
+- "Claude needs you in the Terminal window" no longer shows a minute after Claude finishes a round while it is still listening for your notes and new videos. Before, Claude Code's "waiting for your input" ping put the notice on every page even though the page could still reach Claude. A permission prompt or a question typed in the Terminal still shows it, and so does the ping once Claude stops listening.
+
 ## ai-editor 2.7.52, creator-teardown 2.7.52 (2026-11-13)
 - A new video no longer lands on a Claude that is still working on another one. Before, a Claude in the middle of a render or a long round looked free after 15 minutes, so it took the next new video too and both projects clogged one session. Now anything written in an edit in the last hour counts as busy, and the new video gets a Claude of its own.
 
