@@ -297,6 +297,14 @@ links, shape, length, and which of voice, text and music to include). The editor
 draft. No cut and no style-edit. Report with `status animated`. No studio skill in this session: say on the page
 that the studio plugin is not loaded (`/reload-plugins`) and mark the job `--failed`.
 
+### `JOB streamclips edit=<dir> brief=<dir>/brief.json aspect=<9:16|16:9> root=<dir>` (the studio plugin)
+
+New video's "Clip a stream": the best moments of long streams or gameplay videos as short clips. Invoke the
+`studio:stream-clips` skill (Skill tool) on `edit=` and follow it; it reads `brief.json` (the links, how many clips,
+their length, the layout, captions and titles). The editor is already open on a placeholder draft. Not the clips
+skill, no cut and no style-edit. Report with `status streamclips`. No studio skill in this session: say on the page
+that the studio plugin is not loaded (`/reload-plugins`) and mark the job `--failed`.
+
 ### `JOB style-change <my-style|@handle> [style=<style.json>] text=<the user's words>`
 
 The user typed what to change on a style's page (My styles, "Tell it what to change"). Turn the words

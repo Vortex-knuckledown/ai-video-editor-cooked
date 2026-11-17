@@ -1,11 +1,11 @@
 {
   "name": "studio",
   "displayName": "cooked. studio",
-  "description": "Create a fully animated video from a text prompt, no footage: a script in scenes, an animation per scene, and any of an AI voiceover, on-screen text and music. Uses the ai-editor plugin's animation, sound and renderer.",
-  "version": "0.1.0",
+  "description": "New videos with no footage of your own: a fully animated video from a text prompt (a script in scenes, an animation per scene, and any of an AI voiceover, on-screen text and music), and the best moments of long streams and gameplay videos as short clips with a facecam layout and captions. Uses the ai-editor plugin's animation, sound, transcription and renderer.",
+  "version": "0.2.0",
   "author": { "name": "Vortex-knuckledown" },
   "license": "MIT",
-  "keywords": ["video", "animation", "explainer", "text-to-video", "voiceover", "motion-graphics"],
+  "keywords": ["video", "animation", "explainer", "text-to-video", "voiceover", "motion-graphics", "stream-clips", "gaming"],
   "dependencies": [
     { "name": "ai-editor", "version": "^2.0.0" }
   ]
