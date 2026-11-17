@@ -2,6 +2,10 @@
 
 What changed for every user, newest first.
 
+## studio 0.4.0 (this fork, 2026-11-18)
+- Clip a stream has a Look choice: the gaming look, or any of your styles (My style or a creator's). In a style, each clip goes through your styled edit: its captions, zooms and look. Nothing is cut from the gameplay, captions stay on, and cards are off, because stream talk rarely names a real thing to show.
+- A question from Claude while no editor page is open now waits for the next page you open (Home or the video's editor). Before, it went to Claude's own Terminal, which nobody can see when Claude runs hidden, so the video stood still.
+
 ## studio 0.3.0 (this fork, 2026-11-18)
 - Clip a stream reads the live chat of a YouTube stream replay. A burst of messages, laughing and "W" counting double, now helps pick the moments, next to the most replayed and how loud it gets. A chat too big to download in 10 minutes is left out and the other two still score. Twitch and Kick chat cannot be downloaded, so those are scored on the sound.
 

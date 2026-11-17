@@ -2970,8 +2970,16 @@ def make_handler(token):
             lo, hi = lengths.get(b.get("length"), (20, 40))
             aspect = "16:9" if b.get("aspect") == "16:9" else "9:16"
             layout = b.get("layout") if b.get("layout") in ("auto", "facecam", "follow", "fit") else "auto"
+            style = str(b.get("style") or "")   # "": the gaming look; mine or @handle: each clip styled in that style
+            if style.startswith("@"):
+                style = "@" + re.sub(r"[^a-z0-9._-]", "", style[1:].lower())
+                if not (Path(d["root"]) / "creator-teardowns" / style[1:] / "style.json").exists():
+                    return self.send(400, {"ok": False, "msg": f"{style}'s style is not analysed yet."})
+            elif style != "mine":
+                style = ""
             brief = {"links": ok, "count": max(1, min(8, int(b.get("count") or 3))), "min": lo, "max": hi, "layout": layout,
-                     "captions": b.get("captions") is not False, "titles": b.get("titles") is not False, "aspect": aspect}
+                     "captions": b.get("captions") is not False, "titles": b.get("titles") is not False, "aspect": aspect,
+                     "style": style}
             edit = new_edit(Path(d["root"]), "clips " + (urlsplit(ok[0]).netloc.replace("www.", "").split(".")[0] if ok[0].startswith("http") else Path(ok[0]).stem))
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             self.placeholder(edit, aspect, f"Clips from {len(ok)} video{'s' if len(ok) > 1 else ''}")

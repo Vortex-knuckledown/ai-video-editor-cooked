@@ -15,6 +15,8 @@
                                      or the whole frame over a blurred copy of itself
     python3 streamclips.py build PROJ clip1 [--title "WORDS"] [--no-captions]   studio.clip1.scene.json
     python3 streamclips.py render PROJ clip1 [--draft]                         clips/clip1/render.mp4
+    python3 streamclips.py styled PROJ clip1 --as mine|@handle   <library>/edits/<PROJ name>-clip1/: the clip as an
+                                     ordinary edit for the editor's cut and style-edit, nothing cut, in that style
     python3 streamclips.py demo
 
 PROJ is <library>/edits/<name>/ with brief.json from the page: {"links", "count", "min", "max", "layout",
@@ -30,6 +32,7 @@ import re
 import statistics
 import subprocess
 import sys
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -418,7 +421,7 @@ def cmd_make(proj, ids, pad_in=0.0, pad_out=0.0, number=1):
               for w in words_of(proj / m["part"], raw) if a <= w["start"] < b]
         jsave(d / "words.json", ws)
         jsave(d / "clip.json", {"moment": mid, "video": m["video"], "at": m["at"] - (m["in"] - a), "length": round(b - a, 2),
-                                "title": m["title"]})
+                                "title": m["title"], "part": m["part"], "in": round(a, 3)})
         print(f"{mid} -> {d} ({b - a:.1f} s, {len(ws)} words)")
     return 0
 
@@ -548,6 +551,75 @@ def cmd_render(proj, cid, draft=False):
     return 0
 
 
+# ---------------------------------------------------------------- in the user's style
+def raw_words(proj, cj, d, dur):
+    """The clip's transcript in the transcriber's own shape (words and the spacing between them), on the clip's clock:
+    cut and style-edit read words.raw.json. From the moment's transcript when clip.json names it, else rebuilt
+    from words.json."""
+    src = proj / cj["part"].replace(".mp4", ".words.json") if cj.get("part") else None
+    if src and src.exists() and cj.get("in") is not None:
+        a = cj["in"]
+        toks = [{**t, "start": round(max(0.0, t["start"] - a), 3), "end": round(min(dur, t["end"] - a), 3)}
+                for t in jload(src) if t["end"] > a and t["start"] < a + dur]
+    else:
+        toks = []
+        for w in jload(d / "words.json") or []:
+            if toks:
+                toks.append({"text": " ", "start": toks[-1]["end"], "end": w["start"], "type": "spacing"})
+            toks.append({"text": w["w"], "start": w["start"], "end": w["end"], "type": "word"})
+    while toks and toks[0].get("type") == "spacing":
+        toks.pop(0)
+    while toks and toks[-1].get("type") == "spacing":
+        toks.pop()
+    return [t for t in toks if t["end"] > t["start"] or t.get("type") == "spacing"]
+
+
+def gameplay_style(st, cards=False):
+    """The picked style, fitted to a gameplay clip: captions always on (the laid-out clip has none burned in), and no
+    cards unless asked (stream talk rarely names a real thing a card could show; a card style's rate would fail)."""
+    st = dict(st)
+    st["captions"] = {**(st.get("captions") or {}), "present": True}
+    if not cards:
+        st["cards"] = {**(st.get("cards") or {}), "on": False}
+    return st
+
+
+def cmd_styled(proj, cid, as_, cards=False):
+    """<library>/edits/<project>-<clip>/: the laid-out clip as an ordinary edit for the editor's own cut and
+    style-edit (the ai-editor:clip-editor agent), in the style `as_` (mine or @handle). Gameplay keeps every second:
+    spans.json is empty (no cuts) and keep.json covers the whole clip (no pause is tightened)."""
+    proj = Path(proj).resolve()
+    d = clip_dir(proj, cid)
+    if not (d / "vertical.mp4").exists():
+        sys.exit("ERROR: run streamclips.py layout first.")
+    if not re.fullmatch(r"mine|@[a-z0-9._-]+", as_ or ""):
+        sys.exit("ERROR: --as takes mine or @handle (a style from the Styles page).")
+    root = studio.use_editor()
+    e = proj.parent / f"{proj.name}-{cid}"
+    e.mkdir(exist_ok=True)
+    src = e / "source.mp4"
+    src.unlink(missing_ok=True)
+    try:
+        os.link(d / "vertical.mp4", src)
+    except OSError:
+        shutil.copy2(d / "vertical.mp4", src)
+    dur = duration(src)
+    cj = jload(d / "clip.json") or {}
+    jsave(e / "words.raw.json", raw_words(proj, cj, d, dur))
+    jsave(e / "spans.json", [])
+    jsave(e / "keep.json", [{"start": 0.0, "end": round(dur, 3)}])
+    jsave(e / "clip.json", {**cj, "from": str(proj), "clip": cid, "keep_all": True,
+                            "layout": (jload(d / "layout.json") or {}).get("mode")})
+    r = subprocess.run([sys.executable, str(root / "lib" / "ai_editor" / "profile.py"), "style", str(e), "--as", as_],
+                       capture_output=True, text=True, cwd=str(proj.parent.parent))
+    if r.returncode:
+        print(r.stdout[-400:] + r.stderr[-400:])
+        sys.exit(f"ERROR: the style {as_} could not be written for {e.name}.")
+    jsave(e / "style.json", gameplay_style(jload(e / "style.json") or {}, cards))
+    print(f"{e} ({dur:.1f} s, style {as_}, nothing cut, captions on, cards {'on' if cards else 'off'})")
+    return 0
+
+
 # ---------------------------------------------------------------- self-check
 def demo():
     import numpy as np
@@ -583,6 +655,19 @@ def demo():
     assert abs(cw / ch - W / CAM_H) < 0.02 and cx + cw <= 1920 and cy + ch <= 1080 and cy >= 0, (cw, ch, cx, cy)
     assert game_x(1920, 912, 0, 400) >= 400 + 76 and game_x(1920, 912, 1500, 400) + 912 <= 1500, "the game clears the cam"
     assert game_x(1920, 912, 0, 100) == 504, "a small cam leaves the game centred"
+    with tempfile.TemporaryDirectory() as t:   # words.json -> the transcriber's shape, spacing between words
+        cd = Path(t)
+        jsave(cd / "words.json", [{"w": "no", "start": 0.1, "end": 0.4}, {"w": "way", "start": 0.6, "end": 0.9}])
+        toks = raw_words(cd, {}, cd, 5.0)
+        assert [x["type"] for x in toks] == ["word", "spacing", "word"] and toks[1]["start"] == 0.4, toks
+        jsave(cd / "part-1.words.json", [{"text": "a", "start": 9.0, "end": 9.5, "type": "word"},
+                                         {"text": " ", "start": 9.5, "end": 10.2, "type": "spacing"},
+                                         {"text": "b", "start": 10.2, "end": 10.6, "type": "word"}])
+        toks = raw_words(cd, {"part": "part-1.mp4", "in": 10.0}, cd, 5.0)
+        assert [x["text"] for x in toks] == ["b"] and toks[0]["start"] == 0.2, toks
+    g = gameplay_style({"captions": {"present": False, "y_pct": 72}, "cards": {"rate": 20}})
+    assert g["captions"] == {"present": True, "y_pct": 72} and g["cards"] == {"rate": 20, "on": False}, g
+    assert "on" not in gameplay_style({"cards": {"rate": 20}}, cards=True)["cards"]
     assert mmss(3725) == "1:02:05" and mmss(65) == "1:05"
     with tempfile.TemporaryDirectory() as t:
         jsave(Path(t) / "x.json", {"a": 1})
@@ -605,6 +690,8 @@ def main(argv):
     p.add_argument("--mode", default="auto", choices=("auto", "facecam", "follow", "fit")); p.add_argument("--aspect", default="9:16")
     p = sub.add_parser("build"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--title"); p.add_argument("--no-captions", action="store_true")
     p = sub.add_parser("render"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--draft", action="store_true")
+    p = sub.add_parser("styled"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--as", dest="as_", required=True)
+    p.add_argument("--cards", action="store_true", help="keep the style's cards (only for a clip whose talk names real things)")
     sub.add_parser("demo")
     a = ap.parse_args(argv)
     if a.cmd == "meta":
@@ -621,6 +708,8 @@ def main(argv):
         return cmd_build(a.proj, a.clip, a.title, not a.no_captions)
     if a.cmd == "render":
         return cmd_render(a.proj, a.clip, a.draft)
+    if a.cmd == "styled":
+        return cmd_styled(a.proj, a.clip, a.as_, a.cards)
     return demo()
 
 

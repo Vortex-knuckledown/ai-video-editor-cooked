@@ -72,7 +72,7 @@ LIVE_S = 90          # a page polled this recently is open (a background tab pol
 # long they take (hooks.json gives the hook a day). Only once every such page closed does the terminal box show.
 # AI_EDITOR_ASK_TIMEOUT (seconds) caps it anyway (the self-check).
 KEEP_S = 120         # a question whose hook stopped polling (Esc in Claude Code) leaves the pages by then
-CHECK_S = 20         # how often the waiting hook looks for an open page
+CHECK_S = float(os.environ.get("AI_EDITOR_ASK_CHECK_S") or 20)   # how often the waiting hook looks for an open page
 TERM_S = 1800       # a Terminal notice older than this: Claude gave up waiting, or the user answered elsewhere
 MARK_S = 120         # <edit>/review/asking older than this: its hook stopped (the hook touches it while it waits)
 MAX_IMAGE = 15 << 20      # an attached image (review notes and answers)
@@ -401,6 +401,12 @@ def _call(url, path, body=None, timeout=3):
     return json.loads(urllib.request.urlopen(req, timeout=timeout).read() or b"{}")
 
 
+def hidden():
+    """fork: this Claude runs hidden in a background screen session the launcher started (cooked-<epoch>-<pid>), so
+    nobody can see its own question box."""
+    return ".cooked-" in os.environ.get("STY", "")
+
+
 def relay(payload, timeout=None, poll=0.5):
     """The hook's stdout (a JSON string), or None for Claude Code's own question box."""
     if payload.get("tool_name") != "AskUserQuestion":
@@ -414,15 +420,21 @@ def relay(payload, timeout=None, poll=0.5):
     qid = secrets.token_urlsafe(12)
     sent = []
     about = asking_edit(payload, sid)
-    edit = live("review")
-    for u in edit + [u for u in live() if u not in edit]:   # the video's editor first; Home marked when an editor has it
-        try:
-            _call(u, "/ask", {"id": qid, "questions": qs, "session": sid, "elsewhere": bool(sent) and u not in edit,
-                              **({"edit": str(about)} if about else {})})
-            sent.append(u)
-        except Exception:   # 409: another session's page
-            pass
-    if not sent:   # no page took it: it goes to the terminal box, and every open page says so
+    hide = hidden()
+
+    def offer():
+        edit = live("review")
+        for u in edit + [u for u in live() if u not in edit]:   # the video's editor first; Home marked when an editor has it
+            if u in sent:
+                continue
+            try:
+                _call(u, "/ask", {"id": qid, "questions": qs, "session": sid, "elsewhere": bool(sent) and u not in edit,
+                                  **({"edit": str(about)} if about else {})})
+                sent.append(u)
+            except Exception:   # 409: another session's page
+                pass
+    offer()
+    if not sent and not hide:   # no page took it: it goes to the terminal box, and every open page says so
         say_terminal(sid, "Claude is asking: " + str(qs[0].get("question") or "a question"))
         return None
     t0, result = time.time(), None
@@ -434,7 +446,9 @@ def relay(payload, timeout=None, poll=0.5):
         while result is None and (end is None or time.time() < end):
             if time.time() - beat > CHECK_S:
                 beat = time.time()
-                if not set(sent) & set(live()):   # every page that had it closed: the terminal box
+                if hide:   # fork: a hidden Claude's terminal box is never seen: the next page that opens gets it
+                    offer()
+                elif not set(sent) & set(live()):   # every page that had it closed: the terminal box
                     say_terminal(sid, "Claude is asking: " + str(qs[0].get("question") or "a question"))
                     break
                 if about:
@@ -449,7 +463,7 @@ def relay(payload, timeout=None, poll=0.5):
                     sent.remove(u)
                 if result:
                     break
-            if not sent:
+            if not sent and not hide:
                 break
             if result is None:
                 time.sleep(poll)
@@ -557,6 +571,23 @@ def demo():
         th.start()
         return th, box
 
+    # fork: a hidden Claude (in a cooked- screen session) with no page showing waits, and the page that opens gets it
+    hid = subprocess.Popen(me, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8",
+                           env={**os.environ, "STY": "123.cooked-1-2", "AI_EDITOR_ASK_CHECK_S": "0.2"})
+    hid.stdin.write(json.dumps(payload))
+    hid.stdin.close()
+    time.sleep(1)
+    assert hid.poll() is None, "a hidden Claude's question waits for a page"
+    for _ in range(100):   # the page opens (it polls) and the waiting hook offers it the question
+        h = _call(url, "/ask?v=1")["ask"]
+        if h:
+            break
+        time.sleep(0.1)
+    assert h, "the page that opened got the hidden Claude's question"
+    _call(url, "/ask/answer", {"id": h["id"], "answers": ["Loose", "Zooms"]})
+    out = hid.stdout.read()
+    hid.wait(timeout=30)
+    assert json.loads(out)["hookSpecificOutput"]["updatedInput"]["answers"]["Which cut?"] == "Loose", out
     _call(url, "/ask?v=1")
     assert [u for u in live()] == [url]
     # the answer path: one option, and the user's own words for a multi-select

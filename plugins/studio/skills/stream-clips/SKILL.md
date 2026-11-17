@@ -36,7 +36,8 @@ Say every step in the editor too, where the user is watching: `python3 "$R" EDIT
 ## 0. The brief
 
 `EDIT/brief.json`: `{"links": [...], "count", "min", "max", "layout": "auto"|"facecam"|"follow"|"fit", "captions",
-"titles", "aspect"}`. Asked in chat instead of the page: make the edit folder (`python3 "$E/lib/ai_editor/library.py"
+"titles", "aspect", "style"}`. `style` empty is the gaming look (step 4); `mine` or `@handle` styles every clip in
+that style (step 4b instead of build and render). Asked in chat instead of the page: make the edit folder (`python3 "$E/lib/ai_editor/library.py"
 path`, then `edits/clips-<name>/`), write brief.json yourself, and ask in one question box call: how many clips
 (3 recommended / 1 / 5), how long (20-40 s recommended / 40-60 s / 60-90 s). Layout auto, captions and titles on.
 Then `python3 "$R" EDIT start --raw --video <any 2 s clip> --stage edit` so the editor has the video.
@@ -101,6 +102,29 @@ hook title: at most 6 words, true to what happens and what is said in that clip,
 off, no names the clip does not say. Look at a frame from the middle of every render (`ffmpeg -ss <mid> -i
 clips/clipN/render.mp4 -frames:v 1 -vf scale=360:-2 clips/clipN/look.jpg`): the cam shows a face, the captions sit
 clear of it, nothing important is cut off. A wrong layout: `layout` again with another `--mode`, then build and render.
+
+## 4b. In the user's style (brief.json `style` is `mine` or `@handle`)
+
+After `make` and `layout` (no build, no render), for every clip:
+
+```bash
+python3 "$PY" "$T" styled EDIT clip1 --as <style>      # <library>/edits/<EDIT name>-clip1/: nothing cut, captions on, cards off
+# --cards keeps the style's cards: only for a clip whose talk names real things (a game, a product, a site)
+```
+
+Then launch one `ai-editor:clip-editor` agent per clip, all in one message, in the background. Give each `EDIT` (the
+styled folder that `styled` printed, absolute), `ROOT` (`$E`), the `PY` line, and the answers: aspect 9:16, layout
+overlay, music none (the stream's own sound stays), engine whisper, reframe no, no captions burned in. Add these words to
+each: "A gameplay stream moment: keep every second. spans.json is already [] and keep.json covers the whole clip:
+never change either, skip retake detection and the judge rounds. style.json already has captions on and cards off
+for gameplay: never set captions present false, and add no cards. Facecam layout: the top third is the streamer's
+webcam." Say "Styling N clips" on the page while they run (a few minutes a clip).
+
+Each returns `{"status", "sheet", ...}`. Look at every `ready` clip's stills sheet: captions clear of the face, no card
+over the cam. A `failed` one: say which, and make that clip in the gaming look instead (build and render, step 4).
+Then render each styled clip (laptop): `python3 "$PY" "$E/skills/style-edit/scripts/edit.py" render <styled folder>`
+gives `<styled folder>/render.mp4`; step 5 hands those over instead of `clips/clipN/render.mp4`. A note on a styled
+clip is a style-edit note on its styled folder (the style-edit skill's notes), then render it again.
 
 ## 5. The editor
 
