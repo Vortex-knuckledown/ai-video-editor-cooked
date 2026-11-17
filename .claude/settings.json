@@ -11,6 +11,7 @@
   },
   "enabledPlugins": {
     "ai-editor@nextwork": true,
-    "creator-teardown@nextwork": true
+    "creator-teardown@nextwork": true,
+    "studio@nextwork": true
   }
 }

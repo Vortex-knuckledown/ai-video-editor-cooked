@@ -289,6 +289,14 @@ Notes on a skill style's video become rules in that skill's own SKILL.md (`## Le
 settings file: the final approve's Teach panel does it (`review.py learn --done`), as do `learn --scope this-style` and a
 `style-change` job on a skill style, through the skill-improver skill.
 
+### `JOB animated edit=<dir> brief=<dir>/brief.json aspect=<9:16|16:9> root=<dir>` (the studio plugin)
+
+New video's "Create from a prompt": a fully animated video from the user's prompt, no footage. Invoke the
+`studio:animated-video` skill (Skill tool) on `edit=` and follow it; it reads `brief.json` (the prompt, reference
+links, shape, length, and which of voice, text and music to include). The editor is already open on a placeholder
+draft. No cut and no style-edit. Report with `status animated`. No studio skill in this session: say on the page
+that the studio plugin is not loaded (`/reload-plugins`) and mark the job `--failed`.
+
 ### `JOB style-change <my-style|@handle> [style=<style.json>] text=<the user's words>`
 
 The user typed what to change on a style's page (My styles, "Tell it what to change"). Turn the words

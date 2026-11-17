@@ -88,6 +88,9 @@ def allow_rules(plugin=PLUGIN):
     quoted or not), ffmpeg, ffprobe and the Remotion CLI. Never Bash on its own, never another folder."""
     root = Path(plugin).as_posix()
     own = [f"Bash({exe} {q}{root}/*)" for exe in ("python3", "py", "node") for q in ("", '"')]
+    studio = Path(plugin).parent / "studio"   # studio: the studio plugin beside it (a checkout's plugins/studio)
+    if studio.is_dir():
+        own += [f"Bash({exe} {q}{studio.as_posix()}/*)" for exe in ("python3", "py") for q in ("", '"')]
     return own + ["Bash(ffmpeg *)", "Bash(ffprobe *)", "Bash(npx remotion *)"]
 
 
@@ -105,7 +108,7 @@ def not_everywhere(plugins):
     or locally only (the repo's .claude/settings.json does that), so a Claude started in the library would not
     have /ai-editor:start. The newest row of each; [] when they are installed for the user."""
     out = []
-    for name in ("ai-editor", "creator-teardown"):
+    for name in ("ai-editor", "creator-teardown", "studio"):   # studio: the studio plugin too
         rows = [r for k, v in plugins.items() if k.split("@")[0] == name and isinstance(v, list) for r in v if isinstance(r, dict)]
         if rows and not any(r.get("scope") == "user" for r in rows) and rows[-1].get("installPath"):
             out.append(rows[-1]["installPath"])

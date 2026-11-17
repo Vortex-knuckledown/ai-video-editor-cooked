@@ -103,7 +103,7 @@ UPDATE = Path(__file__).resolve().parents[2] / "skills" / "update" / "scripts" /
 TRANSCRIBE = Path(__file__).resolve().parents[2] / "skills" / "cut" / "scripts" / "transcribe.py"
 EDIT_PY = Path(__file__).resolve().parents[2] / "skills" / "style-edit" / "scripts" / "edit.py"
 BEAT_S = 6
-JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new")
+JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new", "animated")   # studio: "animated" is the studio plugin's Create from a prompt
 TAKE = ("captions", "pace", "graphics", "sound")          # the page's parts; editplan.py --take names
 # The page's "graphics" box is her visuals as a whole: what she shows, how it moves in and where it sits.
 EDITPLAN_PARTS = {"graphics": ("graphics", "entrances", "layout")}
@@ -1749,6 +1749,8 @@ def job_line(j, root):
             (f" broll={a['broll']}" if a.get("broll") else "") + (f" instructions={a['instructions']}" if a.get("instructions") else "") + \
             (f" mode={a['mode']}" if a.get("mode") else "") + \
             f" root={root}"
+    if j["type"] == "animated":   # studio: the studio plugin's animated-video skill takes it
+        return f"JOB animated edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
     if j["type"] == "skill-change":
         return f"JOB skill-change {a['skill']} path={a['path']} text={a['text']}"
     if j["type"] == "skill-new":
@@ -2756,6 +2758,8 @@ def make_handler(token):
                 args = {"handle": td["args"]["handle"], "take": take}
             elif kind == "video":
                 return self.videos(b, d)
+            elif kind == "animated":   # studio: Create from a prompt (plugins/studio, animated-video skill)
+                return self.animated(b, d)
             elif kind == "update":   # Settings, Update: the window runs it itself (run_home), no Claude needed
                 if update_info()["fork"]:
                     return self.send(409, {"error": "Your editor is your own copy (a fork). Ask Claude Code: update my editor."})
@@ -2905,6 +2909,33 @@ def make_handler(token):
             for jid in fresh[1:] if idle else fresh:
                 claude_for(jid)
             return self.send(200, {"id": ids[0], "ids": ids, "edits": edits})
+
+        def animated(self, b, d):   # studio: Create from a prompt. The edit opens at once on a placeholder draft.
+            """A fully animated video from a prompt (the studio plugin's animated-video skill): brief.json in a new edit,
+            the editor opened on a 2 s placeholder, one JOB animated for a Claude."""
+            prompt = re.sub(r"\s+", " ", str(b.get("prompt") or "")).strip()[:4000]
+            if len(prompt) < 8:
+                return self.send(400, {"ok": False, "msg": "Say what the video is about first."})
+            refs = [u.strip() for u in b.get("refs") or [] if isinstance(u, str) and u.strip().startswith("http")][:6]
+            aspect = "16:9" if b.get("aspect") == "16:9" else "9:16"
+            opts = {k: b.get(k) is not False for k in ("voice", "text", "music")}
+            length = max(10, min(180, int(b.get("length") or 30)))
+            edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or "animated")
+            brief = {"prompt": prompt, "refs": refs, "aspect": aspect, "length": length, **opts}
+            (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
+            w, h = (1920, 1080) if aspect == "16:9" else (1080, 1920)
+            ph = edit / "placeholder.mp4"
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=0x0B0B0D:s={w}x{h}:r=30:d=2",
+                            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(ph)], capture_output=True, timeout=60)
+            if ph.exists():
+                subprocess.run([sys.executable, str(REVIEW), str(edit), "start", "--raw", "--video", str(ph), "--stage", "edit"],
+                               capture_output=True, timeout=60)
+                rj = edit / "review.json"
+                if rj.exists():   # its name in Your videos and on the editor: the prompt's start
+                    save(rj, {**load(rj), "name": prompt[:60]})
+            j = update(lambda d: queue(d, "animated", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": aspect}))
+            claude_unless_idle(j["id"])
+            return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
 
         def cover(self):
             """A style's preview image: an image or a short clip, streamed to a temp file, then one 720x1280 frame."""
