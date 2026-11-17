@@ -1252,7 +1252,7 @@ function vNew(){
     :`<button class="pill" onclick="scanHome(true)">Show recent clips from Movies, Desktop and Downloads</button>`;
   const ups=nv.up.map(u=>`<div class="clip" id="up-${u.id}"><div class="pic upic">${u.bad?`<span>${esc(u.bad)}</span><button class="more" style="opacity:1" aria-label="Dismiss" title="Dismiss" onclick="nv.up=nv.up.filter(x=>x.id!==${u.id});render()">${CROSS}</button>`
     :`<span class="uptxt">${u.msg==='Adding...'?`Adding... ${u.pct}%`:esc(u.msg)}</span><div class="upbar"><div style="width:${u.pct}%"></div></div>`}</div><div class="nm">${esc(u.name)}</div></div>`).join('');
-  const side=nv.reel?reelSide():`<div class="panel rv-side" style="width:520px;flex-shrink:0">
+  const side=nv.stream?streamSide():nv.prompt?promptSide():nv.reel?reelSide():`<div class="panel rv-side" style="width:520px;flex-shrink:0">
     ${n>=2?`<div class="sec"><div class="h">These ${n} clips are</div><div style="display:flex;flex-direction:column;gap:8px">
       <button class="opt ${nv.join?'on':''}" onclick="nv.join=true;render()"><div class="radio"></div><div class="grow"><div class="row" style="gap:8px"><b style="font-size:14px">One video, joined in this order</b><span class="rec">Recommended</span></div><div class="sub" style="font-size:13px;line-height:18px">${nv.sel.map((p,i)=>i+1).join(', ')} play back to back.${total()?` About ${fmtT(total())} long.`:''}</div></div></button>
       <button class="opt ${nv.join?'':'on'}" onclick="nv.join=false;render()"><div class="radio"></div><div class="grow"><b style="font-size:14px">Separate videos</b><div class="sub" style="font-size:13px;line-height:18px">Each clip becomes its own video. ${n} in total.</div></div></button></div></div>`:''}
@@ -1270,6 +1270,8 @@ function vNew(){
     <div><h1>New video</h1><p class="lede" style="margin-top:8px;font-size:16px;line-height:22px">Click the clips you want, in the order they play.</p></div>
     <div class="between" style="align-items:center;flex-wrap:wrap"><div class="row" style="gap:8px;flex-wrap:wrap">${chips}</div><label class="choose">${FOLDER}Choose files...<input type="file" id="pickm" multiple accept="video/*,.mov,.mkv,.mp4" class="hide" onchange="chooseFiles(this.files);this.value=''"></label></div>
     ${reelRow()}
+    ${promptRow()}
+    ${streamRow()}
     ${trashRow()}<div class="grid"><div class="droptile" id="droptile" onclick="$('#pickm').click()">${UP}<div style="font-weight:500;font-size:13px;line-height:17px">Drop files here</div><div class="muted" style="font-size:12px">or anywhere on this window</div></div>${ups}${vids.map(clipCard).join('')}</div>
     ${!vids.length&&!nv.up.length&&R?`<div class="muted">No clips here yet. Choose files or drop them in.</div>`:''}
     <div class="row" style="gap:8px"><b style="font-weight:500;font-size:13px;white-space:nowrap;flex-shrink:0">${n} picked</b><span class="muted">Click a clip again to take it out. The numbers are the order they play.</span></div>
@@ -1502,6 +1504,76 @@ function reelSide(){
     <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${libs?(nv.brollAuto?'B-roll: Claude decides':nv.broll.length?`B-roll: ${nv.broll.map(esc).join(', ')}`:'Tick a b-roll folder'):'Connect a b-roll folder first'}</span></div>
       <button class="go" id="make" ${ok?'':'disabled'} onclick="makeVideo()">Make my video</button>
       <div class="muted faint" style="line-height:18px">It opens in the editor, so you can change anything.</div></div></div>`;
+}
+// ---- studio: Create from a prompt (plugins/studio, the animated-video skill). A fully animated video, no footage:
+// a prompt, optional reference links for the look, the shape and length, and any of a voiceover, on-screen text and music.
+function promptRow(){
+  return `<div class="row" style="gap:8px;max-width:640px;align-items:center"><span class="muted" style="font-size:13px">No footage?</span>
+    <button class="btn quiet sm" onclick="nv.prompt=nv.prompt||{text:'',refs:'',length:30,voice:true,caption:true,music:true,msg:''};nv.reel=null;nv.stream=null;render()">Create from a prompt</button>
+    <span class="muted faint" style="font-size:12px">A fully animated video with a voiceover, text and music.</span></div>`;
+}
+function promptSide(){
+  const P=nv.prompt,tick=(k,t,s)=>`<button class="opt ${P[k]?'on':''}" onclick="nv.prompt.${k}=!nv.prompt.${k};render()"><div class="radio" style="border-radius:5px"></div><div class="grow"><b style="font-size:14px">${t}</b><div class="sub" style="font-size:13px;line-height:18px">${s}</div></div></button>`;
+  const ok=P.text.trim().length>=8&&(P.voice||P.caption||P.music);
+  return `<div class="panel rv-side" style="width:520px;flex-shrink:0">
+    <div class="sec"><div class="between"><span class="h">Create from a prompt</span><button class="hlink" style="font-size:13px" onclick="nv.prompt=null;render()">Close</button></div>
+      <div class="sub">Say what the video is about. Claude writes a script in scenes, animates every scene and puts it in the editor.</div>
+      <textarea id="sprompt" class="input" style="min-height:110px;padding:10px;font-family:inherit;resize:vertical" placeholder="For example: a 30 second explainer on how a black hole forms, for curious teenagers" oninput="nv.prompt.text=this.value;promptReady()">${esc(P.text)}</textarea></div>
+    <div class="sec"><div class="h">A video to copy the look of <span class="muted">(optional)</span></div>
+      <textarea class="input" style="min-height:54px;padding:10px;font-family:inherit;resize:vertical" placeholder="Paste links, one a line. Only their style is measured, never their footage." oninput="nv.prompt.refs=this.value">${esc(P.refs)}</textarea></div>
+    <div class="sec"><div class="h">Shape</div><div class="row">${[['9:16','Tall · 9:16'],['16:9','Wide · 16:9']].map(([a,t])=>`<button class="pill ${aspectOf()===a?'on':''}" onclick="nv.aspect='${a}';nv.aspectSet=1;render()">${t}</button>`).join('')}</div></div>
+    <div class="sec"><div class="h">Length</div><div class="row">${[15,30,60,90].map(n=>`<button class="pill ${P.length===n?'on':''}" onclick="nv.prompt.length=${n};render()">${n} s</button>`).join('')}</div></div>
+    <div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
+      ${tick('voice','AI voiceover','ElevenLabs with your key, else the free Mac voice.')}
+      ${tick('caption','On-screen text','Word-timed captions of what is said.')}
+      ${tick('music','Music','Made for this video, so nothing to licence. It dips under the voice.')}</div></div>
+    ${P.msg?`<div class="sec"><div class="msg bad">${CROSS}<span>${esc(P.msg)}</span></div></div>`:''}
+    <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${aspectOf()==='9:16'?'Tall':'Wide'} ${aspectOf()} · ${P.length} s · ${['voice','caption','music'].filter(k=>P[k]).map(k=>({voice:'Voice',caption:'Text',music:'Music'})[k]).join(', ')||'Pick at least one'}</span></div>
+      <button class="go" id="make" ${ok?'':'disabled'} onclick="makeAnimated()">Make my video</button>
+      <div class="muted faint" style="line-height:18px">You approve the script first. It opens in the editor, so you can change anything.</div></div></div>`;
+}
+function promptReady(){const P=nv.prompt,b=$('#make');if(b)b.disabled=!(P.text.trim().length>=8&&(P.voice||P.caption||P.music))}
+async function makeAnimated(){
+  const P=nv.prompt,b=$('#make');if(b)b.disabled=true;
+  const r=await post('/job',{type:'animated',prompt:P.text,refs:P.refs.split(/\s+/).filter(u=>/^https?:\/\//.test(u)),aspect:aspectOf(),length:P.length,voice:!!P.voice,text:!!P.caption,music:!!P.music});
+  if(!r._ok){nv.prompt.msg=r.msg||r.error||'That did not work.';render();return}
+  nv.prompt=null;await load();toEditor(r);
+}
+// ---- studio: Clip a stream (plugins/studio, the stream-clips skill). Long streams or gameplay videos in, the best
+// moments out as short clips: YouTube's most replayed and the loudest reactions find them, the editor shows them all.
+function streamRow(){
+  return `<div class="row" style="gap:8px;max-width:640px;align-items:center"><span class="muted" style="font-size:13px">A long stream?</span>
+    <button class="btn quiet sm" onclick="nv.stream=nv.stream||{links:'',count:3,length:'short',layout:'auto',captions:true,titles:true,msg:''};nv.prompt=null;nv.reel=null;render()">Clip a stream</button>
+    <span class="muted faint" style="font-size:12px">The best moments of a stream or gameplay video as short clips.</span></div>`;
+}
+const streamOk=()=>{const P=nv.stream;return !!P&&P.links.split(/\n+/).some(u=>/^https?:\/\/\S+/.test(u.trim())||/^[~\/].+\.(mp4|mov|mkv|webm)$/i.test(u.trim()))};
+function streamSide(){
+  const P=nv.stream,pill=(k,v,t)=>`<button class="pill ${P[k]===v?'on':''}" onclick="nv.stream.${k}=${JSON.stringify(v).replace(/"/g,"'")};render()">${t}</button>`;
+  const tick=(k,t,s)=>`<button class="opt ${P[k]?'on':''}" onclick="nv.stream.${k}=!nv.stream.${k};render()"><div class="radio" style="border-radius:5px"></div><div class="grow"><b style="font-size:14px">${t}</b><div class="sub" style="font-size:13px;line-height:18px">${s}</div></div></button>`;
+  const lay=[['auto','Claude decides','Facecam on top if there is one, else the best fit.'],['facecam','Facecam on top','The streamer above, the game below.'],['follow','Follow the face','For IRL and just-chatting streams.'],['fit','Whole frame','The full picture over a blurred copy of itself.']];
+  return `<div class="panel rv-side" style="width:520px;flex-shrink:0">
+    <div class="sec"><div class="between"><span class="h">Clip a stream</span><button class="hlink" style="font-size:13px" onclick="nv.stream=null;render()">Close</button></div>
+      <div class="sub">Paste up to 5 links. Claude finds the moments people replay and react to most, you pick which become clips, and they open in the editor.</div>
+      <textarea id="slinks" class="input" style="min-height:90px;padding:10px;font-family:inherit;resize:vertical" placeholder="https://www.youtube.com/watch?v=...  (YouTube, Twitch, Kick, or a video file's path, one a line)" oninput="nv.stream.links=this.value;streamReady()">${esc(P.links)}</textarea>
+      <div class="muted faint" style="line-height:18px">Only clip videos you have the right to use: your own, or a creator who allows clipping.</div></div>
+    <div class="sec"><div class="h">How many clips</div><div class="row">${[1,3,5].map(n=>pill('count',n,String(n))).join('')}</div></div>
+    <div class="sec"><div class="h">Each clip</div><div class="row">${pill('length','short','20-40 s')}${pill('length','mid','40-60 s')}${pill('length','long','60-90 s')}</div></div>
+    <div class="sec"><div class="h">Shape</div><div class="row">${[['9:16','Tall · 9:16'],['16:9','Wide · 16:9']].map(([a,t])=>`<button class="pill ${aspectOf()===a?'on':''}" onclick="nv.aspect='${a}';nv.aspectSet=1;render()">${t}</button>`).join('')}</div></div>
+    ${aspectOf()==='9:16'?`<div class="sec"><div class="h">Layout</div><div style="display:flex;flex-direction:column;gap:8px">${lay.map(([k,t,d])=>`<button class="opt ${P.layout===k?'on':''}" onclick="nv.stream.layout='${k}';render()"><div class="radio"></div><div class="grow"><b style="font-size:14px">${t}</b><div class="sub" style="font-size:13px;line-height:18px">${d}</div></div></button>`).join('')}</div></div>`:''}
+    <div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
+      ${tick('captions','Captions','Big word-by-word captions of what is said.')}
+      ${tick('titles','Hook title','A short line on top for the first seconds.')}</div></div>
+    ${P.msg?`<div class="sec"><div class="msg bad">${CROSS}<span>${esc(P.msg)}</span></div></div>`:''}
+    <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${P.count} clip${P.count>1?'s':''} · ${({short:'20-40',mid:'40-60',long:'60-90'})[P.length]} s · ${aspectOf()==='9:16'?'Tall':'Wide'}</span></div>
+      <button class="go" id="make" ${streamOk()?'':'disabled'} onclick="makeStream()">Find the best moments</button>
+      <div class="muted faint" style="line-height:18px">You pick the moments first. Each clip opens in the editor, so you can change anything.</div></div></div>`;
+}
+function streamReady(){const b=$('#make');if(b)b.disabled=!streamOk()}
+async function makeStream(){
+  const P=nv.stream,b=$('#make');if(b)b.disabled=true;
+  const r=await post('/job',{type:'streamclips',links:P.links.split(/\n+/).map(u=>u.trim()).filter(Boolean),count:P.count,length:P.length,layout:P.layout,captions:!!P.captions,titles:!!P.titles,aspect:aspectOf()});
+  if(!r._ok){nv.stream.msg=r.msg||r.error||'That did not work.';render();return}
+  nv.stream=null;await load();toEditor(r);
 }
 async function scanHome(on){await post('/scanhome',{on});await loadRecent()}
 // dropped or chosen files: a card at the front of the grid right away, with its copy progress; once in, it is

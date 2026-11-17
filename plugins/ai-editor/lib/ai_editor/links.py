@@ -621,6 +621,11 @@ LOGIN = re.compile(r"\b(?:sign(?:ed)? ?in|log ?in|login|private|cookies|not a bo
                    r"age[- ](?:restricted|gated|verification)|confirm your age|inappropriate for some users)\b", re.I)
 
 
+# fork: some ISPs hand out video caches with an IPv6 address only; where the computer's IPv6 does not connect, every
+# download times out while the page itself loads. yt-dlp's own error lines for that.
+V6_STUCK = re.compile(r"timed out|Network is unreachable|No route to host", re.I)
+
+
 def video_format(max_height=2160):
     """yt-dlp -f: H.264 mp4 first, no taller than max_height (clips pass 1080: a 1080x1920 clip needs no 4K)."""
     h = int(max_height)
@@ -684,6 +689,8 @@ def _fetch(url, edit_dir, cookies, max_gb, max_height, direct, found):
             cmd[-1:-1] = ["--cookies-from-browser", cookies]
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=FETCH_S)
+            if r.returncode and V6_STUCK.search(r.stderr):   # fork: a network whose IPv6 is broken: once more on IPv4
+                r = subprocess.run(cmd[:len(y)] + ["--force-ipv4"] + cmd[len(y):], capture_output=True, text=True, timeout=FETCH_S)
         except subprocess.TimeoutExpired:
             return 1, SLOW.format(FETCH_S // 60)
         out = [ln for ln in r.stdout.splitlines() if ln.strip()]
@@ -1036,6 +1043,23 @@ def _demo(home):
         assert it["kind"] == "ask" and "could not open" in it["note"], it
     finally:
         g["ytdlp"], subprocess.run = saved
+    # fork: a download that times out (broken IPv6) runs once more with --force-ipv4, and that one is used
+    tries, saved = [], (g["ytdlp"], subprocess.run)
+    with tempfile.TemporaryDirectory() as td:
+        got = Path(td) / "source.mp4"
+
+        def v6(cmd, **kw):
+            tries.append(cmd)
+            if "--force-ipv4" not in cmd:
+                return subprocess.CompletedProcess(cmd, 1, "", "ERROR: [download] Got error: timed out. Giving up after 10 retries")
+            got.write_bytes(b"x")
+            return subprocess.CompletedProcess(cmd, 0, f"{got}\n", "")
+        try:
+            g["ytdlp"], subprocess.run = (lambda: ["yt-dlp"]), v6
+            code, msg = fetch("https://www.youtube.com/watch?v=dQw4w9WgXcQ", td)
+        finally:
+            g["ytdlp"], subprocess.run = saved
+        assert code == 0 and msg == str(got) and len(tries) == 2 and tries[1][1] == "--force-ipv4", (code, msg, tries)
     for cmd, kw in cmds:
         assert kw.get("timeout") and "--no-playlist" in cmd and cmd[cmd.index("--playlist-items") + 1] == "1", cmd
     print(f"demo ok ({len(CASES)} URL shapes)")
