@@ -1,6 +1,6 @@
 ---
 name: animated-video
-description: Makes a fully animated video from a text prompt, with no camera footage. Writes a script split into scenes, has the user approve it, then animates every scene full frame (one ai-editor clip-builder agent per scene), adds any of an AI voiceover (ElevenLabs with the user's key, else the free macOS voice), word-timed on-screen text and generated music, renders it and opens it in the editor for notes. Optional reference links set the look and pace, measured only, never reused. Use when a home page job says `JOB animated`, or the user says "make an animated video about", "animated explainer", "create a video from a prompt", "text to video", "make a video with no footage". Not for editing the user's own footage (that is the ai-editor start skill), not for a product film of a website (product-video), not for copying a reel onto b-roll (broll-reel).
+description: Makes a fully animated video from a text prompt, or one like a video the user pasted (its length, pace, structure and look on a new topic), with no camera footage. Writes a script split into scenes, has the user approve it, then animates every scene full frame (one ai-editor clip-builder agent per scene), adds any of an AI voiceover (ElevenLabs with the user's key, else the free macOS voice), word-timed on-screen text and generated music, renders it and opens it in the editor for notes. Optional reference links set the look and pace, measured only, never reused. Use when a home page job says `JOB animated`, or the user says "make an animated video about", "animated explainer", "create a video from a prompt", "text to video", "make a video with no footage", "make one like this video", "make me a video like this one". Not for editing the user's own footage (that is the ai-editor start skill), not for a product film of a website (product-video), not for copying a reel onto b-roll (broll-reel).
 license: MIT
 compatibility: Python 3.10+, ffmpeg, Node, and the ai-editor plugin installed beside it with its venv, motion tools (HyperFrames, GSAP) and renderer (the ai-editor setup skill installs them). macOS `say` for the free voice.
 ---
@@ -37,11 +37,40 @@ question and every step shows in the editor.
 ## 0. The brief
 
 `EDIT/brief.json`: `{"prompt", "refs": [links], "aspect": "9:16"|"16:9", "length": seconds, "voice", "text", "music"}`
-(the last three true or false: what the user ticked). Asked in chat instead of the page: make the edit folder with
+(the last three true or false: what the user ticked). With `"like": <link>` (New video's "Make one like this") the
+prompt may be empty and `aspect`, `length` (0) and the three may say `auto`: step 0b fills them in. Asked in chat instead of the page: make the edit folder with
 `python3 "$E/lib/ai_editor/library.py" path`, then `edits/<slug>/`, write brief.json yourself, and ask in one question
 box call: shape (Tall 9:16 recommended / Wide 16:9), length (30 s recommended / 15 s / 60 s), and which to include
 (voice, text and music recommended / no voice / no music). Then `python3 "$R" EDIT start --raw --video <any 2 s clip>
 --stage edit` so the editor has the video.
+
+## 0b. Make one like this (only when brief.json has `like`)
+
+```bash
+python3 "$PY" "$T" like EDIT "<brief.json like>"     # EDIT/like/: like.md, like.json, sheet.jpg (8 frames)
+```
+
+Say "Studying the video you picked" on the page first. `LOGIN:` and exit 3: ask in the question box "Use my Chrome
+login for this download" (recommended) / "Stop", and run again with `--cookies-from-browser chrome`. Read
+`EDIT/like/like.md` and look at `EDIT/like/sheet.jpg`. Take from it, and write into brief.json and scenes.json:
+
+- **Length and shape**: brief `length` 0 becomes its length (10 to 90 s at most); `aspect` `auto` becomes its shape.
+- **Voice, text, music** set to `auto` in the brief: voice true when it talks at least 30% of the time; text true
+  when the frames show captions or on-screen words; music true unless like.md says quiet between the words.
+- **Structure**: the same number of scenes. An animated video morphs more than it cuts, so count the scenes from the
+  frames and the sentences (about one a sentence), not from the cuts alone. The same kind of hook (a question, a
+  number, a claim) and the same kind of close (a payoff, a call to action), on the new topic.
+- **Pace**: its words a second set each `say` line's length.
+- **Look**: scenes.json `look` as an object `{"ground", "ink", "accent", "font"}` from the colours and type you see
+  in the sheet; `captions` like its captions (position, case, size). The `visual` of each scene in the same manner
+  (flat illustration, UI mock-ups, charts, big type), never its own drawings, logos or characters.
+- **Topic**: brief `prompt` when the user gave one. Empty: one question box call, "What should yours be about?",
+  three topics in the same niche as the video (the recommended one first), each a different angle; never its own
+  topic word for word, and no brand or person it names.
+
+Nothing of the video goes into the new one: no footage, no sentence, no music, no logo. Say in one line on the page
+what you took ("48 s, wide, 8 scenes, 2 words a second, light ground with flat illustration"). Then go on at step 2;
+skip step 1 for the liked video (step 1 is for `refs`).
 
 ## 1. The reference links (only when `refs` has any)
 

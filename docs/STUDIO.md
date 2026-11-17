@@ -23,13 +23,15 @@ shows at a glance which lines are ours:
 - `links.py`: a download that times out on a network with broken IPv6 runs once more on IPv4.
 - `askhook.py`: a hidden Claude's question waits for the next page that opens instead of its unseen Terminal.
 
-## New video: the three ways in
+## New video: the four ways in
 
 1. **Your clips** (the original): pick or drop your footage, pick a style, Make my video.
 2. **Create from a prompt** (studio 0.1): type what the video is about, optionally paste videos whose look you like.
    Pick the shape, the length and any of an AI voiceover, on-screen text and music. Claude writes a script in scenes
    and shows it to you as a card. On your OK it animates every scene and opens the video in the editor.
-3. **Clip a stream** (studio 0.2): paste up to 5 stream or gameplay links (YouTube, Twitch, Kick) or files. Pick how
+3. **Make one like this** (studio 0.5): paste a video you like. Claude measures its length, pace, structure and
+   look, asks what yours should be about (or suggests topics), and animates a new one built the same way.
+4. **Clip a stream** (studio 0.2): paste up to 5 stream or gameplay links (YouTube, Twitch, Kick) or files. Pick how
    many clips, how long, the layout and whether to add captions and a hook title. Claude scores every second by
    YouTube's "most replayed" data and how loud the moment gets. It downloads only the best parts and shows them
    numbered in the editor. You pick which ones become clips. Each clip opens as a tab in the editor, with the facecam on
@@ -51,9 +53,7 @@ shows at a glance which lines are ours:
    more than one video's most replayed weighed fairly against another's.
 2. **Clips in your style.** Done in 0.4: the panel's Look runs each clip through
    the original styled edit in the picked style, nothing cut, captions on, cards off.
-3. **"Make one like this" from a link.** Paste a video you like; the analysis that already measures a creator's
-   look (creator-teardown quick mode) sets the script's pace and look for Create from a prompt, without a prompt box
-   first. Today the prompt panel's reference links already do the measuring.
+3. **"Make one like this" from a link.** Done (branch `feature/make-one-like-this`).
 4. **Export all.** One button that saves every approved clip of a stream to a folder, named by title.
 5. **Report the music bug upstream.** `product-video/scripts/sound.py score` fails when given a voice (a shape
    mismatch). The studio mixes its own music round it; the fix belongs in the original.

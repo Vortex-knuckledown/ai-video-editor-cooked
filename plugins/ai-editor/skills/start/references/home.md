@@ -293,7 +293,8 @@ settings file: the final approve's Teach panel does it (`review.py learn --done`
 
 New video's "Create from a prompt": a fully animated video from the user's prompt, no footage. Invoke the
 `studio:animated-video` skill (Skill tool) on `edit=` and follow it; it reads `brief.json` (the prompt, reference
-links, shape, length, and which of voice, text and music to include). The editor is already open on a placeholder
+links, shape, length, and which of voice, text and music to include; with `like`, "Make one like this": a liked
+video to model it on, the skill's step 0b). The editor is already open on a placeholder
 draft. No cut and no style-edit. Report with `status animated`. No studio skill in this session: say on the page
 that the studio plugin is not loaded (`/reload-plugins`) and mark the job `--failed`.
 

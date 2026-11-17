@@ -108,7 +108,7 @@ clear of it, nothing important is cut off. A wrong layout: `layout` again with a
 After `make` and `layout` (no build, no render), for every clip:
 
 ```bash
-python3 "$PY" "$T" styled EDIT clip1 --as <style>      # <library>/edits/<EDIT name>-clip1/: nothing cut, captions on, cards off
+python3 "$PY" "$T" styled EDIT clip1 --as <style>      # EDIT/styled/clip1/: nothing cut, captions on, cards off
 # --cards keeps the style's cards: only for a clip whose talk names real things (a game, a product, a site)
 ```
 

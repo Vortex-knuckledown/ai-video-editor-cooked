@@ -2918,14 +2918,20 @@ def make_handler(token):
             """A fully animated video from a prompt (the studio plugin's animated-video skill): brief.json in a new edit,
             the editor opened on a 2 s placeholder, one JOB animated for a Claude."""
             prompt = re.sub(r"\s+", " ", str(b.get("prompt") or "")).strip()[:4000]
-            if len(prompt) < 8:
+            like = str(b.get("like") or "").strip()   # studio: Make one like this: a liked video's link (or file) to model it on
+            if like and not (like.startswith(("http://", "https://")) or Path(os.path.expanduser(like)).is_file()):
+                return self.send(400, {"ok": False, "msg": "Paste the link of the video you like."})
+            if len(prompt) < 8 and not like:
                 return self.send(400, {"ok": False, "msg": "Say what the video is about first."})
             refs = [u.strip() for u in b.get("refs") or [] if isinstance(u, str) and u.strip().startswith("http")][:6]
             aspect = "16:9" if b.get("aspect") == "16:9" else "9:16"
-            opts = {k: b.get(k) is not False for k in ("voice", "text", "music")}
-            length = max(10, min(180, int(b.get("length") or 30)))
-            edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or "animated")
-            brief = {"prompt": prompt, "refs": refs, "aspect": aspect, "length": length, **opts}
+            # "auto" (like only): the skill sets it from what the liked video has
+            opts = {k: "auto" if like and b.get(k) == "auto" else b.get(k) is not False for k in ("voice", "text", "music")}
+            length = 0 if like and not b.get("length") else max(10, min(180, int(b.get("length") or 30)))   # 0: as long as the liked video
+            if like and b.get("aspect") not in ("9:16", "16:9"):
+                aspect = "auto"   # the liked video's own shape; the placeholder is tall until it is measured
+            edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or ("like a video" if like else "animated"))
+            brief = {"prompt": prompt, "refs": refs, "aspect": aspect, "length": length, **opts, **({"like": like} if like else {})}
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             w, h = (1920, 1080) if aspect == "16:9" else (1080, 1920)
             ph = edit / "placeholder.mp4"
@@ -2939,7 +2945,7 @@ def make_handler(token):
                                capture_output=True, timeout=60)
                 rj = edit / "review.json"
                 if rj.exists():   # its name in Your videos and on the editor: the prompt's start
-                    save(rj, {**load(rj), "name": prompt[:60]})
+                    save(rj, {**load(rj), "name": prompt[:60] or "One like the video you picked"})
             j = update(lambda d: queue(d, "animated", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": aspect}))
             claude_for(j["id"])   # its own Claude, reserved: a listening Claude from before the studio plugin loaded never takes it
             return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})

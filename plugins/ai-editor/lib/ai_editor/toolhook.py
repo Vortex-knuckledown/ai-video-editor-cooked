@@ -110,8 +110,9 @@ def notify(payload):
     sid = payload.get("session_id") or ""
     if not sid or not ours(payload, sid):
         return None
-    if idle(payload) and listening(sid):   # it ended its turn listening: notes and jobs on the pages still reach it
-        return None
+    if idle(payload) and (listening(sid) or askhook.hidden()):   # it ended its turn listening: notes and jobs on the
+        return None                                              # pages still reach it; fork: a hidden Claude has no
+                                                                 # Terminal to go to, so its idle ping never shows
     return askhook.say_terminal(sid, payload.get("message") or "")
 
 

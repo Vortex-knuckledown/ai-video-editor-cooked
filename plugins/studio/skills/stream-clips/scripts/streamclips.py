@@ -15,7 +15,7 @@
                                      or the whole frame over a blurred copy of itself
     python3 streamclips.py build PROJ clip1 [--title "WORDS"] [--no-captions]   studio.clip1.scene.json
     python3 streamclips.py render PROJ clip1 [--draft]                         clips/clip1/render.mp4
-    python3 streamclips.py styled PROJ clip1 --as mine|@handle   <library>/edits/<PROJ name>-clip1/: the clip as an
+    python3 streamclips.py styled PROJ clip1 --as mine|@handle   PROJ/styled/clip1/: the clip as an
                                      ordinary edit for the editor's cut and style-edit, nothing cut, in that style
     python3 streamclips.py demo
 
@@ -585,7 +585,7 @@ def gameplay_style(st, cards=False):
 
 
 def cmd_styled(proj, cid, as_, cards=False):
-    """<library>/edits/<project>-<clip>/: the laid-out clip as an ordinary edit for the editor's own cut and
+    """PROJ/styled/<clip>/: the laid-out clip as an ordinary edit for the editor's own cut and
     style-edit (the ai-editor:clip-editor agent), in the style `as_` (mine or @handle). Gameplay keeps every second:
     spans.json is empty (no cuts) and keep.json covers the whole clip (no pause is tightened)."""
     proj = Path(proj).resolve()
@@ -595,8 +595,8 @@ def cmd_styled(proj, cid, as_, cards=False):
     if not re.fullmatch(r"mine|@[a-z0-9._-]+", as_ or ""):
         sys.exit("ERROR: --as takes mine or @handle (a style from the Styles page).")
     root = studio.use_editor()
-    e = proj.parent / f"{proj.name}-{cid}"
-    e.mkdir(exist_ok=True)
+    e = proj / "styled" / cid   # inside the project: Your videos lists every folder of edits/, and this is not one
+    e.mkdir(parents=True, exist_ok=True)
     src = e / "source.mp4"
     src.unlink(missing_ok=True)
     try:
@@ -611,7 +611,7 @@ def cmd_styled(proj, cid, as_, cards=False):
     jsave(e / "clip.json", {**cj, "from": str(proj), "clip": cid, "keep_all": True,
                             "layout": (jload(d / "layout.json") or {}).get("mode")})
     r = subprocess.run([sys.executable, str(root / "lib" / "ai_editor" / "profile.py"), "style", str(e), "--as", as_],
-                       capture_output=True, text=True, cwd=str(proj.parent.parent))
+                       capture_output=True, text=True, cwd=str(proj.parent.parent))   # the library: its styles
     if r.returncode:
         print(r.stdout[-400:] + r.stderr[-400:])
         sys.exit(f"ERROR: the style {as_} could not be written for {e.name}.")
