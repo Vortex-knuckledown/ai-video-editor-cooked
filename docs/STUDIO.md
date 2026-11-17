@@ -43,7 +43,8 @@ shows at a glance which lines are ours:
 
 ## Next, in order
 
-1. **Clip a stream, better moments.** Twitch chat replay as a third signal (a burst of messages is a moment), and
+1. **Clip a stream, better moments.** Done for YouTube stream replays: the live chat's surges are a third signal
+   (branch `feature/stream-chat-signal`). Left: Twitch chat (Twitch's chat API needs a signed-in client now), and
    more than one video's most replayed weighed fairly against another's.
 2. **Clips in your style.** Run each clip through the original style-edit (your profile's captions, zooms and
    cards) as an option on the Clip a stream panel.

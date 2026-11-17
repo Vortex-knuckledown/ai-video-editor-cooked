@@ -45,6 +45,10 @@ CONTEXT_S = 120           # loudness is measured against the median of this many
 INTRO_S = 90              # "starting soon" and sign-off screens: the first and last of this score half
 W, H = 1080, 1920
 CAM_H = 640               # facecam layout: the cam is the top third, the game the rest
+CHAT_S = 600             # the live chat replay downloads for at most this long; a bigger chat is left out
+CHAT_LAG_S = 4           # chat reacts a few seconds after the moment: its counts move this much earlier
+HYPE = re.compile(r"\b(?:lol|lmao|lmfao|kekw|lul|omegalul|w+|ww+|no way|bro|omg|wtf|clip it|clip that|hahaha+|ha+h)\b|"
+                  r"[\U0001F602\U0001F923\U0001F480\U0001F525]", re.I)   # laughing, skull, fire, "W", "clip it"
 CAPTIONS = {"size_pct": 6.2, "case": "upper", "effect": "pop", "stroke": True, "words_per_caption": 3}
 CAPTION_Y = {"facecam": 34, "follow": 72, "fit": 76, "vertical": 72, "wide": 80}
 
@@ -94,6 +98,8 @@ def cmd_meta(proj, sources, cookies=None):
             out = run_y(["-f", "bestaudio[ext=m4a]/bestaudio", "-o", str(d / "sound.%(ext)s"),
                          "--print", "after_move:filepath", s], cookies)
             meta["sound"] = Path(out.strip().splitlines()[-1]).name
+            if j.get("was_live") or j.get("live_status") == "was_live" or "live_chat" in (j.get("subtitles") or {}):
+                meta["chat"] = fetch_chat(s, d, cookies)
         else:
             f = Path(s).expanduser().resolve()
             if not f.is_file():
@@ -101,8 +107,67 @@ def cmd_meta(proj, sources, cookies=None):
             meta = {"file": str(f), "title": f.stem, "length": duration(f), "heatmap": [], "chapters": [], "sound": None}
         jsave(d / "meta.json", meta)
         print(f"v{n}: {meta['title']} ({mmss(meta['length'] or 0)}), most replayed: "
-              f"{'yes' if meta['heatmap'] else 'none (scored on the sound alone)'}")
+              f"{'yes' if meta['heatmap'] else 'none'}, chat replay: "
+              f"{str(len(jload(d / meta['chat']) or [])) + ' messages' if meta.get('chat') else 'none'}")
     return 0
+
+
+def fetch_chat(link, d, cookies=None, limit=CHAT_S):
+    """A YouTube stream replay's live chat as chat.json, [[seconds, hype 0|1], ...], or None: no chat replay, or one
+    too big to fetch in `limit` seconds (a part of it would favour the start of the stream)."""
+    v4 = [] if os.environ.get("STUDIO_IPV6") else ["--force-ipv4"]
+    cmd = ytdlp() + ["--no-warnings", "--no-playlist", *v4, *(["--cookies-from-browser", cookies] if cookies else []),
+                     "--skip-download", "--write-subs", "--sub-langs", "live_chat", "-o", str(d / "chat"), link]
+    try:
+        subprocess.run(cmd, capture_output=True, text=True, timeout=limit)
+    except subprocess.TimeoutExpired:
+        print(f"chat replay: bigger than {limit // 60} minutes of download, left out")
+        for f in d.glob("chat.live_chat.json*"):
+            f.unlink()
+        return None
+    raw = d / "chat.live_chat.json"
+    if not raw.exists():
+        return None
+    msgs = chat_messages(raw.read_text(encoding="utf-8", errors="replace").splitlines())
+    raw.unlink()   # 15 MB an hour of chat: only the times are kept
+    jsave(d / "chat.json", msgs)
+    return "chat.json" if msgs else None
+
+
+def chat_messages(lines):
+    """[[seconds, hype]] from yt-dlp's live_chat json lines (one action a line, its offset in milliseconds)."""
+    out = []
+    for ln in lines:
+        try:
+            j = json.loads(ln)
+        except ValueError:
+            continue
+        r = j.get("replayChatItemAction") or {}
+        try:
+            t = int(r.get("videoOffsetTimeMsec")) / 1000
+        except (TypeError, ValueError):
+            continue
+        for a in r.get("actions") or []:
+            it = (a.get("addChatItemAction") or {}).get("item") or {}
+            m = it.get("liveChatTextMessageRenderer") or it.get("liveChatPaidMessageRenderer")
+            if not m:
+                continue
+            runs = (m.get("message") or {}).get("runs") or []
+            text = " ".join(x.get("text") or ((x.get("emoji") or {}).get("shortcuts") or [""])[0] for x in runs)
+            out.append([round(t, 1), 1 if HYPE.search(text) else 0])
+    return out
+
+
+def chat_rate(msgs, n):
+    """Messages a second (a laughing or "W" message counts twice), moved CHAT_LAG_S earlier, or None."""
+    if not msgs:
+        return None
+    v = [0.0] * n
+    for t, hype in msgs:
+        i = int(t) - CHAT_LAG_S
+        if 0 <= i < n:
+            v[i] += 1 + hype
+    return v
 
 
 # ---------------------------------------------------------------- 2. moments
@@ -140,23 +205,40 @@ def heat(meta, n):
     return [x / top for x in v]
 
 
-def scores(db, hm):
-    """A score a second: how loud against the minutes round it (shouting, a crowd, an explosion), with the most
-    replayed on top when YouTube has it. Smoothed over 3 s."""
+def surge(x):
+    """0-1 a second: how far above the minutes round it (a robust z-score against a rolling median)."""
     import numpy as np
     from numpy.lib.stride_tricks import sliding_window_view as win
-    x = np.array(db, dtype=np.float32)
+    x = np.array(x, dtype=np.float32)
     k = min(CONTEXT_S | 1, len(x) // 2 * 2 - 1) if len(x) > 4 else 1
     med = np.median(win(np.pad(x, k // 2, mode="edge"), k), axis=1) if k > 1 else x
     rel = x - med
     mad = float(np.median(np.abs(rel))) + 1e-3
-    ex = np.clip(rel / (1.4826 * mad), 0, 6) / 6
-    s = 0.6 * np.array(hm[:len(x)], dtype=np.float32) + 0.4 * ex if hm else ex
+    return np.clip(rel / (1.4826 * mad), 0, 6) / 6
+
+
+# what each signal weighs, by which ones a video has (the sound always)
+WEIGHTS = {(True, True): (0.45, 0.30, 0.25), (True, False): (0.6, 0.0, 0.4), (False, True): (0.0, 0.55, 0.45),
+           (False, False): (0.0, 0.0, 1.0)}
+
+
+def scores(db, hm, chat=None):
+    """A score a second from the most replayed (YouTube), the chat's surges (a stream replay's live chat, smoothed
+    over 5 s) and how loud it is against the minutes round it (shouting, a crowd, an explosion). Smoothed over 3 s.
+    Returns (score, loud, chat surge or None)."""
+    import numpy as np
+    ex = surge(db)
+    ch = None
+    if chat:
+        c = np.convolve(np.array(chat[:len(ex)], dtype=np.float32), np.ones(5) / 5, mode="same")
+        ch = surge(c) if c.max() > 0 else None
+    wh, wc, wl = WEIGHTS[(bool(hm), ch is not None)]
+    s = wl * ex + (wh * np.array(hm[:len(ex)], dtype=np.float32) if hm else 0) + (wc * ch if ch is not None else 0)
     s = np.convolve(s, np.ones(3) / 3, mode="same")
     edge = min(INTRO_S, len(s) // 10)
     s[:edge] *= 0.5
     s[len(s) - edge:] *= 0.5
-    return s, ex
+    return s, ex, ch
 
 
 def peaks(s, length, top, gap=5):
@@ -231,10 +313,11 @@ def cmd_moments(proj, lo=20, hi=45, top=8, cookies=None):
         if len(db) < lo + 2:
             print(f"{d.name}: shorter than one clip, skipped")
             continue
-        s, ex = scores(db, heat(meta, len(db)))
+        chat = chat_rate(jload(d / meta["chat"]) if meta.get("chat") else None, len(db))
+        s, ex, ch = scores(db, heat(meta, len(db)), chat)
         for a, b, t, sc in peaks(s, min(length, len(db) - 1), top):
             found.append({"video": d.name, "a": a, "b": b, "peak": t, "score": round(sc, 3),
-                          "loud": round(float(ex[t]), 2), "heat": round((heat(meta, len(db)) or [0] * len(db))[t], 2)})
+                          "loud": round(float(ex[t]), 2), "chat": round(float(ch[t]), 2) if ch is not None else None, "heat": round((heat(meta, len(db)) or [0] * len(db))[t], 2)})
     found.sort(key=lambda m: -m["score"])
     keep = {m["video"]: m for m in reversed(found)}                 # every video's best moment stays in
     found = (list(keep.values()) + [m for m in found if m not in keep.values()])[:top]
@@ -255,12 +338,13 @@ def cmd_moments(proj, lo=20, hi=45, top=8, cookies=None):
         print(f"m{n}: {m['video']} {mmss(a0 + a)} ({b - a:.0f} s) score {m['score']}")
     jsave(proj / "moments.json", out)
     lines = ["# Moments, best score first", "",
-             "score: 0-1 (most replayed x0.6 + loud against its surroundings x0.4; sound only when YouTube has no "
-             "heatmap). Judge each on: does it make sense with no context, does something happen, does it pay off.", ""]
+             "score: 0-1 from YouTube's most replayed, the live chat's surges (a stream replay) and how loud it gets "
+             "against its surroundings, weighed by which of them the video has. Judge each on: does it make sense with no context, does something happen, does it pay off.", ""]
     for m in out:
         lines += [f"## {m['id']}: {m['title']} at {mmss(m['at'])}, {m['length']:.0f} s"
                   + (f" ({m['chapter']})" if m["chapter"] else ""),
-                  f"score {m['score']} - most replayed {m['heat']} - loudness peak {m['loud']}",
+                  f"score {m['score']} - most replayed {m['heat']} - loudness peak {m['loud']}"
+                  + (f" - chat surge {m['chat']}" if m.get("chat") is not None else ""),
                   f"said: {' '.join(m['text'].split()[:70]) or '(no words: gameplay and reactions only)'}", ""]
     (proj / "shortlist.md").write_text("\n".join(lines), encoding="utf-8")
     print(f"{len(out)} moments -> {proj / 'shortlist.md'}")
@@ -470,14 +554,21 @@ def demo():
     db = [-40.0] * 600
     for t in range(300, 306):
         db[t] = -12.0                          # a shout at 5:00
-    s, ex = scores(db, None)
+    s, ex, _ = scores(db, None)
     assert ex[302] > 0.9 and ex[100] < 0.05, (ex[302], ex[100])
     pk = peaks(s, 30, 3)
     assert pk[0][0] <= 302 <= pk[0][1] and abs(pk[0][2] - 302) <= 3, pk[0]
     assert all(b + 5 <= a2 or a >= b2 + 5 for i, (a, b, *_) in enumerate(pk) for (a2, b2, *_) in pk[i + 1:]), "no overlap"
     hm = heat({"heatmap": [{"start_time": 100, "end_time": 110, "value": 1.0}]}, 600)
-    s2, _ = scores([-40.0] * 600, hm)
+    s2, _, _ = scores([-40.0] * 600, hm)
     assert 100 <= int(np.argmax(s2)) <= 110, "most replayed wins with flat sound"
+    rate = chat_rate([[t / 10, 0] for t in range(4000)] + [[t / 20 + 254, 1] for t in range(100)], 600)
+    s3, _, ch = scores([-40.0] * 600, None, rate)
+    assert ch is not None and 245 <= int(np.argmax(s3)) <= 255, int(np.argmax(s3))   # a chat burst at 4:14, moved 4 s earlier
+    line = json.dumps({"replayChatItemAction": {"videoOffsetTimeMsec": "61500", "actions": [{"addChatItemAction": {"item": {
+        "liveChatTextMessageRenderer": {"message": {"runs": [{"text": "NO WAY "}, {"emoji": {"shortcuts": [":skull:"]}}]}}}}}]}})
+    assert chat_messages([line, "not json", json.dumps({"x": 1})]) == [[61.5, 1]], chat_messages([line])
+    assert chat_rate(None, 10) is None
     hs = heat({"heatmap": [{"start_time": 0, "end_time": 20, "value": 1.0}, {"start_time": 200, "end_time": 210, "value": 0.4}]}, 600)
     assert hs[5] < 0.1 and hs[205] == 1.0, "the start's peak is not a moment"
     ws = [{"w": "no", "start": 0.0, "end": 0.4}, {"w": "way.", "start": 0.5, "end": 0.9}, {"w": "look", "start": 1.6, "end": 2.0}]
