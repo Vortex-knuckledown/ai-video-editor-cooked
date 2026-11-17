@@ -30,6 +30,9 @@ brief.json -> (refs: creator-teardown quick mode for the look and pace) -> scene
 
 Report each step on the page: `python3 "$H" status animated --step "Writing the script"` (and so on), and at the end
 `python3 "$H" status animated --result '{"edit": "<EDIT>"}' --done`. On a failure: `--failed "<one line why>"`.
+Say every step in the editor too, where the user is watching: `python3 "$R" EDIT status "Writing the script"`, then
+"Recording the voice", "Animating N scenes", "Rendering the video". The user never needs the Terminal: every
+question and every step shows in the editor.
 
 ## 0. The brief
 

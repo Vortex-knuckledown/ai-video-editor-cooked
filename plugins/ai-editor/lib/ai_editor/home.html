@@ -1517,7 +1517,7 @@ function promptSide(){
   return `<div class="panel rv-side" style="width:520px;flex-shrink:0">
     <div class="sec"><div class="between"><span class="h">Create from a prompt</span><button class="hlink" style="font-size:13px" onclick="nv.prompt=null;render()">Close</button></div>
       <div class="sub">Say what the video is about. Claude writes a script in scenes, animates every scene and puts it in the editor.</div>
-      <textarea id="sprompt" class="input" style="min-height:110px;padding:10px;font-family:inherit;resize:vertical" placeholder="For example: a 30 second explainer on how a black hole forms, for curious teenagers" oninput="nv.prompt.text=this.value">${esc(P.text)}</textarea></div>
+      <textarea id="sprompt" class="input" style="min-height:110px;padding:10px;font-family:inherit;resize:vertical" placeholder="For example: a 30 second explainer on how a black hole forms, for curious teenagers" oninput="nv.prompt.text=this.value;promptReady()">${esc(P.text)}</textarea></div>
     <div class="sec"><div class="h">A video to copy the look of <span class="muted">(optional)</span></div>
       <textarea class="input" style="min-height:54px;padding:10px;font-family:inherit;resize:vertical" placeholder="Paste links, one a line. Only their style is measured, never their footage." oninput="nv.prompt.refs=this.value">${esc(P.refs)}</textarea></div>
     <div class="sec"><div class="h">Shape</div><div class="row">${[['9:16','Tall · 9:16'],['16:9','Wide · 16:9']].map(([a,t])=>`<button class="pill ${aspectOf()===a?'on':''}" onclick="nv.aspect='${a}';nv.aspectSet=1;render()">${t}</button>`).join('')}</div></div>
@@ -1531,6 +1531,7 @@ function promptSide(){
       <button class="go" id="make" ${ok?'':'disabled'} onclick="makeAnimated()">Make my video</button>
       <div class="muted faint" style="line-height:18px">You approve the script first. It opens in the editor, so you can change anything.</div></div></div>`;
 }
+function promptReady(){const P=nv.prompt,b=$('#make');if(b)b.disabled=!(P.text.trim().length>=8&&(P.voice||P.caption||P.music))}
 async function makeAnimated(){
   const P=nv.prompt,b=$('#make');if(b)b.disabled=true;
   const r=await post('/job',{type:'animated',prompt:P.text,refs:P.refs.split(/\s+/).filter(u=>/^https?:\/\//.test(u)),aspect:aspectOf(),length:P.length,voice:!!P.voice,text:!!P.caption,music:!!P.music});

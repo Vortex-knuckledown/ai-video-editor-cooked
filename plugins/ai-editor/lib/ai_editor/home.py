@@ -2925,8 +2925,11 @@ def make_handler(token):
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             w, h = (1920, 1080) if aspect == "16:9" else (1080, 1920)
             ph = edit / "placeholder.mp4"
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=0x0B0B0D:s={w}x{h}:r=30:d=2",
-                            "-c:v", "libx264", "-pix_fmt", "yuv420p", str(ph)], capture_output=True, timeout=60)
+            card = Path(__file__).resolve().parents[3] / "studio" / "assets" / f"placeholder-{'16x9' if aspect == '16:9' else '9x16'}.png"
+            src = ["-loop", "1", "-i", str(card), "-t", "2", "-r", "30"] if card.exists() else \
+                ["-f", "lavfi", "-i", f"color=c=0x0B0B0D:s={w}x{h}:r=30:d=2"]   # "Making your video", else plain dark
+            subprocess.run(["ffmpeg", "-v", "error", "-y", *src, "-c:v", "libx264", "-pix_fmt", "yuv420p", str(ph)],
+                           capture_output=True, timeout=60)
             if ph.exists():
                 subprocess.run([sys.executable, str(REVIEW), str(edit), "start", "--raw", "--video", str(ph), "--stage", "edit"],
                                capture_output=True, timeout=60)
@@ -2934,7 +2937,7 @@ def make_handler(token):
                 if rj.exists():   # its name in Your videos and on the editor: the prompt's start
                     save(rj, {**load(rj), "name": prompt[:60]})
             j = update(lambda d: queue(d, "animated", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": aspect}))
-            claude_unless_idle(j["id"])
+            claude_for(j["id"])   # its own Claude, reserved: a listening Claude from before the studio plugin loaded never takes it
             return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
 
         def cover(self):

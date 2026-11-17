@@ -403,12 +403,18 @@ def cmd_briefs(edit):
     return 0
 
 
+FULL_FRAME_OK = {"tells"}   # gates written for a card over footage that a full-frame scene may fail on purpose
+                            # (a sky filling the frame is "flat-saturated-ground" to a card, the point of a scene)
+
+
 def clip_of(edit, sid):
-    """A scene's passed render, or None."""
+    """A scene's render that passed, or whose only failures are FULL_FRAME_OK gates; None otherwise."""
     d = Path(edit) / "motion" / sid
     g = jload(d / "gates.json", {}) or {}
     f = d / "renders" / "clip.mp4"
-    return f if g.get("pass") and f.exists() else None
+    failed = {k for k, v in (g.get("gates") or {}).items() if not v[0]}
+    ok = g.get("pass") or (g.get("gates") and failed and failed <= FULL_FRAME_OK)
+    return f if ok and f.exists() else None
 
 
 def fallback_clip(edit, row, look):
