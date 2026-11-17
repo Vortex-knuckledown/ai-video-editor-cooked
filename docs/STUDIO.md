@@ -40,6 +40,7 @@ shows at a glance which lines are ours:
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.4.0 | Clip a stream in your style; a hidden Claude's question waits for a page (released 2026-11-18, tag `studio-v0.4.0`) |
 | studio 0.3.0 | Clip a stream reads a YouTube stream replay's live chat (released 2026-11-18, tag `studio-v0.3.0`) |
 | studio 0.2.0 | Clip a stream; the IPv4 retry for downloads; notes on a finished video work with Claude hidden (released 2026-11-18, tag `studio-v0.2.0`) |
 
@@ -48,7 +49,7 @@ shows at a glance which lines are ours:
 1. **Clip a stream, better moments.** Done for YouTube stream replays in 0.3: the live chat's surges are a third
    signal. Left: Twitch chat (Twitch's chat API needs a signed-in client now), and
    more than one video's most replayed weighed fairly against another's.
-2. **Clips in your style.** Done (branch `feature/clips-in-your-style`): the panel's Look runs each clip through
+2. **Clips in your style.** Done in 0.4: the panel's Look runs each clip through
    the original styled edit in the picked style, nothing cut, captions on, cards off.
 3. **"Make one like this" from a link.** Paste a video you like; the analysis that already measures a creator's
    look (creator-teardown quick mode) sets the script's pace and look for Create from a prompt, without a prompt box
