@@ -7,6 +7,7 @@ What changed for every user, newest first.
 - New video has Create from a prompt (studio 0.1). Say what the video is about, add links to videos whose look you like if you want, and pick any of an AI voiceover, on-screen text and music. You approve the script on a card, then every scene is animated and the video opens in the editor.
 - Claude works hidden in the background: no Terminal windows open, and closing one can no longer stop a video halfway. Show Claude in the editor reveals it. Set AI_EDITOR_WINDOWS=1 to have the windows back.
 - YouTube downloads no longer time out on networks where IPv6 does not connect; they try again over IPv4. This fixes Copy a reel and clips from YouTube links there too.
+- "Claude needs you in the Terminal window" no longer shows a minute after Claude finishes a round while it is still listening for your notes and new videos. Before, Claude Code's "waiting for your input" ping put the notice on every page even though the page could still reach Claude. A permission prompt or a question typed in the Terminal still shows it, and so does the ping once Claude stops listening.
 
 ## ai-editor 2.7.52, creator-teardown 2.7.52 (2026-11-13)
 - A new video no longer lands on a Claude that is still working on another one. Before, a Claude in the middle of a render or a long round looked free after 15 minutes, so it took the next new video too and both projects clogged one session. Now anything written in an edit in the last hour counts as busy, and the new video gets a Claude of its own.
