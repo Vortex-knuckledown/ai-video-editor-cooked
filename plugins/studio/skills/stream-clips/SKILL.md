@@ -1,6 +1,6 @@
 ---
 name: stream-clips
-description: Finds the best moments in long streams and gameplay videos (YouTube, Twitch, Kick links or files, up to 5 at once) and turns the ones the user picks into short clips with a gaming layout (facecam on top and the game below, a crop that follows the face, or the whole frame over a blurred copy), big word-by-word captions and a hook title, then opens them all in the editor for notes. Scores every second by YouTube's "most replayed" heatmap and how loud the moment is against the minutes round it, downloads only the parts that score, never the whole stream. Use when a home page job says `JOB streamclips`, or the user says "clip this stream", "find the best moments of this VOD", "make clips of this streamer", "clip this gameplay video", "turn this Twitch stream into shorts". Not for a talking podcast or interview (that is the ai-editor clips skill), not for editing the user's own short take (start).
+description: Finds the best moments in long streams and gameplay videos (YouTube, Twitch, Kick links or files, up to 5 at once) and turns the ones the user picks into short clips with a gaming layout (facecam on top and the game below, a crop that follows the face, or the whole frame over a blurred copy), big word-by-word captions and a hook title, then opens them all in the editor for notes. Scores every second by YouTube's "most replayed" heatmap, the live chat's surges on a stream replay, and how loud the moment is against the minutes round it, downloads only the parts that score, never the whole stream. Use when a home page job says `JOB streamclips`, or the user says "clip this stream", "find the best moments of this VOD", "make clips of this streamer", "clip this gameplay video", "turn this Twitch stream into shorts". Not for a talking podcast or interview (that is the ai-editor clips skill), not for editing the user's own short take (start).
 license: MIT
 compatibility: Python 3.10+, ffmpeg, and the ai-editor plugin installed beside it with its venv (yt-dlp, numpy, OpenCV, Whisper) and renderer (the ai-editor setup skill installs them).
 ---
@@ -51,7 +51,9 @@ python3 "$PY" "$T" meta EDIT <every link or file in brief.json>
 ```
 
 Downloads only each link's sound (a 3 hour stream is about 150 MB) and its details: the title, the length, YouTube's
-"most replayed" heatmap and chapters. Exit 3: the site wants a login. Ask in the question box: "Use my Chrome login
+"most replayed" heatmap and chapters. A YouTube stream replay also gets its live chat (only the times of the
+messages are kept). A chat too big to download in 10 minutes is left out and says so; the other signals still score.
+Twitch and Kick chat cannot be downloaded: those streams are scored on the sound (and nothing is lost but that signal). Exit 3: the site wants a login. Ask in the question box: "Use my Chrome login
 for this download" (recommended) / "Skip that link". On yes, run again with `--cookies-from-browser chrome`, and pass
 the same flag to `moments`.
 
@@ -61,8 +63,10 @@ the same flag to `moments`.
 python3 "$PY" "$T" moments EDIT --min <min> --max <max> --top <2 x count, at least 6>
 ```
 
-Every second is scored: the most replayed (60%) plus how much louder it is than the two minutes round it (40%: a
-shout, a crowd, an explosion). The first minute is never a moment just because everyone starts there. The peaks
+Every second is scored from what the video has: the most replayed, the chat's surges (messages a second against the
+minutes round it, laughing, "W" and "no way" counting double, moved 4 s earlier because chat reacts late) and how
+much louder it is than the two minutes round it (a shout, a crowd, an explosion). With all three: 45%, 30%, 25%;
+without chat: 60% and 40%; without the most replayed: chat 55%, sound 45%. The first minute is never a moment just because everyone starts there. The peaks
 become moments, with most of the clip before the peak (the build-up) and the rest after (the payoff). Only those parts
 are downloaded (1080p at most) and transcribed. It takes about 1 to 3 minutes; say so on the page.
 

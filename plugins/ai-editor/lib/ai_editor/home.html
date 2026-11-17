@@ -1553,7 +1553,7 @@ function streamSide(){
   const lay=[['auto','Claude decides','Facecam on top if there is one, else the best fit.'],['facecam','Facecam on top','The streamer above, the game below.'],['follow','Follow the face','For IRL and just-chatting streams.'],['fit','Whole frame','The full picture over a blurred copy of itself.']];
   return `<div class="panel rv-side" style="width:520px;flex-shrink:0">
     <div class="sec"><div class="between"><span class="h">Clip a stream</span><button class="hlink" style="font-size:13px" onclick="nv.stream=null;render()">Close</button></div>
-      <div class="sub">Paste up to 5 links. Claude finds the moments people replay and react to most, you pick which become clips, and they open in the editor.</div>
+      <div class="sub">Paste up to 5 links. Claude finds the moments people replay, react to and flood the chat about, you pick which become clips, and they open in the editor.</div>
       <textarea id="slinks" class="input" style="min-height:90px;padding:10px;font-family:inherit;resize:vertical" placeholder="https://www.youtube.com/watch?v=...  (YouTube, Twitch, Kick, or a video file's path, one a line)" oninput="nv.stream.links=this.value;streamReady()">${esc(P.links)}</textarea>
       <div class="muted faint" style="line-height:18px">Only clip videos you have the right to use: your own, or a creator who allows clipping.</div></div>
     <div class="sec"><div class="h">How many clips</div><div class="row">${[1,3,5].map(n=>pill('count',n,String(n))).join('')}</div></div>

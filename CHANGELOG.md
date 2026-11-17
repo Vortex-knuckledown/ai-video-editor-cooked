@@ -2,6 +2,9 @@
 
 What changed for every user, newest first.
 
+## studio 0.3.0 (this fork, 2026-11-18)
+- Clip a stream reads the live chat of a YouTube stream replay. A burst of messages, laughing and "W" counting double, now helps pick the moments, next to the most replayed and how loud it gets. A chat too big to download in 10 minutes is left out and the other two still score. Twitch and Kick chat cannot be downloaded, so those are scored on the sound.
+
 ## studio 0.2.0 (this fork, 2026-11-18)
 - New video has Clip a stream. Paste up to 5 stream or gameplay links (YouTube, Twitch, Kick) or files, and pick how many clips, how long, the layout and whether to add captions and a hook title. Claude finds the moments people replay and react to most and shows them numbered in the editor, and you pick which become clips. Each clip opens as its own tab, with the facecam on top and the game below, a crop that follows the face, or the whole frame. Only the best parts of a stream are downloaded, never the whole thing.
 - New video has Create from a prompt (studio 0.1). Say what the video is about, add links to videos whose look you like if you want, and pick any of an AI voiceover, on-screen text and music. You approve the script on a card, then every scene is animated and the video opens in the editor.
