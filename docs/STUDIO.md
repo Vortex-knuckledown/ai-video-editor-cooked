@@ -21,6 +21,7 @@ shows at a glance which lines are ours:
 - `toolhook.py` (branch `fix/idle-banner-while-listening`): no "Claude needs you in the Terminal" banner while a
   Claude is only listening for the next video.
 - `links.py`: a download that times out on a network with broken IPv6 runs once more on IPv4.
+- `askhook.py`: a hidden Claude's question waits for the next page that opens instead of its unseen Terminal.
 
 ## New video: the three ways in
 
@@ -47,8 +48,8 @@ shows at a glance which lines are ours:
 1. **Clip a stream, better moments.** Done for YouTube stream replays in 0.3: the live chat's surges are a third
    signal. Left: Twitch chat (Twitch's chat API needs a signed-in client now), and
    more than one video's most replayed weighed fairly against another's.
-2. **Clips in your style.** Run each clip through the original style-edit (your profile's captions, zooms and
-   cards) as an option on the Clip a stream panel.
+2. **Clips in your style.** Done (branch `feature/clips-in-your-style`): the panel's Look runs each clip through
+   the original styled edit in the picked style, nothing cut, captions on, cards off.
 3. **"Make one like this" from a link.** Paste a video you like; the analysis that already measures a creator's
    look (creator-teardown quick mode) sets the script's pace and look for Create from a prompt, without a prompt box
    first. Today the prompt panel's reference links already do the measuring.

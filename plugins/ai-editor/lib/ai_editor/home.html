@@ -1543,7 +1543,7 @@ async function makeAnimated(){
 // moments out as short clips: YouTube's most replayed and the loudest reactions find them, the editor shows them all.
 function streamRow(){
   return `<div class="row" style="gap:8px;max-width:640px;align-items:center"><span class="muted" style="font-size:13px">A long stream?</span>
-    <button class="btn quiet sm" onclick="nv.stream=nv.stream||{links:'',count:3,length:'short',layout:'auto',captions:true,titles:true,msg:''};nv.prompt=null;nv.reel=null;render()">Clip a stream</button>
+    <button class="btn quiet sm" onclick="nv.stream=nv.stream||{links:'',count:3,length:'short',layout:'auto',captions:true,titles:true,style:'',msg:''};nv.prompt=null;nv.reel=null;render()">Clip a stream</button>
     <span class="muted faint" style="font-size:12px">The best moments of a stream or gameplay video as short clips.</span></div>`;
 }
 const streamOk=()=>{const P=nv.stream;return !!P&&P.links.split(/\n+/).some(u=>/^https?:\/\/\S+/.test(u.trim())||/^[~\/].+\.(mp4|mov|mkv|webm)$/i.test(u.trim()))};
@@ -1560,18 +1560,20 @@ function streamSide(){
     <div class="sec"><div class="h">Each clip</div><div class="row">${pill('length','short','20-40 s')}${pill('length','mid','40-60 s')}${pill('length','long','60-90 s')}</div></div>
     <div class="sec"><div class="h">Shape</div><div class="row">${[['9:16','Tall · 9:16'],['16:9','Wide · 16:9']].map(([a,t])=>`<button class="pill ${aspectOf()===a?'on':''}" onclick="nv.aspect='${a}';nv.aspectSet=1;render()">${t}</button>`).join('')}</div></div>
     ${aspectOf()==='9:16'?`<div class="sec"><div class="h">Layout</div><div style="display:flex;flex-direction:column;gap:8px">${lay.map(([k,t,d])=>`<button class="opt ${P.layout===k?'on':''}" onclick="nv.stream.layout='${k}';render()"><div class="radio"></div><div class="grow"><b style="font-size:14px">${t}</b><div class="sub" style="font-size:13px;line-height:18px">${d}</div></div></button>`).join('')}</div></div>`:''}
-    <div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
+    <div class="sec"><div class="h">Look</div><div class="row" style="flex-wrap:wrap">${[['','Gaming look'],...((L&&L.styles)||[]).filter(c=>c.id&&!c.studying).map(c=>[c.id,c.name||c.id])].map(([id,t])=>`<button class="pill ${P.style===id?'on':''}" onclick="nv.stream.style=${esc(JSON.stringify(id))};render()">${esc(t)}</button>`).join('')}</div>
+      <div class="sub" style="font-size:13px;line-height:18px">${P.style?'Each clip goes through your styled edit: its captions, zooms and cards. Nothing is cut from the gameplay. Slower: a few minutes a clip.':'Big captions and a hook title, quick.'}</div></div>
+    ${P.style?'':`<div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
       ${tick('captions','Captions','Big word-by-word captions of what is said.')}
-      ${tick('titles','Hook title','A short line on top for the first seconds.')}</div></div>
+      ${tick('titles','Hook title','A short line on top for the first seconds.')}</div></div>`}
     ${P.msg?`<div class="sec"><div class="msg bad">${CROSS}<span>${esc(P.msg)}</span></div></div>`:''}
-    <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${P.count} clip${P.count>1?'s':''} · ${({short:'20-40',mid:'40-60',long:'60-90'})[P.length]} s · ${aspectOf()==='9:16'?'Tall':'Wide'}</span></div>
+    <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${P.count} clip${P.count>1?'s':''} · ${({short:'20-40',mid:'40-60',long:'60-90'})[P.length]} s · ${aspectOf()==='9:16'?'Tall':'Wide'}${P.style?' · in a style':''}</span></div>
       <button class="go" id="make" ${streamOk()?'':'disabled'} onclick="makeStream()">Find the best moments</button>
       <div class="muted faint" style="line-height:18px">You pick the moments first. Each clip opens in the editor, so you can change anything.</div></div></div>`;
 }
 function streamReady(){const b=$('#make');if(b)b.disabled=!streamOk()}
 async function makeStream(){
   const P=nv.stream,b=$('#make');if(b)b.disabled=true;
-  const r=await post('/job',{type:'streamclips',links:P.links.split(/\n+/).map(u=>u.trim()).filter(Boolean),count:P.count,length:P.length,layout:P.layout,captions:!!P.captions,titles:!!P.titles,aspect:aspectOf()});
+  const r=await post('/job',{type:'streamclips',links:P.links.split(/\n+/).map(u=>u.trim()).filter(Boolean),count:P.count,length:P.length,layout:P.layout,captions:!!P.captions,titles:!!P.titles,style:P.style||'',aspect:aspectOf()});
   if(!r._ok){nv.stream.msg=r.msg||r.error||'That did not work.';render();return}
   nv.stream=null;await load();toEditor(r);
 }
