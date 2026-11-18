@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.10.0 (this fork, 2026-11-19)
 - Long video is cut like the channels it was measured against. Three of Slot Studio's published videos were measured (the picture changes every 1.3 to 2.3 seconds, type sits on the footage, captions are small with the spoken word lit). Long video now aims for a new picture every 1.5 to 3 seconds, and a 2-minute test came out at one every 2.0 seconds, against 3.5 before.
 - Type goes on the footage. A shot can carry a big label (a place and year), a person's name and role, or a number on a small card. Full-frame numbers, titles and quotes are drawn over the nearest footage, darkened and without colour, never on an empty dark slide.
 - Titles, numbers and labels are set in condensed capitals (Anton).

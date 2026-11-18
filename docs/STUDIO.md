@@ -61,6 +61,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.10.0 | Long video cut like an edited channel: a new picture every 2 s, type on the footage, condensed capitals, small lit captions (released 2026-11-19, tag `studio-v0.10.0`) |
 | studio 0.9.0 | A narrator picker with previews; connections for Pexels, Runway and Higgsfield; AI-generated shots and your own voiceover in Long video (released 2026-11-19, tag `studio-v0.9.0`) |
 | studio 0.8.0 | A natural free voice (Kokoro); animated graphics, logo-free clips, fuller sound and Pexels stock in Long video (released 2026-11-18, tag `studio-v0.8.0`) |
 | studio 0.7.0 | Long video: a 2 to 10 minute video from one prompt, with thumbnails and a publishing kit (released 2026-11-18, tag `studio-v0.7.0`) |
@@ -75,7 +76,9 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 0. **Needs a real key to try** (built from each service's docs, never run): ElevenLabs voices in the picker, Pexels,
    Runway, Higgsfield, Google's video model. Higgsfield's text-only route and Google's response format are the
    least certain.
-0. **Long video, still open.** Found clips with burned-in subtitles are not detected (only logos); a check that drops
+0. **Long video, still open.** Sound bites (cutting to an interviewee's own words); black side bars on old 4:3
+   footage; Pixabay in place of Pexels, which has paused its API; found clips with burned-in subtitles are not
+   detected (only logos); a check that drops
    found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
    timeline); full 3D is not planned.
 
