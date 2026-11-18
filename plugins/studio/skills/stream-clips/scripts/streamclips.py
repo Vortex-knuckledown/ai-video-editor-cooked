@@ -88,8 +88,62 @@ def run_y(args, cookies=None, timeout=1800):
 
 
 # ---------------------------------------------------------------- 1. meta and sound
-def cmd_meta(proj, sources, cookies=None):
+MAX_VIDEOS = 5
+
+
+def channel_of(s):
+    """A channel's link as the pages that list its videos, newest first (its past streams, then its uploads), or
+    None: the link is one video, a file, or a site with no listing we can read."""
+    m = re.match(r"https?://(?:www\.|m\.)?youtube\.com/(@[^/?#]+|(?:channel|c|user)/[^/?#]+)(?:/(?:streams|videos|featured|live))?/?(?:[?#].*)?$", str(s))
+    if m:
+        base = "https://www.youtube.com/" + m.group(1)
+        return [base + "/streams", base + "/videos"]
+    m = re.match(r"https?://(?:www\.|m\.)?twitch\.tv/([A-Za-z0-9_]{3,25})(?:/videos)?/?(?:[?#].*)?$", str(s))
+    if m and m.group(1).lower() not in ("videos", "directory", "settings", "downloads"):
+        return [f"https://www.twitch.tv/{m.group(1)}/videos?filter=archives&sort=time"]
+    return None
+
+
+def latest_of(pages, n, cookies=None):
+    """The newest n finished videos of a channel (a live or upcoming one is left out), as links."""
+    v4 = [] if os.environ.get("STUDIO_IPV6") else ["--force-ipv4"]
+    for page in pages:
+        r = subprocess.run(ytdlp() + ["--no-warnings", *v4, *(["--cookies-from-browser", cookies] if cookies else []),
+                                      "--flat-playlist", "--playlist-end", str(n + 3), "--print",
+                                      "%(live_status)s|%(webpage_url,url)s", page], capture_output=True, text=True, timeout=180)
+        got = [ln.split("|", 1)[1] for ln in r.stdout.splitlines()
+               if "|" in ln and ln.split("|", 1)[0] not in ("is_live", "is_upcoming") and is_link(ln.split("|", 1)[1])]
+        if got:
+            return got[:n]
+    return []
+
+
+def expand(sources, latest=1, cookies=None):
+    """Every source as videos: a channel link becomes its newest `latest` videos. MAX_VIDEOS in all."""
+    out = []
+    for s in sources:
+        pages = channel_of(s) if is_link(s) else None
+        if not pages:
+            out.append(s)
+            continue
+        got = latest_of(pages, max(1, min(MAX_VIDEOS, latest)), cookies)
+        print(f"{s}: " + (f"its newest {len(got)}: " + " ".join(got) if got else "no finished videos found, skipped"))
+        out += got
+    seen, uniq = set(), []
+    for s in out:
+        if s not in seen:
+            seen.add(s)
+            uniq.append(s)
+    if len(uniq) > MAX_VIDEOS:
+        print(f"{len(uniq)} videos: only the first {MAX_VIDEOS} are read")
+    return uniq[:MAX_VIDEOS]
+
+
+def cmd_meta(proj, sources, cookies=None, latest=1):
     proj = Path(proj)
+    sources = expand(sources, latest, cookies)
+    if not sources:
+        sys.exit("ERROR: no videos to read (a channel link with no finished videos).")
     for n, s in enumerate(sources, 1):
         d = proj / "src" / f"v{n}"
         d.mkdir(parents=True, exist_ok=True)
@@ -635,7 +689,81 @@ def export_name(n, cj):
     return f"{n:02d} {t}.mp4" if t else f"{n:02d} Clip {n}.mp4"
 
 
-def cmd_export(proj, to=None):
+def best_frame(video, n=9):
+    """The frame for a cover: sharp, bright enough, a face a bonus where OpenCV can find one. Looked for between 15% and 85% of the clip."""
+    import cv2
+    cap = cv2.VideoCapture(str(video))
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    faces = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml") \
+        if hasattr(cv2, "CascadeClassifier") and hasattr(cv2, "data") else None      # not in every OpenCV build
+    best, top = None, -1.0
+    for k in range(n):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (0.15 + 0.7 * k / max(1, n - 1))))
+        ok, fr = cap.read()
+        if not ok:
+            continue
+        g = cv2.cvtColor(cv2.resize(fr, (360, int(360 * fr.shape[0] / fr.shape[1]))), cv2.COLOR_BGR2GRAY)
+        sharp = min(1.0, cv2.Laplacian(g, cv2.CV_64F).var() / 600.0)
+        light = 1.0 - abs(float(g.mean()) - 125.0) / 125.0
+        face = 0.5 if faces is not None and len(faces.detectMultiScale(g, 1.2, 4, minSize=(40, 40))) else 0.0
+        if sharp + 0.5 * light + face > top:
+            best, top = fr, sharp + 0.5 * light + face
+    cap.release()
+    return best
+
+
+def thumb(video, title, out):
+    """A cover image the clip's own size: its best frame with the title on it, big, white, outlined."""
+    import cv2
+    from PIL import Image, ImageDraw, ImageFont
+    fr = best_frame(video)
+    if fr is None:
+        return False
+    im = Image.fromarray(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB))
+    w, h = im.size
+    title = " ".join(str(title or "").upper().split())
+    if title:
+        size = int(w * (0.115 if h > w else 0.075))
+        font = None
+        for f in ("/System/Library/Fonts/Supplemental/Impact.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+                  "/System/Library/Fonts/Helvetica.ttc", "C:/Windows/Fonts/impact.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
+            try:
+                font = ImageFont.truetype(f, size)
+                break
+            except OSError:
+                continue
+        font = font or ImageFont.load_default()
+        dr = ImageDraw.Draw(im)
+        lines, line = [], ""
+        for word in title.split():
+            if line and dr.textlength(line + " " + word, font=font) > w * 0.86:
+                lines.append(line)
+                line = word
+            else:
+                line = (line + " " + word).strip()
+        lines = (lines + [line])[:3]
+        y = int(h * (0.52 if h > w else 0.62)) - len(lines) * size // 2
+        for ln in lines:
+            x = (w - dr.textlength(ln, font=font)) / 2
+            dr.text((x, y), ln, font=font, fill=(255, 255, 255), stroke_width=max(4, size // 9), stroke_fill=(0, 0, 0))
+            y += int(size * 1.12)
+    im.save(out, quality=90)
+    return True
+
+
+def post_text(pj):
+    """A clip's post.json ({"caption", "hashtags": [...]}, Claude writes it) as the text to paste when posting."""
+    if not isinstance(pj, dict) or not str(pj.get("caption") or "").strip():
+        return None
+    tags = []
+    for t in pj.get("hashtags") or []:
+        t = "#" + re.sub(r"[^\w]", "", str(t), flags=re.UNICODE)
+        if len(t) > 1 and t.lower() not in [x.lower() for x in tags]:
+            tags.append(t)
+    return str(pj["caption"]).strip() + ("\n\n" + " ".join(tags[:8]) if tags else "") + "\n"
+
+
+def cmd_export(proj, to=None, thumbs=True):
     """Every finished clip of the project copied into one folder, numbered and named by its title. The folder is
     PROJ/exports/ (where the editor's own Export saves, so the home page shows it) unless --to names another."""
     proj = Path(proj)
@@ -643,11 +771,11 @@ def cmd_export(proj, to=None):
     out.mkdir(parents=True, exist_ok=True)
     was = jload(out / ".studio-export.json", []) or []
     for name in was:                                   # last time's copies, so a renamed clip does not leave two
-        if re.fullmatch(r"\d\d .+\.mp4", str(name)) and (out / name).is_file():
+        if re.fullmatch(r"\d\d .+\.(mp4|jpg|txt)", str(name)) and (out / name).is_file():
             (out / name).unlink()
     mj = jload(proj / "moments.json", []) or []
     moments = {m["id"]: m for m in (mj.get("moments", []) if isinstance(mj, dict) else mj) if isinstance(m, dict) and m.get("id")}
-    made = []
+    made, n_clips = [], 0
     for cid in clip_ids(proj):
         f = final_of(proj, cid)
         if not f:
@@ -658,10 +786,25 @@ def cmd_export(proj, to=None):
         name = export_name(int(cid[4:]), cj)
         shutil.copy2(f, out / name)
         made.append(name)
-        print(f"{cid} -> {name}")
+        extra = []
+        if thumbs:
+            try:
+                if thumb(f, cj.get("hook") or "", out / (name[:-4] + ".jpg")):
+                    made.append(name[:-4] + ".jpg")
+                    extra.append("a cover")
+            except ImportError:
+                thumbs = False
+                print("no covers: Pillow or OpenCV is missing (the ai-editor setup skill installs them)")
+        txt = post_text(jload(proj / "clips" / cid / "post.json", None))
+        if txt:
+            (out / (name[:-4] + ".txt")).write_text(txt, encoding="utf-8")
+            made.append(name[:-4] + ".txt")
+            extra.append("a caption")
+        n_clips += 1
+        print(f"{cid} -> {name}" + (" with " + " and ".join(extra) if extra else ""))
     jsave(out / ".studio-export.json", made)
-    print(f"EXPORTED {len(made)} to {out}")
-    return 0 if made else 1
+    print(f"EXPORTED {n_clips} to {out}")
+    return 0 if n_clips else 1
 
 
 def cmd_styled(proj, cid, as_, cards=False):
@@ -725,12 +868,21 @@ def demo():
         (pj / "styled" / "clip2").mkdir(parents=True)
         (pj / "styled" / "clip2" / "render.mp4").write_bytes(b"styled")
         os.utime(pj / "clips" / "clip2" / "render.mp4", (1, 1))
-        assert cmd_export(pj) == 0
+        jsave(pj / "clips" / "clip1" / "post.json", {"caption": "He never saw it coming.", "hashtags": ["minecraft", "#Bed Wars", "minecraft"]})
+        assert cmd_export(pj, thumbs=False) == 0
+        assert (pj / "exports" / "01 First blood.txt").read_text(encoding="utf-8") == "He never saw it coming.\n\n#minecraft #BedWars\n"
         assert sorted(f.name for f in (pj / "exports").glob("*.mp4")) == ["01 First blood.mp4", "02 A stream.mp4"]
         assert (pj / "exports" / "02 A stream.mp4").read_bytes() == b"styled"
         jsave(pj / "moments.json", [{"id": "m1", "text": "from the moment"}])
         jsave(pj / "clips" / "clip1" / "clip.json", {"hook": "Renamed", "moment": "m1"})
-        assert cmd_export(pj) == 0 and not (pj / "exports" / "01 First blood.mp4").exists()
+        assert cmd_export(pj, thumbs=False) == 0 and not (pj / "exports" / "01 First blood.mp4").exists()
+        assert not (pj / "exports" / "01 First blood.txt").exists() and (pj / "exports" / "01 Renamed.txt").exists()
+    # a channel link is its listing pages; one video, a file and a Twitch VOD are not
+    assert channel_of("https://www.youtube.com/@somebody") == ["https://www.youtube.com/@somebody/streams", "https://www.youtube.com/@somebody/videos"]
+    assert channel_of("https://youtube.com/channel/UC123/videos")[0].endswith("/channel/UC123/streams")
+    assert channel_of("https://www.twitch.tv/somebody")[0].startswith("https://www.twitch.tv/somebody/videos")
+    assert channel_of("https://www.youtube.com/watch?v=abc") is None and channel_of("https://www.twitch.tv/videos/123") is None
+    assert channel_of("/tmp/a.mp4") is None and post_text({"caption": " "}) is None
     db = [-40.0] * 600
     for t in range(300, 306):
         db[t] = -12.0                          # a shout at 5:00
@@ -788,6 +940,7 @@ def main(argv):
     ap = argparse.ArgumentParser(prog="streamclips.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("meta"); p.add_argument("proj"); p.add_argument("sources", nargs="+"); p.add_argument("--cookies-from-browser")
+    p.add_argument("--latest", type=int, default=1, help="a channel link becomes its newest N videos")
     p = sub.add_parser("moments"); p.add_argument("proj"); p.add_argument("--min", type=float, default=20)
     p.add_argument("--max", type=float, default=45); p.add_argument("--top", type=int, default=8); p.add_argument("--cookies-from-browser")
     p = sub.add_parser("previews"); p.add_argument("proj")
@@ -800,11 +953,11 @@ def main(argv):
     p = sub.add_parser("render"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--draft", action="store_true")
     p = sub.add_parser("styled"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--as", dest="as_", required=True)
     p.add_argument("--cards", action="store_true", help="keep the style's cards (only for a clip whose talk names real things)")
-    p = sub.add_parser("export"); p.add_argument("proj"); p.add_argument("--to")
+    p = sub.add_parser("export"); p.add_argument("proj"); p.add_argument("--to"); p.add_argument("--no-thumbs", action="store_true")
     sub.add_parser("demo")
     a = ap.parse_args(argv)
     if a.cmd == "meta":
-        return cmd_meta(a.proj, a.sources, a.cookies_from_browser)
+        return cmd_meta(a.proj, a.sources, a.cookies_from_browser, a.latest)
     if a.cmd == "moments":
         return cmd_moments(a.proj, a.min, a.max, a.top, a.cookies_from_browser)
     if a.cmd == "previews":
@@ -818,7 +971,7 @@ def main(argv):
     if a.cmd == "render":
         return cmd_render(a.proj, a.clip, a.draft)
     if a.cmd == "export":
-        return cmd_export(a.proj, a.to)
+        return cmd_export(a.proj, a.to, not a.no_thumbs)
     if a.cmd == "styled":
         return cmd_styled(a.proj, a.clip, a.as_, a.cards)
     return demo()

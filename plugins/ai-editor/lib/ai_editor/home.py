@@ -124,7 +124,7 @@ def stream_clips(edit):
         return 0
 
 
-JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new", "animated", "streamclips")   # studio: "animated" is Create from a prompt, "streamclips" Clip a stream
+JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new", "animated", "streamclips", "subtitles")   # studio: "animated" is Create from a prompt, "streamclips" Clip a stream
 TAKE = ("captions", "pace", "graphics", "sound")          # the page's parts; editplan.py --take names
 # The page's "graphics" box is her visuals as a whole: what she shows, how it moves in and where it sits.
 EDITPLAN_PARTS = {"graphics": ("graphics", "entrances", "layout")}
@@ -1774,6 +1774,8 @@ def job_line(j, root):
         return f"JOB animated edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
     if j["type"] == "streamclips":   # studio: the studio plugin's stream-clips skill takes it
         return f"JOB streamclips edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
+    if j["type"] == "subtitles":   # studio: the studio plugin's subtitles skill takes it
+        return f"JOB subtitles edit={a['edit']} langs={a['langs']} root={root}"
     if j["type"] == "skill-change":
         return f"JOB skill-change {a['skill']} path={a['path']} text={a['text']}"
     if j["type"] == "skill-new":
@@ -2418,7 +2420,7 @@ def make_handler(token):
                 t = studio_script("stream-clips", "streamclips.py")
                 if d not in library.edit_dirs() or not t or not stream_clips(d):
                     return self.send(400, {"msg": "This video has no finished clips to export yet."})
-                r = subprocess.run([sys.executable, str(t), "export", str(d)], capture_output=True, text=True, timeout=300)
+                r = subprocess.run([sys.executable, str(Path(__file__).with_name("run.py")), str(t), "export", str(d)], capture_output=True, text=True, timeout=600)   # run.py: the venv, for the covers (Pillow, OpenCV)
                 m = re.search(r"EXPORTED (\d+) to (.+)", r.stdout or "")
                 if r.returncode or not m:
                     return self.send(500, {"msg": ((r.stderr or r.stdout or "").strip().splitlines() or ["The export did not run."])[-1][:200]})
@@ -2797,6 +2799,8 @@ def make_handler(token):
                 return self.animated(b, d)
             elif kind == "streamclips":   # studio: Clip a stream (plugins/studio, stream-clips skill)
                 return self.streamclips(b, d)
+            elif kind == "subtitles":   # studio: subtitles in other languages for a finished video (plugins/studio, subtitles skill)
+                return self.subtitles(b, d)
             elif kind == "update":   # Settings, Update: the window runs it itself (run_home), no Claude needed
                 if update_info()["fork"]:
                     return self.send(409, {"error": "Your editor is your own copy (a fork). Ask Claude Code: update my editor."})
@@ -3018,11 +3022,28 @@ def make_handler(token):
                 style = ""
             brief = {"links": ok, "count": max(1, min(8, int(b.get("count") or 3))), "min": lo, "max": hi, "layout": layout,
                      "captions": b.get("captions") is not False, "titles": b.get("titles") is not False, "aspect": aspect,
-                     "style": style}
+                     "style": style, "latest": max(1, min(5, int(b.get("latest") or 1)))}   # latest: a channel link's newest N videos
             edit = new_edit(Path(d["root"]), "clips " + (urlsplit(ok[0]).netloc.replace("www.", "").split(".")[0] if ok[0].startswith("http") else Path(ok[0]).stem))
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             self.placeholder(edit, aspect, f"Clips from {len(ok)} video{'s' if len(ok) > 1 else ''}")
             j = update(lambda d: queue(d, "streamclips", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": aspect}))
+            claude_for(j["id"])
+            return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
+
+        def subtitles(self, b, d):   # studio: subtitles in other languages
+            """Subtitle files (.srt) for a finished video in the languages picked: one JOB subtitles for its own Claude,
+            which translates what is said. The files land in the video's exports folder."""
+            edit = Path(str(b.get("dir") or "")).resolve()
+            langs = []
+            for x in b.get("langs") or []:
+                x = re.sub(r"[^A-Za-z \-()]", "", str(x)).strip()[:30]
+                if x and x.lower() not in [y.lower() for y in langs]:
+                    langs.append(x)
+            if edit not in library.edit_dirs() or not langs:
+                return self.send(400, {"ok": False, "msg": "Pick a finished video and at least one language."})
+            if not (stream_clips(edit) or any((edit / n).is_file() for n in ("render.mp4", "final.mp4")) or list((edit / "review").glob("v-*.mp4"))):
+                return self.send(400, {"ok": False, "msg": "This video is not finished yet. Subtitles need the finished video."})
+            j = update(lambda d: queue(d, "subtitles", {"edit": str(edit), "langs": ",".join(langs[:5])}))
             claude_for(j["id"])
             return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
 

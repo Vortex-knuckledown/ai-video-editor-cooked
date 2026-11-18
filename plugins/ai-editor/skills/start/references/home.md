@@ -306,6 +306,14 @@ their length, the layout, captions and titles). The editor is already open on a 
 skill, no cut and no style-edit. Report with `status streamclips`. No studio skill in this session: say on the page
 that the studio plugin is not loaded (`/reload-plugins`) and mark the job `--failed`.
 
+### `JOB subtitles edit=<dir> langs=<Spanish,Hindi,...> root=<dir>` (the studio plugin)
+
+Subtitles in other languages for a finished video (the card's menu in Your videos). Invoke the `studio:subtitles`
+skill (Skill tool) on `edit=` with `langs=` and follow it: it transcribes the finished video, translates each cue and
+saves .srt files beside the exported video. Nothing is cut, styled or rendered, and the editor is not touched.
+Report with `status subtitles`. No studio skill in this session: say on the page that the studio plugin is not
+loaded (`/reload-plugins`) and mark the job `--failed`.
+
 ### `JOB style-change <my-style|@handle> [style=<style.json>] text=<the user's words>`
 
 The user typed what to change on a style's page (My styles, "Tell it what to change"). Turn the words

@@ -2,6 +2,12 @@
 
 What changed for every user, newest first.
 
+## studio 0.6.0 (this fork, 2026-11-18)
+- Subtitles in other languages for any finished video. A video's menu in Your videos has "Subtitles in other languages": pick up to 5 languages, Claude translates what is said, and a subtitle file (.srt) for each language is saved beside the exported video, named like it, with one in the language spoken. The video itself does not change.
+- Export all also saves a cover image for each clip: its sharpest, best-lit frame with the hook title on it.
+- Export all also saves a caption for each clip as a text file: one or two lines and 3 to 5 hashtags that Claude writes when it makes the clip.
+- Clip a stream takes a channel link (YouTube or Twitch) and clips its newest 1, 3 or 5 finished streams. A stream that is live now is left out.
+
 ## studio 0.5.0 (this fork, 2026-11-18)
 - New video opens on four cards with a small drawing each: Edit my clips, Create from a prompt, Make one like this, Clip a stream. They were three small text links under the clip list, easy to miss. Picking a card shows its options on the right and, for the three new kinds, the three steps of what happens.
 - A video made with Make one like this comes out the length of the one you pasted. Claude writes about as many words as it says; the voice then slows a little (never under 80%) and every line gets the same air until the length matches. The test video went from 32 s to 47 s against the original's 48 s.

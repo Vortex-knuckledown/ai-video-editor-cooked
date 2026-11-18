@@ -1527,13 +1527,13 @@ const KINDS=[['clips','Edit my clips','Your own footage, cut and styled like a c
   ['like','Make one like this','Paste a video you like. Yours comes out built the same way.'],['stream','Clip a stream','The best moments of a long stream or gameplay video, as shorts.']];
 const KHOW={prompt:['Say what the video is about, and pick the shape and length.','Claude writes the script in scenes and shows it to you first.','On your OK it animates every scene, and the video opens in the editor.'],
   like:['Paste the video you like. Say what yours is about, or let Claude suggest topics.','Claude measures its length, pace, structure and look, then shows you a script.','Yours is animated from nothing: none of the video you pasted is reused.'],
-  stream:['Paste up to 5 streams or gameplay videos.','Claude finds the best moments and plays them for you, numbered. You pick.','Each pick becomes a short clip with captions and a title, one tab each in the editor.']};
+  stream:['Paste up to 5 streams or gameplay videos, or a channel link for its newest ones.','Claude finds the best moments and plays them for you, numbered. You pick.','Each pick becomes a short clip with captions and a title, one tab each in the editor.']};
 const nvKind=()=>nv.like?'like':nv.stream?'stream':nv.prompt?'prompt':'clips';
 function setKind(k){
   const keep={prompt:nv.prompt,like:nv.like,stream:nv.stream}[k];nv.prompt=nv.like=nv.stream=null;
   if(k==='prompt')nv.prompt=keep||{text:'',refs:'',length:30,voice:true,caption:true,music:true,msg:''};
   if(k==='like')nv.like=keep||{link:'',topic:'',shape:'auto',match:true,voice:true,caption:true,music:true,msg:''};
-  if(k==='stream')nv.stream=keep||{links:'',count:3,length:'short',layout:'auto',captions:true,titles:true,style:'',msg:''};
+  if(k==='stream')nv.stream=keep||{links:'',latest:1,count:3,length:'short',layout:'auto',captions:true,titles:true,style:'',msg:''};
   if(k!=='clips')nv.reel=null;
   render();
 }
@@ -1605,9 +1605,10 @@ function streamSide(){
   const lay=[['auto','Claude decides','Facecam on top if there is one, else the best fit.'],['facecam','Facecam on top','The streamer above, the game below.'],['follow','Follow the face','For IRL and just-chatting streams.'],['fit','Whole frame','The full picture over a blurred copy of itself.']];
   return `<div class="panel rv-side" style="width:520px;flex-shrink:0">
     <div class="sec"><div class="between"><span class="h">Clip a stream</span><button class="hlink" style="font-size:13px" onclick="nv.stream=null;render()">Close</button></div>
-      <div class="sub">Paste up to 5 links. Claude finds the moments people replay, react to and flood the chat about, you pick which become clips, and they open in the editor.</div>
-      <textarea id="slinks" class="input" style="min-height:90px;padding:10px;font-family:inherit;resize:vertical" placeholder="https://www.youtube.com/watch?v=...  (YouTube, Twitch, Kick, or a video file's path, one a line)" oninput="nv.stream.links=this.value;streamReady()">${esc(P.links)}</textarea>
+      <div class="sub">Paste up to 5 links: videos, or a channel for its newest streams. Claude finds the moments people replay, react to and flood the chat about, you pick which become clips, and they open in the editor.</div>
+      <textarea id="slinks" class="input" style="min-height:90px;padding:10px;font-family:inherit;resize:vertical" placeholder="https://www.youtube.com/watch?v=...  or a channel: https://www.youtube.com/@name  (YouTube, Twitch, Kick, or a video file's path, one a line)" oninput="nv.stream.links=this.value;streamReady()">${esc(P.links)}</textarea>
       <div class="muted faint" style="line-height:18px">Only clip videos you have the right to use: your own, or a creator who allows clipping.</div></div>
+    <div class="sec"><div class="h">From a channel link</div><div class="row">${[[1,'Its newest stream'],[3,'Newest 3'],[5,'Newest 5']].map(([n,t])=>pill('latest',n,t)).join('')}</div><div class="muted faint" style="line-height:18px">Only for a channel link (YouTube or Twitch). 5 videos at most in all.</div></div>
     <div class="sec"><div class="h">How many clips</div><div class="row">${[1,3,5].map(n=>pill('count',n,String(n))).join('')}</div></div>
     <div class="sec"><div class="h">Each clip</div><div class="row">${pill('length','short','20-40 s')}${pill('length','mid','40-60 s')}${pill('length','long','60-90 s')}</div></div>
     <div class="sec"><div class="h">Shape</div><div class="row">${[['9:16','Tall · 9:16'],['16:9','Wide · 16:9']].map(([a,t])=>`<button class="pill ${aspectOf()===a?'on':''}" onclick="nv.aspect='${a}';nv.aspectSet=1;render()">${t}</button>`).join('')}</div></div>
@@ -1625,7 +1626,7 @@ function streamSide(){
 function streamReady(){const b=$('#make');if(b)b.disabled=!streamOk()}
 async function makeStream(){
   const P=nv.stream,b=$('#make');if(b)b.disabled=true;
-  const r=await post('/job',{type:'streamclips',links:P.links.split(/\n+/).map(u=>u.trim()).filter(Boolean),count:P.count,length:P.length,layout:P.layout,captions:!!P.captions,titles:!!P.titles,style:P.style||'',aspect:aspectOf()});
+  const r=await post('/job',{type:'streamclips',links:P.links.split(/\n+/).map(u=>u.trim()).filter(Boolean),count:P.count,latest:P.latest||1,length:P.length,layout:P.layout,captions:!!P.captions,titles:!!P.titles,style:P.style||'',aspect:aspectOf()});
   if(!r._ok){nv.stream.msg=r.msg||r.error||'That did not work.';render();return}
   nv.stream=null;await load();toEditor(r);
 }
@@ -2329,6 +2330,26 @@ function vCard(v){
 const picArea=v=>`<div class="pa ${v.wide?'':'tall'}" style="${v.thumb?`--u:url('${esc(v.thumb)}')`:''}">${vMenu(v)}</div>`;
 // how many cards fit across the page view (the same rule as the grid's auto-fill columns: 260 px each, 12 px apart)
 const perRow=()=>Math.max(1,Math.floor((cw()+12)/272));
+// studio: subtitles in other languages for a finished video (plugins/studio, the subtitles skill): pick languages,
+// Claude translates what is said, the .srt files land beside the exported video.
+const SUBLANGS=['Spanish','Hindi','Portuguese','French','German','Japanese','Arabic','Indonesian','Korean','Chinese'];
+const subsPicked=()=>{const S=ui.subs;return [...S.langs,...S.other.split(',').map(x=>x.trim()).filter(Boolean)].slice(0,5)};
+function subsModal(){
+  const S=ui.subs;if(!S)return '';
+  return `<div class="modalbg" onclick="if(event.target===this){ui.subs=null;render()}"><div class="modal" style="width:min(560px,100%);gap:16px" role="dialog" aria-modal="true" aria-labelledby="subt">
+    <div><b id="subt" style="font-size:18px">Subtitles in other languages</b><div class="sub" style="margin-top:4px;font-size:14px;line-height:20px">For ${esc(S.name)}. Claude translates what is said and saves a subtitle file for each language beside the exported video, ready to upload with it. The video itself does not change.</div></div>
+    <div class="row" style="flex-wrap:wrap;gap:8px">${SUBLANGS.map(l=>`<button class="pill ${S.langs.includes(l)?'on':''}" onclick="const a=ui.subs.langs,i=a.indexOf('${l}');i>=0?a.splice(i,1):a.push('${l}');render()">${l}</button>`).join('')}</div>
+    <input class="input" style="height:38px;min-height:38px;flex-shrink:0;padding:0 10px;font-family:inherit" placeholder="Another language (or several, with commas)" value="${esc(S.other)}" oninput="ui.subs.other=this.value;const b=document.getElementById('subgo');if(b)b.disabled=!subsPicked().length">
+    ${S.msg?`<div class="msg bad">${CROSS}<span>${esc(S.msg)}</span></div>`:''}
+    <div class="between"><span class="muted">${subsPicked().length?subsPicked().length+' picked · up to 5':'Pick up to 5'}</span><div class="row" style="gap:8px"><button class="btn quiet sm" onclick="ui.subs=null;render()">Cancel</button><button class="btn dark sm" id="subgo" ${subsPicked().length?'':'disabled'} onclick="makeSubs()">Make subtitles</button></div></div>
+  </div></div>`;
+}
+async function makeSubs(){
+  const S=ui.subs,b=$('#subgo');if(b)b.disabled=true;
+  const r=await post('/job',{type:'subtitles',dir:S.dir,langs:subsPicked()});
+  if(!r._ok){ui.subs.msg=r.msg||r.error||'That did not work.';render();return}
+  ui.subs=null;toast('Claude is making the subtitles. The folder opens when they are ready.');await load();render();
+}
 // studio: Export all. Every finished clip of a Clip a stream video into one folder, named by its title, shown in Finder.
 async function exportClips(dir){ui.cmenu=null;const r=await post('/studio/export',{dir});toast(r._ok?`${r.count} clip${r.count>1?'s':''} saved. The folder is open in Finder.`:(r.msg||'The export did not run.'));await load();render()}
 function cardRows(vs){return `<div class="vcs">${vs.map(vCard).join('')}</div>`}
@@ -2680,7 +2701,7 @@ function subMenu(kind,item,name){
   return `<button class="hasub ${ui.sub?'on':''}" onclick="ui.sub=!ui.sub;render()">${ic('folder',16)}<span class="lb">Move to folder</span>${ic('chev',14,2)}</button>${ui.sub?`<div class="cmenu sub">${kind==='styles'?'<div class="mh">Style folders</div>':''}${F.folders.map(f=>`<button onclick="ui.cmenu=null;moveTo('${kind}',${J(item)},${J(f.id)},${J(name)})">${ic(kind==='styles'?'styles':'folder',16)}<span class="lb">${esc(f.name)}</span>${f.id===cur?ic('check',14,2.4):`<span class="n">${n(f.id)}</span>`}</button>`).join('')}${F.folders.length?'<hr>':''}<button onclick="ui.cmenu=null;${nf}">${ic('plus',16)}<span class="lb">New folder</span></button>${cf?`<button onclick="ui.cmenu=null;moveTo('${kind}',${J(item)},null,${J(name)})">${ic('minus',16)}<span class="lb">Take out of ${esc(cf.name)}</span></button>`:''}</div>`:''}`;
 }
 const vMenu=v=>dotsBtn('v:'+v.dir,'More for this video')+cMenu('v:'+v.dir,[['Rename',`renVid(${J(v.dir)},${J(v.name)})`,'pencil'],['Remove from this list',`hideEdit(${J(v.dir)})`,'minus'],ui.cmenu==='v:'+v.dir&&subMenu('videos',v.dir,v.name),
-  v.status==='done'&&v.media&&['Download',`location.href=${J(v.media)}`,'down'],v.clips&&[`Export all ${v.clips} clip${v.clips>1?'s':''}`,`exportClips(${J(v.dir)})`,'down'],v.exported&&['Show export in Finder',`post('/reveal',{export:${J(v.dir)}})`,'folder'],'hr',['Move to Trash',`askTrash(${J(v.dir)})`,'trash']]);
+  v.status==='done'&&v.media&&['Download',`location.href=${J(v.media)}`,'down'],v.clips&&[`Export all ${v.clips} clip${v.clips>1?'s':''}`,`exportClips(${J(v.dir)})`,'down'],(v.clips||v.status==='done'||v.media)&&['Subtitles in other languages',`ui.cmenu=null;ui.subs={dir:${J(v.dir)},name:${J(v.name)},langs:[],other:'',msg:''};render()`,'file'],v.exported&&['Show export in Finder',`post('/reveal',{export:${J(v.dir)}})`,'folder'],'hr',['Move to Trash',`askTrash(${J(v.dir)})`,'trash']]);
 // ---- folders (Your videos in the sidebar, My styles on its page): folders.json through /folder/*
 const fd=k=>(L&&L.folders||{})[k]||{folders:[],items:{}};
 const inFold=(k,item)=>{const F=fd(k),f=F.items[item];return F.folders.some(x=>x.id===f)?f:null};
@@ -2922,7 +2943,7 @@ function rrender(){
   $('#main').classList.toggle('pg',['home','videos','settings','mystyle','style','stylepage','skills','claude','brand'].includes(rv));
   paint($('#main'),h,rv+'|'+ui.sp);$('#main').classList.toggle('spwrap',rv==='stylepage');
   if(!ui.supp&&S&&L&&!ui.create&&!ui.del&&!ui.skdel&&!ui.bconn&&suppDue()){ui.supp=true;ui.suppSeen=true}
-  const md=ui.skdel?skDelModal():ui.del?delModal():ui.create?createModal():ui.bconn?bconnModal():ui.supp?suppModal():'';paint($('#modal'),md,'m');document.documentElement.style.overflow=md?'hidden':'';$('#main').classList.toggle('hmain',rv==='home');
+  const md=ui.subs?subsModal():ui.skdel?skDelModal():ui.del?delModal():ui.create?createModal():ui.bconn?bconnModal():ui.supp?suppModal():'';paint($('#modal'),md,'m');document.documentElement.style.overflow=md?'hidden':'';$('#main').classList.toggle('hmain',rv==='home');
   if(rv==='mystyle'||rv==='style')flashBuilt();
   const o=$('#order');if(o)o.querySelectorAll('[draggable]').forEach(el=>{
     el.ondragstart=e=>{e.dataTransfer.setData('text/plain',el.dataset.i)};el.ondragover=e=>e.preventDefault();
