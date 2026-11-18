@@ -296,7 +296,7 @@ body.dz #dropov{display:none!important}
 .shape.on{border:1.5px solid var(--ink)}
 .shape i{display:block;border:2px solid var(--t4);border-radius:4px}.shape.on i{border-color:var(--ink)}
 /* studio: the kinds of video on New video, one card each with a small drawing */
-.kinds{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.kinds{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
 .kind{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--panel);text-align:left;min-width:0}
 .kind.on{border:1.5px solid var(--ink);padding:11.5px}
 .kind .art{height:92px;border-radius:10px;background:var(--soft);display:flex;align-items:center;justify-content:center;color:var(--t3)}
@@ -305,7 +305,6 @@ body.dz #dropov{display:none!important}
 .khow{display:flex;flex-direction:column;gap:10px;max-width:640px}
 .khow>div{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
 .khow i{font-style:normal;width:26px;height:26px;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;flex-shrink:0}
-@media (max-width:1700px){.kinds{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:1100px){.kinds{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* B-roll (New video): Claude decides + one tile per library folder, ticked ones Claude can pull clips from */
 .bgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
@@ -1089,7 +1088,8 @@ const KEYS=[
  {id:'gemini',name:'Gemini',tag:"reads a creator's look",text:'Names the fonts, colours and graphics when it analyses a format. Without it, Claude looks at the frames. That uses more of your Claude usage.',cost:'Free, no card',url:'https://aistudio.google.com/apikey'}];
 // studio: the connections Long video can use. Kept out of KEYS so setup never asks for them.
 const STUDIO_KEYS=[
- {id:'pexels',name:'Pexels',tag:'free stock footage and pictures',cost:'Free',url:'https://www.pexels.com/api/'},
+ {id:'pixabay',name:'Pixabay',tag:'free stock footage and pictures',cost:'Free',url:'https://pixabay.com/api/docs/'},
+ {id:'pexels',name:'Pexels',tag:'free stock footage and pictures',cost:'Free, when Pexels is taking new API users',url:'https://www.pexels.com/api/'},
  {id:'runway',name:'Runway',tag:'AI-generated shots',cost:'Paid by the second, from about $0.12',url:'https://dev.runwayml.com/'},
  {id:'higgsfield',name:'Higgsfield',tag:'AI-generated shots',cost:'Paid from your Higgsfield balance',url:'https://cloud.higgsfield.ai/'}];
 const PARTS=[['captions','Captions'],['pace','Pace'],['graphics','Graphics'],['sound','Sound']];
@@ -1269,7 +1269,7 @@ function vNew(){
     :`<button class="pill" onclick="scanHome(true)">Show recent clips from Movies, Desktop and Downloads</button>`;
   const ups=nv.up.map(u=>`<div class="clip" id="up-${u.id}"><div class="pic upic">${u.bad?`<span>${esc(u.bad)}</span><button class="more" style="opacity:1" aria-label="Dismiss" title="Dismiss" onclick="nv.up=nv.up.filter(x=>x.id!==${u.id});render()">${CROSS}</button>`
     :`<span class="uptxt">${u.msg==='Adding...'?`Adding... ${u.pct}%`:esc(u.msg)}</span><div class="upbar"><div style="width:${u.pct}%"></div></div>`}</div><div class="nm">${esc(u.name)}</div></div>`).join('');
-  const side=nv.long?longSide():nv.like?likeSide():nv.stream?streamSide():nv.prompt?promptSide():nv.reel?reelSide():`<div class="panel rv-side" style="width:520px;flex-shrink:0">
+  const side=nv.ugc?ugcSide():nv.long?longSide():nv.like?likeSide():nv.stream?streamSide():nv.prompt?promptSide():nv.reel?reelSide():`<div class="panel rv-side" style="width:520px;flex-shrink:0">
     ${n>=2?`<div class="sec"><div class="h">These ${n} clips are</div><div style="display:flex;flex-direction:column;gap:8px">
       <button class="opt ${nv.join?'on':''}" onclick="nv.join=true;render()"><div class="radio"></div><div class="grow"><div class="row" style="gap:8px"><b style="font-size:14px">One video, joined in this order</b><span class="rec">Recommended</span></div><div class="sub" style="font-size:13px;line-height:18px">${nv.sel.map((p,i)=>i+1).join(', ')} play back to back.${total()?` About ${fmtT(total())} long.`:''}</div></div></button>
       <button class="opt ${nv.join?'':'on'}" onclick="nv.join=false;render()"><div class="radio"></div><div class="grow"><b style="font-size:14px">Separate videos</b><div class="sub" style="font-size:13px;line-height:18px">Each clip becomes its own video. ${n} in total.</div></div></button></div></div>`:''}
@@ -1529,17 +1529,21 @@ const KART={
   prompt:'<rect x="10" y="14" width="44" height="36" rx="6"/><path d="M18 25h24M18 32h28M18 39h14"/><path d="M60 32h10m-4-4 4 4-4 4"/><rect x="76" y="12" width="34" height="40" rx="5"/><circle cx="93" cy="27" r="6"/><path d="M83 44l7-7 5 5 4-4 6 6"/>',
   like:'<rect x="12" y="14" width="36" height="36" rx="5"/><path d="M26 25v14l10-7z"/><path d="M54 32h12m-4-4 4 4-4 4"/><rect x="72" y="14" width="36" height="36" rx="5" stroke-dasharray="4 3"/><path d="M90 23l2.4 6.6L99 32l-6.6 2.4L90 41l-2.4-6.6L81 32l6.6-2.4z" fill="currentColor" stroke="none"/>',
   long:'<rect x="8" y="10" width="68" height="36" rx="5"/><path d="M37 21v14l11-7z" fill="currentColor"/><path d="M8 54h104"/><path d="M8 51v6M34 51v6M60 51v6M86 51v6M112 51v6"/><rect x="82" y="14" width="30" height="8" rx="2"/><path d="M82 30h30M82 37h22"/>',
+  ugc:'<rect x="40" y="6" width="30" height="52" rx="6"/><circle cx="55" cy="24" r="7"/><path d="M44 46c2-8 20-8 22 0"/><rect x="78" y="14" width="32" height="12" rx="6"/><path d="M84 20h20"/><rect x="78" y="32" width="26" height="12" rx="6"/><path d="M84 38h14"/><path d="M12 22l6 4-6 4zM12 38l6 4-6 4z" fill="currentColor"/><path d="M22 26h10M22 42h10"/>',
   stream:'<path d="M8 40h64"/><path d="M12 40v-4M17 40v-7M22 40v-3M27 40v-18M32 40v-9M37 40v-4M42 40v-6M47 40v-22M52 40v-10M57 40v-4M62 40v-7M67 40v-3"/><rect x="23" y="18" width="13" height="26" rx="3" stroke-dasharray="3 3"/><rect x="43" y="14" width="13" height="30" rx="3" stroke-dasharray="3 3"/><path d="M76 32h8m-3-3 3 3-3 3"/><rect x="90" y="8" width="22" height="48" rx="4"/><path d="M95 44h12M97 49h8"/>'};
 const KINDS=[['clips','Edit my clips','Your own footage, cut and styled like a creator.'],['prompt','Create from a prompt','No footage needed. A fully animated video from a few sentences.'],
   ['long','Long video','A 2 to 10 minute video from one prompt: research, voice, footage and graphics.'],
+  ['ugc','UGC ad','A person talking about your product, cut into several ads with different hooks.'],
   ['like','Make one like this','Paste a video you like. Yours comes out built the same way.'],['stream','Clip a stream','The best moments of a long stream or gameplay video, as shorts.']];
-const KHOW={long:['Say what the video is about and how long. Claude researches it and shows you the script, with its sources.','On your OK it records the voice and finds a new shot for every few seconds: footage, pictures, charts and graphics.','It opens in the editor, with three thumbnails and a title and description ready to paste.'],
+const KHOW={ugc:['Name the product and say what it does. With no clips yet, Claude writes the hooks, a script and a shot list to film from.','Come back with the filmed clips. Claude picks the best takes and cuts several versions, each opening on a different hook.','They open in the editor, one tab each, so you can post them and see which hook works.'],
+  long:['Say what the video is about and how long. Claude researches it and shows you the script, with its sources.','On your OK it records the voice and finds a new shot for every few seconds: footage, pictures, charts and graphics.','It opens in the editor, with three thumbnails and a title and description ready to paste.'],
   prompt:['Say what the video is about, and pick the shape and length.','Claude writes the script in scenes and shows it to you first.','On your OK it animates every scene, and the video opens in the editor.'],
   like:['Paste the video you like. Say what yours is about, or let Claude suggest topics.','Claude measures its length, pace, structure and look, then shows you a script.','Yours is animated from nothing: none of the video you pasted is reused.'],
   stream:['Paste up to 5 streams or gameplay videos, or a channel link for its newest ones.','Claude finds the best moments and plays them for you, numbered. You pick.','Each pick becomes a short clip with captions and a title, one tab each in the editor.']};
-const nvKind=()=>nv.long?'long':nv.like?'like':nv.stream?'stream':nv.prompt?'prompt':'clips';
+const nvKind=()=>nv.ugc?'ugc':nv.long?'long':nv.like?'like':nv.stream?'stream':nv.prompt?'prompt':'clips';
 function setKind(k){
-  const keep={prompt:nv.prompt,like:nv.like,stream:nv.stream,long:nv.long}[k];nv.prompt=nv.like=nv.stream=nv.long=null;
+  const keep={prompt:nv.prompt,like:nv.like,stream:nv.stream,long:nv.long,ugc:nv.ugc}[k];nv.prompt=nv.like=nv.stream=nv.long=nv.ugc=null;
+  if(k==='ugc')nv.ugc=keep||{product:'',about:'',audience:'',link:'',clips:'',media:'',versions:3,caption:true,music:true,cta:'',msg:''};
   if(k==='long')nv.long=keep||{text:'',minutes:3,shape:'16:9',youtube:true,photos:true,caption:true,music:true,own:'',ai:false,voiceover:'',msg:''};
   if(k==='prompt')nv.prompt=keep||{text:'',refs:'',length:30,voice:true,caption:true,music:true,msg:''};
   if(k==='like')nv.like=keep||{link:'',topic:'',shape:'auto',match:true,voice:true,caption:true,music:true,msg:''};
@@ -1549,6 +1553,43 @@ function setKind(k){
 }
 const kindCards=()=>`<div class="kinds" role="radiogroup" aria-label="What kind of video">${KINDS.map(([k,t,d])=>`<button class="kind ${nvKind()===k?'on':''}" role="radio" aria-checked="${nvKind()===k}" onclick="setKind('${k}')"><div class="art"><svg width="150" height="80" viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${KART[k]}</svg></div><div><b>${t}</b><div class="sub">${d}</div></div></button>`).join('')}</div>`;
 const kindHow=k=>`<div class="khow">${KHOW[k].map((t,i)=>`<div><i>${i+1}</i><span style="font-size:14px;line-height:20px;padding-top:3px">${t}</span></div>`).join('')}</div>`;
+// ---- studio: UGC ad (plugins/studio, the ugc-ad skill). A person talking to the camera about a product: with no clips,
+// the pack to film from; with the clips, several versions of the ad that differ in their hook.
+function ugcSide(){
+  const P=nv.ugc,tick=(k,t,s)=>`<button class="opt ${P[k]?'on':''}" onclick="nv.ugc.${k}=!nv.ugc.${k};render()"><div class="radio" style="border-radius:5px"></div><div class="grow"><b style="font-size:14px">${t}</b><div class="sub" style="font-size:13px;line-height:18px">${s}</div></div></button>`;
+  const inp=(k,ph)=>`<input class="input" style="height:38px;min-height:38px;padding:0 10px;font-family:inherit" placeholder="${ph}" value="${esc(P[k])}" oninput="nv.ugc.${k}=this.value;ugcReady()">`;
+  const area=(k,ph,h)=>`<textarea class="input" style="min-height:${h}px;padding:10px;font-family:inherit;resize:vertical" placeholder="${ph}" oninput="nv.ugc.${k}=this.value;ugcReady()" onchange="render()">${esc(P[k])}</textarea>`;
+  const has=P.clips.trim().length>0;
+  return `<div class="panel rv-side" style="width:520px;flex-shrink:0">
+    <div class="sec"><div class="between"><span class="h">UGC ad</span><button class="hlink" style="font-size:13px" onclick="nv.ugc=null;render()">Close</button></div>
+      <div class="sub">A person talking to the camera about your product. Start with no clips to get what to film; come back with the clips to get the ads.</div>
+      ${inp('product','The product\'s name')}
+      ${area('about','What it does and why someone would want it. Only what is true: the ad says nothing you do not say here or on its page.',84)}
+      ${inp('audience','Who it is for (optional)')}
+      ${inp('link','Its page, https://... (optional)')}</div>
+    <div class="sec"><div class="h">The filmed clips <span class="muted">(leave empty to get the script first)</span></div>
+      ${area('clips','A folder like ~/Movies/ugc-takes, or the clips\' paths, one a line',64)}
+      <div class="muted faint" style="line-height:18px">Vertical clips of the person talking: each hook, and the script in one or two takes.</div></div>
+    ${has?`<div class="sec"><div class="h">Pictures or clips of the product <span class="muted">(optional)</span></div>
+      ${area('media','Paths, one a line. Shown over the voice while the product is described.',54)}</div>
+    <div class="sec"><div class="h">How many versions</div><div class="row">${[1,3,5].map(n=>`<button class="pill ${P.versions===n?'on':''}" onclick="nv.ugc.versions=${n};render()">${n}</button>`).join('')}</div>
+      <div class="muted faint" style="line-height:18px">Each opens on a different hook and shares the rest, so you can test which works.</div></div>
+    <div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
+      ${tick('caption','Captions','Every word, as it is said.')}
+      ${tick('music','Music','A quiet bed made for this ad.')}</div>
+      ${inp('cta','The last card, like: Link in bio (optional)')}</div>`:''}
+    ${P.msg?`<div class="sec"><div class="msg bad">${CROSS}<span>${esc(P.msg)}</span></div></div>`:''}
+    <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${has?P.versions+' version'+(P.versions>1?'s':'')+' · Tall 9:16':'Hooks, a script and a shot list'}</span></div>
+      <button class="go" id="make" ${P.product.trim().length>=2&&P.about.trim().length>=8?'':'disabled'} onclick="makeUgc()">${has?'Make my ads':'Write what to film'}</button>
+      <div class="muted faint" style="line-height:18px">Real people and true claims only: never a made-up customer or review.</div></div></div>`;
+}
+function ugcReady(){const P=nv.ugc,b=$('#make');if(b)b.disabled=!(P.product.trim().length>=2&&P.about.trim().length>=8)}
+async function makeUgc(){
+  const P=nv.ugc,b=$('#make'),ls=t=>t.split(/\n+/).map(x=>x.trim()).filter(Boolean);if(b)b.disabled=true;
+  const r=await post('/job',{type:'ugc',product:P.product.trim(),about:P.about.trim(),audience:P.audience.trim(),link:P.link.trim(),clips:ls(P.clips),product_media:ls(P.media),versions:P.versions,captions:!!P.caption,music:!!P.music,cta:P.cta.trim()});
+  if(!r._ok){nv.ugc.msg=r.msg||r.error||'That did not work.';render();return}
+  nv.ugc=null;await load();toEditor(r);
+}
 // ---- studio: the voice picker, shared by Long video, Create from a prompt and Make one like this. Kokoro's voices are
 // free and run on this computer; with an ElevenLabs key saved, the account's voices are listed too. A click picks a
 // voice and plays a few seconds of it.
@@ -2397,7 +2438,7 @@ function vStat(v){
 function vCard(v){
   const s=vStat(v),fn=rv==='videos'&&ui.fold.videos?'':(fd('videos').folders.find(f=>f.id===inFold('videos',v.dir))||{}).name,meta=[fn,v.stage==='edit'?'Full edit':'Cut',v.clips?`${v.clips} clip${v.clips>1?'s':''}`:'',v.wide?'16:9':v.round?(v.draft||`draft ${v.round}`):'',v.exported?exAgo(v.exported):ago(v.updated)].filter(Boolean).join(' · ');
   return `<div class="vc" ${goAttrs(v)} ${dragAttrs('videos',v.dir,v.name,v.thumb)}><div class="vi">${picArea(v)}
-    <div class="tx"><div style="min-width:0">${vName(v)}<div class="mt">${meta}</div></div><div class="st"><div class="stt ${s.ok?'ok':''}" title="${esc(s.title||'')}">${s.txt}</div>${s.btn}${v.clips?`<button class="b2" onclick="event.stopPropagation();exportClips(${J(v.dir)})">Export all</button>`:''}</div></div>
+    <div class="tx"><div style="min-width:0">${vName(v)}<div class="mt">${meta}</div></div><div class="st"><div class="stt ${s.ok?'ok':''}" title="${esc(s.title||'')}">${s.txt}</div>${s.btn}${v.clips?`<button class="b2" onclick="event.stopPropagation();exportClips(${J(v.dir)})">Export all</button>`:''}${v.long?`<button class="b2" onclick="event.stopPropagation();makeShorts(${J(v.dir)})">Make Shorts</button>`:''}</div></div>
     <div class="bar ${s.ok?'ok':s.frac==null?'indet':''}">${s.ok?'':`<i style="width:${s.frac==null?40:Math.round(s.frac*100)}%"></i>`}</div></div></div>`;
 }
 // the picture area every video card and tile shares: one height; wide fills it, tall shows whole over a blurred copy
@@ -2424,6 +2465,8 @@ async function makeSubs(){
   if(!r._ok){ui.subs.msg=r.msg||r.error||'That did not work.';render();return}
   ui.subs=null;toast('Claude is making the subtitles. The folder opens when they are ready.');await load();render();
 }
+// studio: Shorts from a finished Long video: its sections as vertical clips, rendered in the background into its exports folder.
+async function makeShorts(dir){ui.cmenu=null;const r=await post('/studio/shorts',{dir});toast(r._ok?'Making the Shorts. The folder opens when they are ready, in a few minutes.':(r.msg||'That did not start.'));render()}
 // studio: Export all. Every finished clip of a Clip a stream video into one folder, named by its title, shown in Finder.
 async function exportClips(dir){ui.cmenu=null;const r=await post('/studio/export',{dir});toast(r._ok?`${r.count} clip${r.count>1?'s':''} saved. The folder is open in Finder.`:(r.msg||'The export did not run.'));await load();render()}
 function cardRows(vs){return `<div class="vcs">${vs.map(vCard).join('')}</div>`}
@@ -2775,7 +2818,7 @@ function subMenu(kind,item,name){
   return `<button class="hasub ${ui.sub?'on':''}" onclick="ui.sub=!ui.sub;render()">${ic('folder',16)}<span class="lb">Move to folder</span>${ic('chev',14,2)}</button>${ui.sub?`<div class="cmenu sub">${kind==='styles'?'<div class="mh">Style folders</div>':''}${F.folders.map(f=>`<button onclick="ui.cmenu=null;moveTo('${kind}',${J(item)},${J(f.id)},${J(name)})">${ic(kind==='styles'?'styles':'folder',16)}<span class="lb">${esc(f.name)}</span>${f.id===cur?ic('check',14,2.4):`<span class="n">${n(f.id)}</span>`}</button>`).join('')}${F.folders.length?'<hr>':''}<button onclick="ui.cmenu=null;${nf}">${ic('plus',16)}<span class="lb">New folder</span></button>${cf?`<button onclick="ui.cmenu=null;moveTo('${kind}',${J(item)},null,${J(name)})">${ic('minus',16)}<span class="lb">Take out of ${esc(cf.name)}</span></button>`:''}</div>`:''}`;
 }
 const vMenu=v=>dotsBtn('v:'+v.dir,'More for this video')+cMenu('v:'+v.dir,[['Rename',`renVid(${J(v.dir)},${J(v.name)})`,'pencil'],['Remove from this list',`hideEdit(${J(v.dir)})`,'minus'],ui.cmenu==='v:'+v.dir&&subMenu('videos',v.dir,v.name),
-  v.status==='done'&&v.media&&['Download',`location.href=${J(v.media)}`,'down'],v.clips&&[`Export all ${v.clips} clip${v.clips>1?'s':''}`,`exportClips(${J(v.dir)})`,'down'],(v.clips||v.status==='done'||v.media)&&['Subtitles in other languages',`ui.cmenu=null;ui.subs={dir:${J(v.dir)},name:${J(v.name)},langs:[],other:'',msg:''};render()`,'file'],v.exported&&['Show export in Finder',`post('/reveal',{export:${J(v.dir)}})`,'folder'],'hr',['Move to Trash',`askTrash(${J(v.dir)})`,'trash']]);
+  v.status==='done'&&v.media&&['Download',`location.href=${J(v.media)}`,'down'],v.clips&&[`Export all ${v.clips} clip${v.clips>1?'s':''}`,`exportClips(${J(v.dir)})`,'down'],v.long&&['Make Shorts from this video',`makeShorts(${J(v.dir)})`,'down'],(v.clips||v.status==='done'||v.media)&&['Subtitles in other languages',`ui.cmenu=null;ui.subs={dir:${J(v.dir)},name:${J(v.name)},langs:[],other:'',msg:''};render()`,'file'],v.exported&&['Show export in Finder',`post('/reveal',{export:${J(v.dir)}})`,'folder'],'hr',['Move to Trash',`askTrash(${J(v.dir)})`,'trash']]);
 // ---- folders (Your videos in the sidebar, My styles on its page): folders.json through /folder/*
 const fd=k=>(L&&L.folders||{})[k]||{folders:[],items:{}};
 const inFold=(k,item)=>{const F=fd(k),f=F.items[item];return F.folders.some(x=>x.id===f)?f:null};
@@ -2842,7 +2885,7 @@ function stHelp(k){
 }
 // ---- Settings: keys (each with its own status and a little of its brand colour), updates, the videos folder, the theme
 const KLT={elevenlabs:'var(--soft)',gemini:'color-mix(in srgb,#9168C0 14%,var(--skbg))'};
-const KDS={pexels:'Stock clips and pictures with no logos, for Long video',runway:'A few seconds of generated video for a shot nobody filmed',higgsfield:'A found picture brought to life as a moving shot',elevenlabs:'Exact words, so the cut finds your retakes',gemini:"Reads a creator's look when it analyses them",zernio:'Does the posting for cooked.'};
+const KDS={pixabay:'Stock clips and pictures with no logos, for Long video',pexels:'Stock clips and pictures with no logos, for Long video',runway:'A few seconds of generated video for a shot nobody filmed',higgsfield:'A found picture brought to life as a moving shot',elevenlabs:'Exact words, so the cut finds your retakes',gemini:"Reads a creator's look when it analyses them",zernio:'Does the posting for cooked.'};
 const OKTICK=ic('check',14,2.6);
 function stKey(k){
   const st=S.keys[k.id]||{},u=ui.keys[k.id]||{},c=st.check,editing=u.edit||!st.set;

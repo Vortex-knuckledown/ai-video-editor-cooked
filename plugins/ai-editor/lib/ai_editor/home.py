@@ -166,7 +166,7 @@ def stream_clips(edit):
         return 0
 
 
-JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new", "animated", "streamclips", "subtitles", "longvideo")   # studio: "animated" is Create from a prompt, "streamclips" Clip a stream
+JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new", "animated", "streamclips", "subtitles", "longvideo", "ugc")   # studio: "animated" is Create from a prompt, "streamclips" Clip a stream
 TAKE = ("captions", "pace", "graphics", "sound")          # the page's parts; editplan.py --take names
 # The page's "graphics" box is her visuals as a whole: what she shows, how it moves in and where it sits.
 EDITPLAN_PARTS = {"graphics": ("graphics", "entrances", "layout")}
@@ -1816,6 +1816,8 @@ def job_line(j, root):
         return f"JOB animated edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
     if j["type"] == "streamclips":   # studio: the studio plugin's stream-clips skill takes it
         return f"JOB streamclips edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
+    if j["type"] == "ugc":   # studio: the studio plugin's ugc-ad skill takes it
+        return f"JOB ugc edit={a['edit']} brief={a['brief']} aspect=9:16 root={root}"
     if j["type"] == "longvideo":   # studio: the studio plugin's long-video skill takes it
         return f"JOB longvideo edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
     if j["type"] == "subtitles":   # studio: the studio plugin's subtitles skill takes it
@@ -2235,6 +2237,7 @@ def make_handler(token):
                     v["phase"] = phase(v)
                     v["exported"] = max((f.stat().st_mtime for f in (Path(v["dir"]) / "exports").glob("*.mp4")), default=None)   # review.py Export
                     v["clips"] = stream_clips(v["dir"])   # studio: a Clip a stream video's finished clips, for Export all
+                    v["long"] = (Path(v["dir"]) / "render.mp4").is_file() and (Path(v["dir"]) / "shots.json").is_file()   # studio: a finished Long video, for Make Shorts
                 for v, m in zip(vids, ms):
                     a = (raw.get(v["dir"]) or {}).get("args", {}).get("aspect")
                     v["duration"] = m.get("duration") if v["status"] in ("ready", "done") else None
@@ -2473,6 +2476,15 @@ def make_handler(token):
                     return self.send(400, {})
                 subprocess.Popen(library.reveal_cmd(p), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return self.send(200, {})
+            if path == "/studio/shorts":   # studio: Shorts from a finished Long video, rendered in the background into its exports folder
+                d = Path(str(body.get("dir") or "")).resolve()
+                t = studio_script("long-video", "longvideo.py")
+                if d not in library.edit_dirs() or not t or not (d / "render.mp4").is_file() or not (d / "shots.json").is_file():
+                    return self.send(400, {"msg": "Shorts are made from a finished Long video."})
+                log = open(d / "shorts.log", "w", encoding="utf-8")
+                subprocess.Popen([sys.executable, str(Path(__file__).with_name("run.py")), str(t), "shorts", str(d), "--reveal"],
+                                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                return self.send(200, {"started": True})
             if path == "/studio/export":   # studio: Export all. Every finished clip of a stream into <edit>/exports/, named by its title
                 d = Path(str(body.get("dir") or "")).resolve()
                 t = studio_script("stream-clips", "streamclips.py")
@@ -2857,6 +2869,8 @@ def make_handler(token):
                 return self.animated(b, d)
             elif kind == "streamclips":   # studio: Clip a stream (plugins/studio, stream-clips skill)
                 return self.streamclips(b, d)
+            elif kind == "ugc":   # studio: UGC ad (plugins/studio, ugc-ad skill)
+                return self.ugc(b, d)
             elif kind == "longvideo":   # studio: Long video (plugins/studio, long-video skill)
                 return self.longvideo(b, d)
             elif kind == "subtitles":   # studio: subtitles in other languages for a finished video (plugins/studio, subtitles skill)
@@ -3087,6 +3101,36 @@ def make_handler(token):
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             self.placeholder(edit, aspect, f"Clips from {len(ok)} video{'s' if len(ok) > 1 else ''}")
             j = update(lambda d: queue(d, "streamclips", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": aspect}))
+            claude_for(j["id"])
+            return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
+
+        def ugc(self, b, d):   # studio: UGC ad
+            """A UGC-style ad (the studio plugin's ugc-ad skill): with no clips, the hooks, script and shot list to film
+            from; with the filmed clips, several versions of the ad that differ in their hook."""
+            product = re.sub(r"\s+", " ", str(b.get("product") or "")).strip()[:120]
+            about = re.sub(r"\s+", " ", str(b.get("about") or "")).strip()[:2000]
+            if len(product) < 2 or len(about) < 8:
+                return self.send(400, {"ok": False, "msg": "Name the product and say what it does first."})
+            def paths(key, want_dir=True):
+                out = []
+                for x in b.get(key) or []:
+                    p = Path(os.path.expanduser(str(x).strip()))
+                    if str(x).strip() and (p.is_file() or (want_dir and p.is_dir())):
+                        out.append(str(p))
+                return out[:24]
+            clips, media = paths("clips"), paths("product_media", False)
+            given = [x for x in b.get("clips") or [] if str(x).strip()]
+            if given and not clips:
+                return self.send(400, {"ok": False, "msg": "Those clips are not there. Give a folder, or the files' paths, one a line."})
+            link = str(b.get("link") or "").strip()
+            brief = {"product": product, "about": about, "audience": str(b.get("audience") or "").strip()[:300],
+                     "link": link if link.startswith(("http://", "https://")) else "", "clips": clips, "product_media": media,
+                     "versions": max(1, min(5, int(b.get("versions") or 3))), "captions": b.get("captions") is not False,
+                     "music": b.get("music") is not False, "cta": str(b.get("cta") or "").strip()[:40]}
+            edit = new_edit(Path(d["root"]), "ugc " + " ".join(product.split()[:4]))
+            (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
+            self.placeholder(edit, "9:16", f"UGC ad: {product}"[:60])
+            j = update(lambda d: queue(d, "ugc", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": "9:16"}))
             claude_for(j["id"])
             return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
 

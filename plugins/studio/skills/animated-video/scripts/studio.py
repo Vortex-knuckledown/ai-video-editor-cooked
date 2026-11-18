@@ -445,7 +445,12 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
             text = str(s["say"]).strip()
             stamp = edit / "audio" / f"vo-{s['id']}.txt"
             want = f"{eng}|{voice}|{text}" + (f"|r{rate}" if rate else "")
-            if not out.exists() or (stamp.read_text(encoding="utf-8") if stamp.exists() else "") != want:
+            bite = edit / "audio" / f"bite-{s['id']}.wav"       # a sound bite (long-video): the person's own words are the voice
+            if s.get("bite") and bite.exists():
+                if not out.exists() or out.stat().st_mtime < bite.stat().st_mtime:
+                    shutil.copy2(bite, out)
+                stamp.write_text("bite", encoding="utf-8")
+            elif not out.exists() or (stamp.read_text(encoding="utf-8") if stamp.exists() else "") != want:
                 if eng == "eleven":
                     tts_eleven(text, out, voice or DEFAULT_VOICE, key)
                 elif eng == "kokoro":
