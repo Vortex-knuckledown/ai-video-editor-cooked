@@ -124,7 +124,7 @@ def stream_clips(edit):
         return 0
 
 
-JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new", "animated", "streamclips", "subtitles")   # studio: "animated" is Create from a prompt, "streamclips" Clip a stream
+JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new", "animated", "streamclips", "subtitles", "longvideo")   # studio: "animated" is Create from a prompt, "streamclips" Clip a stream
 TAKE = ("captions", "pace", "graphics", "sound")          # the page's parts; editplan.py --take names
 # The page's "graphics" box is her visuals as a whole: what she shows, how it moves in and where it sits.
 EDITPLAN_PARTS = {"graphics": ("graphics", "entrances", "layout")}
@@ -1774,6 +1774,8 @@ def job_line(j, root):
         return f"JOB animated edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
     if j["type"] == "streamclips":   # studio: the studio plugin's stream-clips skill takes it
         return f"JOB streamclips edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
+    if j["type"] == "longvideo":   # studio: the studio plugin's long-video skill takes it
+        return f"JOB longvideo edit={a['edit']} brief={a['brief']} aspect={a['aspect']} root={root}"
     if j["type"] == "subtitles":   # studio: the studio plugin's subtitles skill takes it
         return f"JOB subtitles edit={a['edit']} langs={a['langs']} root={root}"
     if j["type"] == "skill-change":
@@ -2799,6 +2801,8 @@ def make_handler(token):
                 return self.animated(b, d)
             elif kind == "streamclips":   # studio: Clip a stream (plugins/studio, stream-clips skill)
                 return self.streamclips(b, d)
+            elif kind == "longvideo":   # studio: Long video (plugins/studio, long-video skill)
+                return self.longvideo(b, d)
             elif kind == "subtitles":   # studio: subtitles in other languages for a finished video (plugins/studio, subtitles skill)
                 return self.subtitles(b, d)
             elif kind == "update":   # Settings, Update: the window runs it itself (run_home), no Claude needed
@@ -3027,6 +3031,27 @@ def make_handler(token):
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             self.placeholder(edit, aspect, f"Clips from {len(ok)} video{'s' if len(ok) > 1 else ''}")
             j = update(lambda d: queue(d, "streamclips", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": aspect}))
+            claude_for(j["id"])
+            return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
+
+        def longvideo(self, b, d):   # studio: Long video
+            """A long video from a prompt (the studio plugin's long-video skill): researched, narrated, a new shot every
+            few seconds. brief.json in a new edit, the editor opened on a placeholder, one JOB longvideo for its own Claude."""
+            prompt = re.sub(r"\s+", " ", str(b.get("prompt") or "")).strip()[:4000]
+            if len(prompt) < 8:
+                return self.send(400, {"ok": False, "msg": "Say what the video is about first."})
+            aspect = "9:16" if b.get("aspect") == "9:16" else "16:9"
+            own = str(b.get("own") or "").strip()
+            if own and not Path(os.path.expanduser(own)).is_dir():
+                return self.send(400, {"ok": False, "msg": "That folder of your own clips is not there."})
+            brief = {"prompt": prompt, "minutes": max(1, min(10, int(b.get("minutes") or 3))), "aspect": aspect, "voice": True,
+                     "text": b.get("text") is not False, "music": b.get("music") is not False,
+                     "footage": {"youtube": b.get("youtube") is not False, "photos": b.get("photos") is not False},
+                     "own": os.path.expanduser(own) if own else None}
+            edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]))
+            (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
+            self.placeholder(edit, aspect, prompt[:60])
+            j = update(lambda d: queue(d, "longvideo", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": aspect}))
             claude_for(j["id"])
             return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
 

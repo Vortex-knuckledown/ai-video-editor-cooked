@@ -306,6 +306,14 @@ their length, the layout, captions and titles). The editor is already open on a 
 skill, no cut and no style-edit. Report with `status streamclips`. No studio skill in this session: say on the page
 that the studio plugin is not loaded (`/reload-plugins`) and mark the job `--failed`.
 
+### `JOB longvideo edit=<dir> brief=<dir>/brief.json aspect=<16:9|9:16> root=<dir>` (the studio plugin)
+
+New video's "Long video": a 2 to 10 minute video from one prompt. Invoke the `studio:long-video` skill (Skill tool)
+on `edit=` and follow it; it reads `brief.json` (the prompt, the minutes, what footage it may use). The editor is
+already open on a placeholder draft. Not the animated-video skill, no cut and no style-edit. Report with
+`status longvideo`. No studio skill in this session: say on the page that the studio plugin is not loaded
+(`/reload-plugins`) and mark the job `--failed`.
+
 ### `JOB subtitles edit=<dir> langs=<Spanish,Hindi,...> root=<dir>` (the studio plugin)
 
 Subtitles in other languages for a finished video (the card's menu in Your videos). Invoke the `studio:subtitles`

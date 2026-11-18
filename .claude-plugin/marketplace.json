@@ -24,7 +24,7 @@
       "category": "media",
       "tags": ["video", "animation", "clips"],
       "keywords": ["animated-video", "explainer", "text-to-video", "voiceover", "motion-graphics", "stream-clips", "gaming", "twitch"],
-      "skills": ["./skills/animated-video", "./skills/stream-clips", "./skills/subtitles"]
+      "skills": ["./skills/animated-video", "./skills/stream-clips", "./skills/subtitles", "./skills/long-video"]
     },
     {
       "name": "ai-editor",

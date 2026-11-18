@@ -296,7 +296,7 @@ body.dz #dropov{display:none!important}
 .shape.on{border:1.5px solid var(--ink)}
 .shape i{display:block;border:2px solid var(--t4);border-radius:4px}.shape.on i{border-color:var(--ink)}
 /* studio: the kinds of video on New video, one card each with a small drawing */
-.kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kinds{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
 .kind{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--panel);text-align:left;min-width:0}
 .kind.on{border:1.5px solid var(--ink);padding:11.5px}
 .kind .art{height:92px;border-radius:10px;background:var(--soft);display:flex;align-items:center;justify-content:center;color:var(--t3)}
@@ -305,7 +305,8 @@ body.dz #dropov{display:none!important}
 .khow{display:flex;flex-direction:column;gap:10px;max-width:640px}
 .khow>div{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
 .khow i{font-style:normal;width:26px;height:26px;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;flex-shrink:0}
-@media (max-width:1280px){.kinds{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:1700px){.kinds{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:1100px){.kinds{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* B-roll (New video): Claude decides + one tile per library folder, ticked ones Claude can pull clips from */
 .bgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .btile{position:relative;min-width:0;display:flex;flex-direction:column;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);text-align:left;color:var(--ink)}
@@ -1263,7 +1264,7 @@ function vNew(){
     :`<button class="pill" onclick="scanHome(true)">Show recent clips from Movies, Desktop and Downloads</button>`;
   const ups=nv.up.map(u=>`<div class="clip" id="up-${u.id}"><div class="pic upic">${u.bad?`<span>${esc(u.bad)}</span><button class="more" style="opacity:1" aria-label="Dismiss" title="Dismiss" onclick="nv.up=nv.up.filter(x=>x.id!==${u.id});render()">${CROSS}</button>`
     :`<span class="uptxt">${u.msg==='Adding...'?`Adding... ${u.pct}%`:esc(u.msg)}</span><div class="upbar"><div style="width:${u.pct}%"></div></div>`}</div><div class="nm">${esc(u.name)}</div></div>`).join('');
-  const side=nv.like?likeSide():nv.stream?streamSide():nv.prompt?promptSide():nv.reel?reelSide():`<div class="panel rv-side" style="width:520px;flex-shrink:0">
+  const side=nv.long?longSide():nv.like?likeSide():nv.stream?streamSide():nv.prompt?promptSide():nv.reel?reelSide():`<div class="panel rv-side" style="width:520px;flex-shrink:0">
     ${n>=2?`<div class="sec"><div class="h">These ${n} clips are</div><div style="display:flex;flex-direction:column;gap:8px">
       <button class="opt ${nv.join?'on':''}" onclick="nv.join=true;render()"><div class="radio"></div><div class="grow"><div class="row" style="gap:8px"><b style="font-size:14px">One video, joined in this order</b><span class="rec">Recommended</span></div><div class="sub" style="font-size:13px;line-height:18px">${nv.sel.map((p,i)=>i+1).join(', ')} play back to back.${total()?` About ${fmtT(total())} long.`:''}</div></div></button>
       <button class="opt ${nv.join?'':'on'}" onclick="nv.join=false;render()"><div class="radio"></div><div class="grow"><b style="font-size:14px">Separate videos</b><div class="sub" style="font-size:13px;line-height:18px">Each clip becomes its own video. ${n} in total.</div></div></button></div></div>`:''}
@@ -1522,15 +1523,19 @@ const KART={
   clips:'<rect x="22" y="12" width="22" height="40" rx="4"/><rect x="49" y="8" width="24" height="48" rx="4"/><rect x="78" y="12" width="22" height="40" rx="4"/><path d="M57 25v14l10-7z" fill="currentColor"/>',
   prompt:'<rect x="10" y="14" width="44" height="36" rx="6"/><path d="M18 25h24M18 32h28M18 39h14"/><path d="M60 32h10m-4-4 4 4-4 4"/><rect x="76" y="12" width="34" height="40" rx="5"/><circle cx="93" cy="27" r="6"/><path d="M83 44l7-7 5 5 4-4 6 6"/>',
   like:'<rect x="12" y="14" width="36" height="36" rx="5"/><path d="M26 25v14l10-7z"/><path d="M54 32h12m-4-4 4 4-4 4"/><rect x="72" y="14" width="36" height="36" rx="5" stroke-dasharray="4 3"/><path d="M90 23l2.4 6.6L99 32l-6.6 2.4L90 41l-2.4-6.6L81 32l6.6-2.4z" fill="currentColor" stroke="none"/>',
+  long:'<rect x="8" y="10" width="68" height="36" rx="5"/><path d="M37 21v14l11-7z" fill="currentColor"/><path d="M8 54h104"/><path d="M8 51v6M34 51v6M60 51v6M86 51v6M112 51v6"/><rect x="82" y="14" width="30" height="8" rx="2"/><path d="M82 30h30M82 37h22"/>',
   stream:'<path d="M8 40h64"/><path d="M12 40v-4M17 40v-7M22 40v-3M27 40v-18M32 40v-9M37 40v-4M42 40v-6M47 40v-22M52 40v-10M57 40v-4M62 40v-7M67 40v-3"/><rect x="23" y="18" width="13" height="26" rx="3" stroke-dasharray="3 3"/><rect x="43" y="14" width="13" height="30" rx="3" stroke-dasharray="3 3"/><path d="M76 32h8m-3-3 3 3-3 3"/><rect x="90" y="8" width="22" height="48" rx="4"/><path d="M95 44h12M97 49h8"/>'};
 const KINDS=[['clips','Edit my clips','Your own footage, cut and styled like a creator.'],['prompt','Create from a prompt','No footage needed. A fully animated video from a few sentences.'],
+  ['long','Long video','A 2 to 10 minute video from one prompt: research, voice, footage and graphics.'],
   ['like','Make one like this','Paste a video you like. Yours comes out built the same way.'],['stream','Clip a stream','The best moments of a long stream or gameplay video, as shorts.']];
-const KHOW={prompt:['Say what the video is about, and pick the shape and length.','Claude writes the script in scenes and shows it to you first.','On your OK it animates every scene, and the video opens in the editor.'],
+const KHOW={long:['Say what the video is about and how long. Claude researches it and shows you the script, with its sources.','On your OK it records the voice and finds a new shot for every few seconds: footage, pictures, charts and graphics.','It opens in the editor, with three thumbnails and a title and description ready to paste.'],
+  prompt:['Say what the video is about, and pick the shape and length.','Claude writes the script in scenes and shows it to you first.','On your OK it animates every scene, and the video opens in the editor.'],
   like:['Paste the video you like. Say what yours is about, or let Claude suggest topics.','Claude measures its length, pace, structure and look, then shows you a script.','Yours is animated from nothing: none of the video you pasted is reused.'],
   stream:['Paste up to 5 streams or gameplay videos, or a channel link for its newest ones.','Claude finds the best moments and plays them for you, numbered. You pick.','Each pick becomes a short clip with captions and a title, one tab each in the editor.']};
-const nvKind=()=>nv.like?'like':nv.stream?'stream':nv.prompt?'prompt':'clips';
+const nvKind=()=>nv.long?'long':nv.like?'like':nv.stream?'stream':nv.prompt?'prompt':'clips';
 function setKind(k){
-  const keep={prompt:nv.prompt,like:nv.like,stream:nv.stream}[k];nv.prompt=nv.like=nv.stream=null;
+  const keep={prompt:nv.prompt,like:nv.like,stream:nv.stream,long:nv.long}[k];nv.prompt=nv.like=nv.stream=nv.long=null;
+  if(k==='long')nv.long=keep||{text:'',minutes:3,shape:'16:9',youtube:true,photos:true,caption:true,music:true,own:'',msg:''};
   if(k==='prompt')nv.prompt=keep||{text:'',refs:'',length:30,voice:true,caption:true,music:true,msg:''};
   if(k==='like')nv.like=keep||{link:'',topic:'',shape:'auto',match:true,voice:true,caption:true,music:true,msg:''};
   if(k==='stream')nv.stream=keep||{links:'',latest:1,count:3,length:'short',layout:'auto',captions:true,titles:true,style:'',msg:''};
@@ -1539,6 +1544,39 @@ function setKind(k){
 }
 const kindCards=()=>`<div class="kinds" role="radiogroup" aria-label="What kind of video">${KINDS.map(([k,t,d])=>`<button class="kind ${nvKind()===k?'on':''}" role="radio" aria-checked="${nvKind()===k}" onclick="setKind('${k}')"><div class="art"><svg width="150" height="80" viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${KART[k]}</svg></div><div><b>${t}</b><div class="sub">${d}</div></div></button>`).join('')}</div>`;
 const kindHow=k=>`<div class="khow">${KHOW[k].map((t,i)=>`<div><i>${i+1}</i><span style="font-size:14px;line-height:20px;padding-top:3px">${t}</span></div>`).join('')}</div>`;
+// ---- studio: Long video (plugins/studio, the long-video skill). One prompt in, a 2 to 10 minute video out: researched,
+// narrated, a new shot every few seconds (found footage, free pictures, graphics), with thumbnails and a publishing kit.
+function longSide(){
+  const P=nv.long,tick=(k,t,s)=>`<button class="opt ${P[k]?'on':''}" onclick="nv.long.${k}=!nv.long.${k};render()"><div class="radio" style="border-radius:5px"></div><div class="grow"><b style="font-size:14px">${t}</b><div class="sub" style="font-size:13px;line-height:18px">${s}</div></div></button>`;
+  return `<div class="panel rv-side" style="width:520px;flex-shrink:0">
+    <div class="sec"><div class="between"><span class="h">Long video</span><button class="hlink" style="font-size:13px" onclick="nv.long=null;render()">Close</button></div>
+      <div class="sub">Say what the video is about. Claude researches it, writes the script for you to approve, records the voice and edits the whole video.</div>
+      <textarea id="slong" class="input" style="min-height:110px;padding:10px;font-family:inherit;resize:vertical" placeholder="For example: why honey never spoils, for a curious general audience, calm documentary tone" oninput="nv.long.text=this.value;longReady()">${esc(P.text)}</textarea></div>
+    <div class="sec"><div class="h">Length</div><div class="row">${[2,3,5,8].map(n=>`<button class="pill ${P.minutes===n?'on':''}" onclick="nv.long.minutes=${n};render()">${n} min</button>`).join('')}</div>
+      <div class="muted faint" style="line-height:18px">About ${P.minutes*4} minutes to make and ${P.minutes*2} to render.</div></div>
+    <div class="sec"><div class="h">Shape</div><div class="row">${[['16:9','Wide · 16:9'],['9:16','Tall · 9:16']].map(([a,t])=>`<button class="pill ${P.shape===a?'on':''}" onclick="nv.long.shape='${a}';render()">${t}</button>`).join('')}</div></div>
+    <div class="sec"><div class="h">What it shows</div><div style="display:flex;flex-direction:column;gap:8px">
+      ${tick('youtube','Footage found on YouTube','A few seconds each from other people\'s videos, listed in your publishing kit. Publishing them is your call.')}
+      ${tick('photos','Free pictures','From Wikimedia Commons and Openverse: free to reuse, credited in the kit.')}
+      <div class="sub" style="font-size:13px;line-height:18px">Charts, lists, quotes and big numbers are always made from the script.</div></div></div>
+    <div class="sec"><div class="h">Your own clips <span class="muted">(optional)</span></div>
+      <input class="input" style="height:38px;min-height:38px;padding:0 10px;font-family:inherit" placeholder="A folder's path, like ~/Movies/my-broll" value="${esc(P.own)}" oninput="nv.long.own=this.value"></div>
+    <div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
+      ${tick('caption','Captions','Every word, as it is said.')}
+      ${tick('music','Music and sound','Music made for this video, and a quiet sound on the cuts.')}
+      <div class="sub" style="font-size:13px;line-height:18px">The voice is an AI voice: ElevenLabs with your key, else the free Mac voice.</div></div></div>
+    ${P.msg?`<div class="sec"><div class="msg bad">${CROSS}<span>${esc(P.msg)}</span></div></div>`:''}
+    <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${P.minutes} min · ${P.shape==='16:9'?'Wide':'Tall'} · ${[P.youtube&&'footage',P.photos&&'pictures','graphics'].filter(Boolean).join(', ')}</span></div>
+      <button class="go" id="make" ${P.text.trim().length>=8?'':'disabled'} onclick="makeLong()">Make my video</button>
+      <div class="muted faint" style="line-height:18px">You approve the script first. It opens in the editor, so you can change anything.</div></div></div>`;
+}
+function longReady(){const b=$('#make');if(b)b.disabled=nv.long.text.trim().length<8}
+async function makeLong(){
+  const P=nv.long,b=$('#make');if(b)b.disabled=true;
+  const r=await post('/job',{type:'longvideo',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,text:!!P.caption,music:!!P.music,own:P.own.trim()});
+  if(!r._ok){nv.long.msg=r.msg||r.error||'That did not work.';render();return}
+  nv.long=null;await load();toEditor(r);
+}
 // ---- studio: Create from a prompt (plugins/studio, the animated-video skill). A fully animated video, no footage:
 // a prompt, optional reference links for the look, the shape and length, and any of a voiceover, on-screen text and music.
 function promptSide(){

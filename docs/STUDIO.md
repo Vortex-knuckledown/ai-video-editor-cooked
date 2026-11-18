@@ -16,7 +16,7 @@ The few lines added inside the original are marked `studio:` or `fork:` in the c
 shows at a glance which lines are ours:
 
 - `home.py` and `home.html`: the cards for the kinds of video on New video, their side panels and their jobs
-  (`animated`, `streamclips`, `subtitles`); Export all on a stream video's card (`/studio/export`); the subtitles
+  (`animated`, `streamclips`, `subtitles`, `longvideo`); Export all on a stream video's card (`/studio/export`); the subtitles
   dialog in a video's menu.
 - `start/references/home.md`: which skill takes each new job.
 - `launcher.py` and `review.py`: Claude runs hidden in the background (no Terminal windows); Show Claude reveals it.
@@ -25,9 +25,13 @@ shows at a glance which lines are ours:
 - `links.py`: a download that times out on a network with broken IPv6 runs once more on IPv4.
 - `askhook.py`: a hidden Claude's question waits for the next page that opens instead of its unseen Terminal.
 
-## New video: the four ways in
+## New video: the five ways in
 
-New video opens on four cards, one for each, with a small drawing; picking one shows its options on the right.
+New video opens on five cards, one for each, with a small drawing; picking one shows its options on the right.
+The fifth, **Long video** (not released yet, branch `feature/long-video`): a 2 to 10 minute video from one prompt.
+Claude researches it with sources and shows you the script. On your OK it records an AI voice and gives every line a
+new shot every few seconds: seconds of footage found on YouTube, free pictures, your own clips, and graphics built
+from the script's numbers. It ends in the editor with three thumbnails and a publishing kit.
 
 1. **Your clips** (the original): pick or drop your footage, pick a style, Make my video.
 2. **Create from a prompt** (studio 0.1): type what the video is about, optionally paste videos whose look you like.
@@ -61,6 +65,10 @@ New video opens on four cards, one for each, with a small drawing; picking one s
 | studio 0.2.0 | Clip a stream; the IPv4 retry for downloads; notes on a finished video work with Claude hidden (released 2026-11-18, tag `studio-v0.2.0`) |
 
 ## Next, in order
+
+0. **Long video, after the first version.** Your own recorded voiceover instead of the AI voice; a check that drops
+   found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
+   timeline); full 3D is not planned.
 
 1. **Twitch and Kick chat.** Not built: neither site offers a public way to read a past stream's chat (Twitch's needs
    its own site's key, Kick's sits behind a bot check). Those streams are scored on sound.
