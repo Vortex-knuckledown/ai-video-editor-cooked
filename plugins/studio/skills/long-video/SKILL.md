@@ -76,7 +76,9 @@ session: say so on the page, write from what you know, use no statistic you are 
     words. `quote` (`text`, `by`): someone's own words. `source` (`title`, `by`, `highlight`): the paper or article
     a claim comes from, with the sentence that matters, in its own words. `title` (`text`, `sub`): a section's
     opening, or the close.
-  Footage and pictures carry the video; graphics make the points (at most 6 in 10 shots). Every number, name and
+  Footage and pictures carry the video; graphics make the points (at most 6 in 10 shots). At most 20 `photo` shots
+  in a video (the picture sites are slow to a caller with no key): a clip for anything that moves or still exists
+  today, a photo only for a named person, document, map or moment in the past. Every number, name and
   quote in a graphic is in research.md. A section opens on footage or a `title`, never on a `list`.
 - `look`: a dark ground and one accent that fit the topic. `captions`: leave out for the default.
 
@@ -111,6 +113,11 @@ key") sounds like a person and bills their own ElevenLabs plan. Before the first
 python3 "$PY" "$L" find EDIT           # every clip and photo into EDIT/shots/, 4 at a time; about 10 s a clip
 python3 "$PY" "$L" sheet EDIT          # EDIT/sheets/sheet-N.jpg, 20 shots a sheet, each labelled with its key
 ```
+
+The free picture sites allow few pictures a minute to a caller with no key (Wikimedia rests for 2 minutes once it
+says slow down), so `find` fetches pictures one at a time and waits when told to: about 5 s a picture, sometimes
+minutes more. Say "Finding N clips and M pictures" on the page. A picture still `MISSING` with "the picture sites":
+run `find` again once (it only fetches what is missing), then make what is left a clip or a graphic.
 
 Look at every sheet (Read the image). A shot is wrong when it does not show what its line says, shows a talking
 presenter or a title card, carries big burned-in text or a watermark across the frame, or is blurry. For each wrong

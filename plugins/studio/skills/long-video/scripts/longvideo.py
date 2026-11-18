@@ -110,6 +110,9 @@ def cmd_check(edit):
     if est / len(shots) > PACE_S:
         print(f"FIX  a shot every {est / len(shots):.1f} s is slow: add shots to the long lines (one every 2 to 4 s)")
         return 1
+    if kinds["photo"] > 20:
+        print(f"FIX  {kinds['photo']} photo shots: 20 at most (the picture sites are slow). Make the others clips or graphics")
+        return 1
     g = sum(kinds[k] for k in GRAPHICS)
     if g > 0.6 * len(shots):
         print(f"FIX  {g} of {len(shots)} shots are graphics: real footage and pictures carry a video, graphics make the points")
@@ -231,27 +234,47 @@ def search_openverse(query, n=8):
 
 
 PHOTO_LOCK = threading.Lock()      # the picture sites slow a caller down that asks for several at once
+PHOTO_GAP_S = 3.2                  # between two pictures: under Openverse's 20 a minute for a caller with no key
+COOL = {}                          # site -> the time it may be asked again, after it said "too many requests"
 
 
 def fetch_photo(edit, key, sh, w, h):
+    """One picture at a time. A site that says "too many requests" rests for as long as it asks (2 minutes for
+    Wikimedia); while both rest, this waits for the first to come back rather than give the shot up."""
     raw, c, why = edit / "shots" / f"{key}.raw", None, "no picture found for this search"
     with PHOTO_LOCK:
-        for search in (search_commons, search_openverse):
-            try:
-                cands = search(sh["query"])
-                if not cands:
+        for attempt in range(3):
+            asked = False
+            for search in (search_commons, search_openverse):
+                if COOL.get(search.__name__, 0) > time.time():
                     continue
-                wide = [x for x in cands if (x["w"] >= x["h"]) == (w >= h)] or cands
-                order = (wide + [x for x in cands if x not in wide])
-                c = order[min(len(order) - 1, max(0, int(sh.get("pick") or 0)))]
-                import net
-                with net.urlopen(urllib.request.Request(c["url"], headers={"User-Agent": UA}), 60) as r:
-                    raw.write_bytes(r.read())
-                time.sleep(1.0)
+                asked = True
+                try:
+                    cands = search(sh["query"])
+                    if not cands:
+                        continue
+                    wide = [x for x in cands if (x["w"] >= x["h"]) == (w >= h)] or cands
+                    order = (wide + [x for x in cands if x not in wide])
+                    c = order[min(len(order) - 1, max(0, int(sh.get("pick") or 0)))]
+                    import net
+                    with net.urlopen(urllib.request.Request(c["url"], headers={"User-Agent": UA}), 60) as r:
+                        raw.write_bytes(r.read())
+                    break
+                except Exception as e:      # the network, "too many requests": the next site
+                    c, why = None, f"the picture sites did not answer ({type(e).__name__})"
+                    if getattr(e, "code", None) == 429:
+                        try:
+                            wait = float(e.headers.get("Retry-After") or 60)
+                        except (TypeError, ValueError):
+                            wait = 60.0
+                        COOL[search.__name__] = time.time() + min(180.0, max(20.0, wait))
+            resting = [t for t in COOL.values() if t > time.time()]
+            if c or (asked and not resting) or attempt == 2:
                 break
-            except Exception as e:      # the network, "too many requests": the next site, else the shot is missing
-                c, why = None, f"the picture sites did not answer ({type(e).__name__})"
-                time.sleep(1.0)
+            if resting:
+                why = "the picture sites asked to slow down"
+                time.sleep(max(1.0, min(130.0, min(resting) - time.time() + 1)))
+        time.sleep(PHOTO_GAP_S)
     if not c:
         return {"missing": why}
     out = edit / "shots" / f"{key}.jpg"
@@ -499,8 +522,10 @@ def cmd_build(edit):
     W, H = studio.size_of(edit)
     S = scene.Scene(W, H, studio.FPS, background=look["ground"], edit=edit)
     S.track("Footage"); S.track("Graphics"); S.track("Graphics top")
-    miss = []
-    for sp in spans(edit):
+    miss, all_sp = [], spans(edit)
+    stills = [(sp["n"], db[sp["key"]]["file"]) for sp in all_sp if sp["shot"]["kind"] in MEDIA
+              and str((db.get(sp["key"]) or {}).get("file") or "").endswith(".jpg") and (edit / db[sp["key"]]["file"]).exists()]
+    for sp in all_sp:
         sh, a, z, d = sp["shot"], sp["a"], sp["b"], sp["b"] - sp["a"]
         if sh["kind"] in GRAPHICS:
             graphic(S, sh, a, z, W, H, look)
@@ -508,8 +533,11 @@ def cmd_build(edit):
         got = db.get(sp["key"]) or {}
         f = edit / got["file"] if got.get("file") else None
         if not f or not f.exists():
-            miss.append(sp["key"])       # the ground shows, the captions carry the line
-            continue
+            miss.append(sp["key"])       # never an empty frame: the nearest picture again, moving the other way
+            if not stills:
+                continue
+            got = {"file": min(stills, key=lambda x: abs(x[0] - sp["n"]))[1]}
+            f, sp = edit / got["file"], {**sp, "n": sp["n"] + 1}
         grow = sp["n"] % 2 == 0
         if f.suffix == ".mp4":
             S.video(got["file"], a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H,
@@ -539,7 +567,7 @@ def cmd_build(edit):
     print(f"{studio.SCENE_FILE}: {tm['length'] // 60:.0f}:{tm['length'] % 60:04.1f}, {n} shots (one every {tm['length'] / n:.1f} s)"
           + (f", captions {len(words)} words" if b["text"] and words else ""))
     if miss:
-        print("MISSING (the plain ground shows instead): " + " ".join(miss))
+        print("MISSING (the nearest picture shows again instead; an empty frame where the video has no picture at all): " + " ".join(miss))
     return 0
 
 
