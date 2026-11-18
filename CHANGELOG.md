@@ -2,7 +2,9 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.7.0 (this fork, 2026-11-18)
+- A long video comes out the length you asked for: the voice slows a little and each line gets a short pause until it matches.
+- Pictures are fetched one at a time and wait when a picture site says slow down, and a video has at most 20 of them. A shot that cannot be found shows the nearest picture again, never an empty frame.
 - New video has a fifth card, Long video: a 2 to 10 minute video from one prompt. Claude researches the topic and keeps the source of every fact, writes a script for you to approve, records an AI voice, and gives every spoken line a new shot every 2 to 4 seconds: a few seconds of footage found on YouTube, free pictures from Wikimedia Commons and Openverse, your own clips, and graphics made from the script's own numbers (a big stat, a bar chart, a list, a quote, a highlighted source, a title). Captions on every word, music and a quiet sound on the cuts.
 - A long video comes with three thumbnail options and a publishing kit: three titles, a description with chapters, the sources, a credit line for every clip and picture, and tags.
 - Footage from YouTube can be switched off for a video, which then uses only free pictures, your own clips and graphics.

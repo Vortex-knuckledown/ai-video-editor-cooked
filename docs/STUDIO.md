@@ -9,7 +9,7 @@ adds new kinds of video in a plugin of its own, `plugins/studio`. Nothing is pus
 |---|---|---|
 | `plugins/ai-editor` | the original | Edits your own footage: the cut, the styled edit, the editor window, b-roll reels, product videos, talking-head clips |
 | `plugins/creator-teardown` | the original | Measures a creator's style from their videos |
-| `plugins/studio` | this fork | New videos that do not start from your own footage: Create from a prompt, Make one like this, Clip a stream |
+| `plugins/studio` | this fork | New videos that do not start from your own footage: Create from a prompt, Long video, Make one like this, Clip a stream |
 
 The studio calls the editor's code (its renderer, transcriber, music, face finder, downloader) and never changes it.
 The few lines added inside the original are marked `studio:` or `fork:` in the code, so a merge from the original
@@ -28,7 +28,7 @@ shows at a glance which lines are ours:
 ## New video: the five ways in
 
 New video opens on five cards, one for each, with a small drawing; picking one shows its options on the right.
-The fifth, **Long video** (not released yet, branch `feature/long-video`): a 2 to 10 minute video from one prompt.
+The fifth, **Long video** (studio 0.7): a 2 to 10 minute video from one prompt.
 Claude researches it with sources and shows you the script. On your OK it records an AI voice and gives every line a
 new shot every few seconds: seconds of footage found on YouTube, free pictures, your own clips, and graphics built
 from the script's numbers. It ends in the editor with three thumbnails and a publishing kit.
@@ -58,6 +58,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.7.0 | Long video: a 2 to 10 minute video from one prompt, with thumbnails and a publishing kit (released 2026-11-18, tag `studio-v0.7.0`) |
 | studio 0.6.0 | Subtitles in other languages; a cover image and a post caption with every exported clip; Clip a stream from a channel link (released 2026-11-18, tag `studio-v0.6.0`) |
 | studio 0.5.0 | Make one like this; the four kinds of video as cards on New video; Export all; several streams ranked fairly (released 2026-11-18, tag `studio-v0.5.0`) |
 | studio 0.4.0 | Clip a stream in your style; a hidden Claude's question waits for a page (released 2026-11-18, tag `studio-v0.4.0`) |
@@ -66,7 +67,8 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 
 ## Next, in order
 
-0. **Long video, after the first version.** Your own recorded voiceover instead of the AI voice; a check that drops
+0. **Long video, after the first version.** Stock footage and pictures from Pexels with the user's free key (no
+   rate limits, no logos); your own recorded voiceover instead of the AI voice; a check that drops
    found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
    timeline); full 3D is not planned.
 
