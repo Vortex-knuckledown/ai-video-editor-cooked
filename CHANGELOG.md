@@ -2,6 +2,16 @@
 
 What changed for every user, newest first.
 
+## studio 0.5.0 (this fork, 2026-11-18)
+- New video opens on four cards with a small drawing each: Edit my clips, Create from a prompt, Make one like this, Clip a stream. They were three small text links under the clip list, easy to miss. Picking a card shows its options on the right and, for the three new kinds, the three steps of what happens.
+- A video made with Make one like this comes out the length of the one you pasted. Claude writes about as many words as it says; the voice then slows a little (never under 80%) and every line gets the same air until the length matches. The test video went from 32 s to 47 s against the original's 48 s.
+- Export all on a Clip a stream video's card (and in its menu) saves every finished clip into one folder, numbered and named by its title, and opens the folder.
+- Several streams pasted at once are ranked fairly. A moment is ranked by how far it stands out in its own video, every video keeps its best moment, and no video takes more than 60% of the places.
+- New video has Make one like this. Paste a video you like, and say what yours should be about or let Claude suggest three topics in the same niche. Claude measures the video's length, shape, pace and number of scenes, and whether it has a voice, on-screen text and music. It looks at its frames for the colours and type, then writes and animates a new video built the same way. None of its footage, words or music is reused.
+- Downloads from YouTube ask over IPv4 first. On a network where IPv6 does not connect, a download used to spend minutes timing out before it tried again; now it takes seconds.
+- A background Claude's "waiting for your input" ping no longer shows as "Claude needs you in the Terminal". There is no Terminal to go to when Claude runs hidden.
+- A styled stream clip's working folder is inside its project now, so Your videos no longer lists it as another video being made.
+
 ## studio 0.4.0 (this fork, 2026-11-18)
 - Clip a stream has a Look choice: the gaming look, or any of your styles (My style or a creator's). In a style, each clip goes through your styled edit: its captions, zooms and look. Nothing is cut from the gameplay, captions stay on, and cards are off, because stream talk rarely names a real thing to show.
 - A question from Claude while no editor page is open now waits for the next page you open (Home or the video's editor). Before, it went to Claude's own Terminal, which nobody can see when Claude runs hidden, so the video stood still.

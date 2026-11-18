@@ -15,7 +15,7 @@
                                      or the whole frame over a blurred copy of itself
     python3 streamclips.py build PROJ clip1 [--title "WORDS"] [--no-captions]   studio.clip1.scene.json
     python3 streamclips.py render PROJ clip1 [--draft]                         clips/clip1/render.mp4
-    python3 streamclips.py styled PROJ clip1 --as mine|@handle   <library>/edits/<PROJ name>-clip1/: the clip as an
+    python3 streamclips.py styled PROJ clip1 --as mine|@handle   PROJ/styled/clip1/: the clip as an
                                      ordinary edit for the editor's cut and style-edit, nothing cut, in that style
     python3 streamclips.py demo
 
@@ -244,6 +244,39 @@ def scores(db, hm, chat=None):
     return s, ex, ch
 
 
+def standout(s, v):
+    """How far a peak stands above its own video's ordinary second, 0 to 1.5: 0 at the video's median, 1 at its
+    99th percentile. A score is only comparable inside one video (its most replayed is scaled to its own top, a
+    video with no chat is scored on fewer signals), this is comparable across them."""
+    import numpy as np
+    med, hi = float(np.median(s)), float(np.percentile(s, 99))
+    return round(max(0.0, min(1.5, (v - med) / (hi - med))) if hi - med > 1e-6 else 0.0, 3)
+
+
+def fair(found, top):
+    """The top moments across several videos, by how much each stands out in its own video. Every video's best
+    moment stays in, and with more than one video none takes over 60% of the places while another has moments."""
+    found = sorted(found, key=lambda m: (-m.get("rank", m["score"]), -m["score"]))
+    vids = {m["video"] for m in found}
+    cap = top if len(vids) < 2 else max(1, -(-top * 6 // 10))
+    best = {}
+    for m in found:
+        best.setdefault(m["video"], m)
+    out, n, later = list(best.values())[:top], {v: 1 for v in best}, []
+    for m in found:
+        if len(out) >= top:
+            break
+        if any(m is o for o in out):
+            continue
+        if n[m["video"]] >= cap:
+            later.append(m)
+            continue
+        out.append(m)
+        n[m["video"]] += 1
+    out += later[:top - len(out)]
+    return sorted(out, key=lambda m: (-m.get("rank", m["score"]), -m["score"]))
+
+
 def peaks(s, length, top, gap=5):
     """The best non-overlapping windows: each peak with 65% of the clip before it (the build-up) and 35% after."""
     out = []
@@ -319,12 +352,9 @@ def cmd_moments(proj, lo=20, hi=45, top=8, cookies=None):
         chat = chat_rate(jload(d / meta["chat"]) if meta.get("chat") else None, len(db))
         s, ex, ch = scores(db, heat(meta, len(db)), chat)
         for a, b, t, sc in peaks(s, min(length, len(db) - 1), top):
-            found.append({"video": d.name, "a": a, "b": b, "peak": t, "score": round(sc, 3),
+            found.append({"video": d.name, "a": a, "b": b, "peak": t, "score": round(sc, 3), "rank": standout(s, sc),
                           "loud": round(float(ex[t]), 2), "chat": round(float(ch[t]), 2) if ch is not None else None, "heat": round((heat(meta, len(db)) or [0] * len(db))[t], 2)})
-    found.sort(key=lambda m: -m["score"])
-    keep = {m["video"]: m for m in reversed(found)}                 # every video's best moment stays in
-    found = (list(keep.values()) + [m for m in found if m not in keep.values()])[:top]
-    found.sort(key=lambda m: -m["score"])
+    found = fair(found, top)
     out = []
     for n, m in enumerate(found, 1):
         d = proj / "src" / m["video"]
@@ -536,6 +566,9 @@ def cmd_build(proj, cid, title=None, captions=True):
                anim={"in": "pop", "out": "fade", "dur": 0.25})
     S.sc["duration"] = dur
     jsave(proj / f"studio.{cid}.scene.json", S.done())
+    cj = jload(proj / "clips" / cid / "clip.json", {}) or {}
+    cj["hook"] = title or ""
+    jsave(proj / "clips" / cid / "clip.json", cj)
     print(f"studio.{cid}.scene.json: {dur:.1f} s, {lay.get('mode', '?')}" + (f", {len(words)} words" if captions else "")
           + (f", title {title!r}" if title else ""))
     return 0
@@ -584,8 +617,55 @@ def gameplay_style(st, cards=False):
     return st
 
 
+def final_of(proj, cid):
+    """A clip's finished video: its styled render when that is the newer one, else the gaming look's. None: not made."""
+    fs = [f for f in (Path(proj) / "styled" / cid / "render.mp4", Path(proj) / "clips" / cid / "render.mp4") if f.exists()]
+    return max(fs, key=lambda f: f.stat().st_mtime) if fs else None
+
+
+def clip_ids(proj):
+    return sorted((d.name for d in (Path(proj) / "clips").glob("clip*") if d.name[4:].isdigit()), key=lambda c: int(c[4:]))
+
+
+def export_name(n, cj):
+    """`02 No way he found me.mp4`: the clip's hook title, else its first words, else the stream's title."""
+    t = str(cj.get("hook") or "").strip() or " ".join(str(cj.get("text") or "").split()[:6]) or str(cj.get("title") or "")
+    t = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', " ", t)
+    t = re.sub(r"\s+", " ", t).strip(" .")[:60].strip()
+    return f"{n:02d} {t}.mp4" if t else f"{n:02d} Clip {n}.mp4"
+
+
+def cmd_export(proj, to=None):
+    """Every finished clip of the project copied into one folder, numbered and named by its title. The folder is
+    PROJ/exports/ (where the editor's own Export saves, so the home page shows it) unless --to names another."""
+    proj = Path(proj)
+    out = Path(to).expanduser() if to else proj / "exports"
+    out.mkdir(parents=True, exist_ok=True)
+    was = jload(out / ".studio-export.json", []) or []
+    for name in was:                                   # last time's copies, so a renamed clip does not leave two
+        if re.fullmatch(r"\d\d .+\.mp4", str(name)) and (out / name).is_file():
+            (out / name).unlink()
+    mj = jload(proj / "moments.json", []) or []
+    moments = {m["id"]: m for m in (mj.get("moments", []) if isinstance(mj, dict) else mj) if isinstance(m, dict) and m.get("id")}
+    made = []
+    for cid in clip_ids(proj):
+        f = final_of(proj, cid)
+        if not f:
+            print(f"{cid}: not rendered yet, left out")
+            continue
+        cj = jload(proj / "clips" / cid / "clip.json", {}) or {}
+        cj.setdefault("text", (moments.get(cj.get("moment")) or {}).get("text"))
+        name = export_name(int(cid[4:]), cj)
+        shutil.copy2(f, out / name)
+        made.append(name)
+        print(f"{cid} -> {name}")
+    jsave(out / ".studio-export.json", made)
+    print(f"EXPORTED {len(made)} to {out}")
+    return 0 if made else 1
+
+
 def cmd_styled(proj, cid, as_, cards=False):
-    """<library>/edits/<project>-<clip>/: the laid-out clip as an ordinary edit for the editor's own cut and
+    """PROJ/styled/<clip>/: the laid-out clip as an ordinary edit for the editor's own cut and
     style-edit (the ai-editor:clip-editor agent), in the style `as_` (mine or @handle). Gameplay keeps every second:
     spans.json is empty (no cuts) and keep.json covers the whole clip (no pause is tightened)."""
     proj = Path(proj).resolve()
@@ -595,8 +675,8 @@ def cmd_styled(proj, cid, as_, cards=False):
     if not re.fullmatch(r"mine|@[a-z0-9._-]+", as_ or ""):
         sys.exit("ERROR: --as takes mine or @handle (a style from the Styles page).")
     root = studio.use_editor()
-    e = proj.parent / f"{proj.name}-{cid}"
-    e.mkdir(exist_ok=True)
+    e = proj / "styled" / cid   # inside the project: Your videos lists every folder of edits/, and this is not one
+    e.mkdir(parents=True, exist_ok=True)
     src = e / "source.mp4"
     src.unlink(missing_ok=True)
     try:
@@ -611,7 +691,7 @@ def cmd_styled(proj, cid, as_, cards=False):
     jsave(e / "clip.json", {**cj, "from": str(proj), "clip": cid, "keep_all": True,
                             "layout": (jload(d / "layout.json") or {}).get("mode")})
     r = subprocess.run([sys.executable, str(root / "lib" / "ai_editor" / "profile.py"), "style", str(e), "--as", as_],
-                       capture_output=True, text=True, cwd=str(proj.parent.parent))
+                       capture_output=True, text=True, cwd=str(proj.parent.parent))   # the library: its styles
     if r.returncode:
         print(r.stdout[-400:] + r.stderr[-400:])
         sys.exit(f"ERROR: the style {as_} could not be written for {e.name}.")
@@ -623,6 +703,34 @@ def cmd_styled(proj, cid, as_, cards=False):
 # ---------------------------------------------------------------- self-check
 def demo():
     import numpy as np
+    # several videos: ranked by how far each moment stands out in its own video, no video takes every place
+    flat = np.array([0.1] * 990 + [0.9] * 10)
+    assert standout(flat, 0.9) >= 1.0 and standout(flat, 0.1) == 0.0 and standout(np.ones(50), 1.0) == 0.0
+    ms = [{"video": "v1", "score": 0.9 - i / 100, "rank": 1.2 - i / 100} for i in range(6)] + \
+         [{"video": "v2", "score": 0.5 - i / 100, "rank": 0.8 - i / 100} for i in range(6)]
+    got = fair(ms, 5)
+    assert [m["video"] for m in got].count("v1") == 3 and len(got) == 5 and got[0]["rank"] == 1.2, got
+    assert len(fair(ms[:6], 5)) == 5 and len(fair(ms[:2] + ms[6:7], 5)) == 3
+    # export: numbered, named by the hook, safe as a file name
+    assert export_name(2, {"hook": 'No way: he "found" me?'}) == "02 No way he found me.mp4", export_name(2, {"hook": 'No way: he "found" me?'})
+    assert export_name(1, {"text": "where is he where is he they still know"}) == "01 where is he where is he.mp4"
+    assert export_name(3, {}) == "03 Clip 3.mp4"
+    with tempfile.TemporaryDirectory() as td:
+        pj = Path(td)
+        for k, hook in ((1, "First blood"), (2, ""), (3, "Never made")):
+            (pj / "clips" / f"clip{k}").mkdir(parents=True)
+            jsave(pj / "clips" / f"clip{k}" / "clip.json", {"hook": hook, "title": "A stream"})
+        (pj / "clips" / "clip1" / "render.mp4").write_bytes(b"a")
+        (pj / "clips" / "clip2" / "render.mp4").write_bytes(b"b")
+        (pj / "styled" / "clip2").mkdir(parents=True)
+        (pj / "styled" / "clip2" / "render.mp4").write_bytes(b"styled")
+        os.utime(pj / "clips" / "clip2" / "render.mp4", (1, 1))
+        assert cmd_export(pj) == 0
+        assert sorted(f.name for f in (pj / "exports").glob("*.mp4")) == ["01 First blood.mp4", "02 A stream.mp4"]
+        assert (pj / "exports" / "02 A stream.mp4").read_bytes() == b"styled"
+        jsave(pj / "moments.json", [{"id": "m1", "text": "from the moment"}])
+        jsave(pj / "clips" / "clip1" / "clip.json", {"hook": "Renamed", "moment": "m1"})
+        assert cmd_export(pj) == 0 and not (pj / "exports" / "01 First blood.mp4").exists()
     db = [-40.0] * 600
     for t in range(300, 306):
         db[t] = -12.0                          # a shout at 5:00
@@ -692,6 +800,7 @@ def main(argv):
     p = sub.add_parser("render"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--draft", action="store_true")
     p = sub.add_parser("styled"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--as", dest="as_", required=True)
     p.add_argument("--cards", action="store_true", help="keep the style's cards (only for a clip whose talk names real things)")
+    p = sub.add_parser("export"); p.add_argument("proj"); p.add_argument("--to")
     sub.add_parser("demo")
     a = ap.parse_args(argv)
     if a.cmd == "meta":
@@ -708,6 +817,8 @@ def main(argv):
         return cmd_build(a.proj, a.clip, a.title, not a.no_captions)
     if a.cmd == "render":
         return cmd_render(a.proj, a.clip, a.draft)
+    if a.cmd == "export":
+        return cmd_export(a.proj, a.to)
     if a.cmd == "styled":
         return cmd_styled(a.proj, a.clip, a.as_, a.cards)
     return demo()

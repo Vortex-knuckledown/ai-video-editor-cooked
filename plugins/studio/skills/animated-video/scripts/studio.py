@@ -14,6 +14,9 @@
     python3 studio.py build EDIT                     studio.scene.json: the clips back to back, captions, the mix
     python3 studio.py render EDIT [--draft]          render.mp4 through the editor's Scene composition
     python3 studio.py stills EDIT                    stills/sheet.png: one frame from the middle of each scene
+    python3 studio.py like EDIT <link or file>       "Make one like this": the liked video in EDIT/like/, measured
+                                                     (length, shape, cuts, words a second, its hook, music under the
+                                                     voice) into like.json and like.md, and a sheet of 8 frames
     python3 studio.py demo                           self-check (offline, no render)
 
 EDIT is <library>/edits/<name>/. brief.json (the page's job) says what was asked: {"prompt", "refs", "aspect",
@@ -117,6 +120,116 @@ def words_in(s):
     return [w for w in re.split(r"\s+", str(s or "").strip()) if w]
 
 
+# ---------------------------------------------------------------- make one like this
+LIKE_FRAMES = 8
+
+
+def cuts_of(video, thr=0.3):
+    """The times the picture cuts (ffmpeg's scene change score over thr, on a small copy)."""
+    r = subprocess.run(["ffmpeg", "-hide_banner", "-i", str(video), "-an", "-vf", f"scale=320:-2,select='gt(scene,{thr})',showinfo",
+                        "-f", "null", "-"], capture_output=True, text=True)
+    return [round(float(t), 2) for t in re.findall(r"pts_time:([\d.]+)", r.stderr)]
+
+
+def levels(media, step=0.1):
+    """dB every `step` seconds of the sound (mono, 8 kHz)."""
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(media), "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-"],
+                         capture_output=True).stdout
+    x = np.frombuffer(raw, np.int16).astype(np.float32) / 32768
+    n = int(8000 * step)
+    if len(x) < n:
+        return []
+    x = x[:len(x) // n * n].reshape(-1, n)
+    return [round(float(v), 1) for v in 20 * np.log10(np.maximum(1e-5, np.sqrt((x * x).mean(axis=1))))]
+
+
+def music_under(db, words, step=0.1):
+    """True when the gaps between words are not quiet (a bed under the voice), False when they are, None when the
+    video has too few gaps to tell (under 1.5 s of them) or no words at all."""
+    if not words or not db:
+        return None
+    talk = [False] * len(db)
+    for w in words:
+        for i in range(max(0, int((w["start"] - 0.15) / step)), min(len(db), int((w["end"] + 0.15) / step) + 1)):
+            talk[i] = True
+    gap = sorted(v for v, t in zip(db, talk) if not t)
+    said = sorted(v for v, t in zip(db, talk) if t)
+    if len(gap) * step < 1.5 or not said:
+        return None
+    g, sp = gap[len(gap) // 2], said[len(said) // 2]
+    return g > -45 and g > sp - 18
+
+
+def hook_of(words, n=16):
+    """The video's first sentence (or its first n words)."""
+    out = []
+    for w in words:
+        out.append(w["text"].strip())
+        if re.search(r"[.?!]$", out[-1]) or len(out) >= n:
+            break
+    return " ".join(out)
+
+
+def cmd_like(edit, src, cookies=None):
+    edit = Path(edit).resolve()
+    root = use_editor()
+    import links
+    d = edit / "like"
+    d.mkdir(parents=True, exist_ok=True)
+    if Path(src).expanduser().is_file():
+        video = Path(src).expanduser().resolve()
+    else:
+        code, msg = links.fetch(src, d, cookies=cookies, max_height=720)
+        if code:
+            print(("LOGIN: " if code == 3 else "ERROR: ") + msg)
+            return code
+        video = Path(msg)
+    dur = duration(video)
+    w, h = (int(x) for x in subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                            "stream=width,height", "-of", "csv=p=0", str(video)],
+                                           capture_output=True, text=True).stdout.strip().split(",")[:2])
+    raw = d / "words.raw.json"
+    if not raw.exists():
+        subprocess.run([sys.executable, str(root / "skills" / "cut" / "scripts" / "transcribe.py"), str(video), str(raw),
+                        "--engine", "whisper"], capture_output=True, text=True)
+    words = [x for x in jload(raw, []) or [] if x.get("type", "word") == "word" and x["text"].strip()]
+    cuts = cuts_of(video)
+    span = (words[-1]["end"] - words[0]["start"]) if words else 0
+    talk = sum(x["end"] - x["start"] for x in words)
+    like = {"from": src, "length": round(dur, 1), "aspect": "9:16" if h > w else "16:9", "cuts": len(cuts),
+            "shot_s": round(dur / (len(cuts) + 1), 1), "words": len(words),
+            "wps": round(len(words) / span, 2) if span > 1 else 0, "speech_share": round(talk / dur, 2) if dur else 0,
+            "music": music_under(levels(video), words), "hook": hook_of(words),
+            "text": " ".join(x["text"].strip() for x in words)[:1500]}
+    jsave(d / "like.json", like)
+    frames = []
+    for k in range(LIKE_FRAMES):
+        f = d / f"frame-{k + 1}.jpg"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{dur * (k + 0.5) / LIKE_FRAMES:.2f}", "-i", str(video),
+                        "-frames:v", "1", "-vf", "scale=270:-2", str(f)], capture_output=True)
+        if f.exists():
+            frames.append(f)
+    if frames:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", *sum((["-i", str(f)] for f in frames), []), "-filter_complex",
+                        "".join(f"[{k}:v]" for k in range(len(frames))) + f"concat=n={len(frames)}:v=1:a=0,tile=4x2" if len(frames) == 8
+                        else "".join(f"[{k}:v]" for k in range(len(frames))) + f"hstack=inputs={len(frames)}" if len(frames) > 1
+                        else "null", "-frames:v", "1", str(d / "sheet.jpg")], capture_output=True)
+        for f in frames:
+            f.unlink()
+    music = {True: "yes, a bed under the voice", False: "no (quiet between the words)", None: "can't tell"}[like["music"]]
+    (d / "like.md").write_text("\n".join([
+        f"# The video to make one like: {src}", "",
+        f"- Length {like['length']} s, {like['aspect']}, {like['cuts']} cuts (a new shot about every {like['shot_s']} s)",
+        f"- Voice: {like['words']} words, {like['wps']} a second, talking {round(100 * like['speech_share'])}% of the time",
+        f"- Music under the voice: {music}",
+        f"- Its hook: {like['hook'] or '(no words)'}",
+        f"- Frames: like/sheet.jpg (8, start to end: look at it for the colours, type, captions and what fills the frame)",
+        "", "## What it says", "", like["text"] or "(nothing: music and pictures only)"]) + "\n", encoding="utf-8")
+    print(f"{d / 'like.md'}: {like['length']} s {like['aspect']}, {like['cuts']} cuts, {like['wps']} words/s, music {music}")
+    return 0
+
+
 # ---------------------------------------------------------------- scenes.json
 def check_scenes(edit):
     """Errors in scenes.json, [] when it is fine."""
@@ -177,9 +290,9 @@ def tts_eleven(text, out, voice, key):
     mp3.unlink()
 
 
-def tts_mac(text, out, voice):
+def tts_mac(text, out, voice, rate=None):
     aiff = Path(out).with_suffix(".aiff")
-    subprocess.run(["say", "-v", voice, "-o", str(aiff), text], check=True)
+    subprocess.run(["say", "-v", voice] + (["-r", str(rate)] if rate else []) + ["-o", str(aiff), text], check=True)
     to_wav(aiff, out)
     aiff.unlink()
 
@@ -209,8 +322,22 @@ def engine_for(want):
     sys.exit("No voice engine here: no ElevenLabs key and no macOS `say`. Use --engine none (on-screen words only).")
 
 
-def cmd_voice(edit, engine="auto", voice=None):
-    """Each scene's voice, then timing.json: {"scenes": [{"id", "start", "dur", "vo"?}], "length", "engine"}."""
+MAC_RATE, SLOWEST, MAX_AIR_S = 175, 0.8, 1.5     # say's words a minute; never slower than 80%; air after a line
+
+
+def fit_plan(voiced, n, target, share=0.85):
+    """How to reach `target` seconds from `voiced` seconds of speech in n scenes: (speed, air after each line).
+    The voice slows first (to SLOWEST at most, it sounds drugged below), then every line gets the same air."""
+    if not target or not voiced or not n:
+        return 1.0, 0.0
+    speed = max(SLOWEST, min(1.0, voiced / (target * share)))
+    base = LEAD_S + voiced / speed + n * TAIL_S
+    return round(speed, 3), round(max(0.0, min(MAX_AIR_S, (target - base) / n)), 3)
+
+
+def cmd_voice(edit, engine="auto", voice=None, fit=None):
+    """Each scene's voice, then timing.json: {"scenes": [{"id", "start", "dur", "vo"?}], "length", "engine"}.
+    fit: the length to reach (seconds). Default: the liked video's, when brief.json has `like`."""
     edit = Path(edit)
     errs = check_scenes(edit)
     if errs:
@@ -218,23 +345,48 @@ def cmd_voice(edit, engine="auto", voice=None):
     b, scenes = brief_of(edit), jload(edit / "scenes.json")["scenes"]
     eng, key = engine_for(engine if b["voice"] else "none")
     (edit / "audio").mkdir(exist_ok=True)
+    like = jload(edit / "like" / "like.json", {}) if b.get("like") else {}
+    if fit is None and like:
+        fit = float(b.get("length") or like.get("length") or 0)
+
+    def speak(rate):
+        out_d = []
+        for s in scenes:
+            out = edit / "audio" / f"vo-{s['id']}.wav"
+            text = str(s["say"]).strip()
+            stamp = edit / "audio" / f"vo-{s['id']}.txt"
+            want = f"{eng}|{voice}|{text}" + (f"|r{rate}" if rate else "")
+            if not out.exists() or (stamp.read_text(encoding="utf-8") if stamp.exists() else "") != want:
+                if eng == "eleven":
+                    tts_eleven(text, out, voice or DEFAULT_VOICE, key)
+                else:
+                    tts_mac(text, out, voice or MAC_VOICE, rate)
+                stamp.write_text(want, encoding="utf-8")
+            out_d.append(duration(out))
+        return out_d
+
+    speed, air, vds = 1.0, 0.0, []
+    if eng != "none":
+        vds = speak(None)
+        speed, air = fit_plan(sum(vds), len(scenes), fit, like.get("speech_share") or 0.85)
+        if eng == "mac" and speed < 0.97:      # ElevenLabs is paid by the character: one pass, air only
+            want = sum(vds) / speed
+            rate = round(MAC_RATE * speed)
+            vds = speak(rate)
+            if abs(sum(vds) - want) > 0.05 * want:        # say's own pace differs a voice to a voice: one correction
+                rate = max(round(MAC_RATE * SLOWEST * 0.9), round(rate * sum(vds) / want))
+                vds = speak(rate)
+        elif speed < 0.97:
+            speed = 1.0
+        if fit:
+            air = round(max(0.0, min(MAX_AIR_S, (fit - LEAD_S - sum(vds) - len(scenes) * TAIL_S) / len(scenes))), 3)
     t, rows = 0.0, []
     for i, s in enumerate(scenes):
         row = {"id": s["id"], "start": round(t, 3)}
         if eng != "none":
-            out = edit / "audio" / f"vo-{s['id']}.wav"
-            text = str(s["say"]).strip()
-            stamp = edit / "audio" / f"vo-{s['id']}.txt"
-            if not out.exists() or (stamp.read_text(encoding="utf-8") if stamp.exists() else "") != f"{eng}|{voice}|{text}":
-                if eng == "eleven":
-                    tts_eleven(text, out, voice or DEFAULT_VOICE, key)
-                else:
-                    tts_mac(text, out, voice or MAC_VOICE)
-                stamp.write_text(f"{eng}|{voice}|{text}", encoding="utf-8")
             lead = LEAD_S if i == 0 else 0.0
-            vd = duration(out)
-            row.update(vo=str(out.relative_to(edit)), vo_at=round(t + lead, 3), vo_dur=round(vd, 3))
-            dur = max(MIN_SCENE_S, lead + vd + TAIL_S)
+            row.update(vo=f"audio/vo-{s['id']}.wav", vo_at=round(t + lead, 3), vo_dur=round(vds[i], 3))
+            dur = max(MIN_SCENE_S, lead + vds[i] + TAIL_S + air)
         else:
             dur = estimate(s, b)
         row["dur"] = round(dur, 3)
@@ -242,12 +394,21 @@ def cmd_voice(edit, engine="auto", voice=None):
         t += dur
     tm = {"engine": eng, "voice": voice or (DEFAULT_VOICE if eng == "eleven" else MAC_VOICE if eng == "mac" else None),
           "length": round(t, 3), "scenes": rows}
+    if fit and eng != "none":
+        tm["fit"] = {"target": round(fit, 1), "speed": speed, "air": air}
     jsave(edit / "timing.json", tm)
     if eng != "none":
         join_voice(edit, tm)
     for r in rows:
         print(f"{r['id']:<24} {r['start']:6.2f}s +{r['dur']:.2f}s" + (f"  voice {r['vo_dur']:.2f}s" if r.get("vo") else ""))
     print(f"{len(rows)} scenes, {t:.1f} s, voice: {eng}" + (" (the free Mac voice; an ElevenLabs key sounds more natural)" if eng == "mac" else ""))
+    if fit and eng != "none":
+        print(f"fit   {t:.1f} s for {fit:.0f} s: the voice at {round(100 * speed)}% speed, {air:.2f} s of air after each line")
+        words = sum(len(words_in(s.get("say"))) for s in scenes)
+        if t < 0.9 * fit:
+            print(f"FIT   {fit - t:.0f} s short: add about {round((fit - t) * words / max(1.0, sum(vds)))} words to the say lines, then voice again")
+        elif t > 1.1 * fit:
+            print(f"FIT   {t - fit:.0f} s long: cut about {round((t - fit) * words / max(1.0, sum(vds)))} words from the say lines, then voice again")
     return 0
 
 
@@ -548,6 +709,18 @@ def cmd_stills(edit):
 
 # ---------------------------------------------------------------- self-check
 def demo():
+    # fit: slow the voice first (never under 80%), then the same air after every line, capped
+    assert fit_plan(30.0, 8, 48.0) == (0.8, round((48 - 0.15 - 37.5 - 8 * 0.35) / 8, 3)), fit_plan(30.0, 8, 48.0)
+    assert fit_plan(41.0, 8, 48.0)[0] == 1.0 and fit_plan(10.0, 4, 60.0) == (0.8, MAX_AIR_S)
+    assert fit_plan(30.0, 8, 0) == (1.0, 0.0) and fit_plan(60.0, 8, 48.0) == (1.0, 0.0)
+    # make one like this: music under the voice, its hook
+    ws = [{"text": "Did", "start": 0.0, "end": 0.3}, {"text": "you", "start": 0.3, "end": 0.5}, {"text": "know?", "start": 0.5, "end": 0.9},
+          {"text": "Bees", "start": 3.0, "end": 3.4}]
+    loud_gaps = [-20.0 if i < 10 or 30 <= i < 35 else -28.0 for i in range(60)]
+    quiet_gaps = [-20.0 if i < 10 or 30 <= i < 35 else -70.0 for i in range(60)]
+    assert music_under(loud_gaps, ws) is True and music_under(quiet_gaps, ws) is False
+    assert music_under(loud_gaps[:12], ws) is None and music_under(loud_gaps, []) is None
+    assert hook_of(ws) == "Did you know?" and hook_of([]) == ""
     with tempfile.TemporaryDirectory() as t:
         e = Path(t) / "edits" / "demo"
         e.mkdir(parents=True)
@@ -594,9 +767,14 @@ def main(argv):
     v.add_argument("edit")
     v.add_argument("--engine", default="auto", choices=("auto", "eleven", "mac", "none"))
     v.add_argument("--voice")
+    v.add_argument("--fit", type=float, help="seconds to reach: the voice slows a little, then each line gets air")
     m = sub.add_parser("music")
     m.add_argument("edit")
     m.add_argument("--mood", default="linear")
+    lk = sub.add_parser("like")
+    lk.add_argument("edit")
+    lk.add_argument("src")
+    lk.add_argument("--cookies-from-browser")
     r = sub.add_parser("render")
     r.add_argument("edit")
     r.add_argument("--draft", action="store_true")
@@ -606,7 +784,9 @@ def main(argv):
         return 0
     if a.cmd == "demo":
         return demo()
-    return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice),
+    if a.cmd == "like":
+        return cmd_like(a.edit, a.src, a.cookies_from_browser)
+    return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice, a.fit),
             "words": lambda: cmd_words(a.edit), "briefs": lambda: cmd_briefs(a.edit),
             "music": lambda: cmd_music(a.edit, a.mood), "build": lambda: cmd_build(a.edit),
             "render": lambda: cmd_render(a.edit, a.draft), "stills": lambda: cmd_stills(a.edit)}[a.cmd]()
