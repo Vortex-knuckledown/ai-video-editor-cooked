@@ -208,6 +208,40 @@ def title_score(c):
     return 2 * bool(CLEAN.search(t)) - 2 * bool(BUSY.search(t)) - (c.get("duration", 0) > 1200)
 
 
+_OCR, OCR_LOCK = [], threading.Lock()
+
+
+def subs_in(f):
+    """True when a clip carries someone else's subtitles or captions: text read in the bottom third of the frame, in
+    at least two of three frames. Reads with RapidOCR on onnxruntime; False where that is not installed."""
+    with OCR_LOCK:
+        if not _OCR:
+            try:
+                from rapidocr_onnxruntime import RapidOCR
+                _OCR.append(RapidOCR())
+            except Exception:
+                _OCR.append(None)
+        if not _OCR[0]:
+            return False
+        try:
+            import cv2
+            cap = cv2.VideoCapture(str(f))
+            total, hits = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0), 0
+            for k in range(3):
+                cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (0.2 + 0.3 * k)))
+                ok, fr = cap.read()
+                if not ok:
+                    continue
+                band = fr[int(fr.shape[0] * 0.66):, :]
+                res, _ = _OCR[0](cv2.resize(band, (960, int(960 * band.shape[0] / band.shape[1]))))
+                text = "".join(t for _, t, sc in res or [] if sc > 0.6)
+                hits += len(re.sub(r"\W", "", text)) >= 6
+            cap.release()
+            return hits >= 2
+        except Exception:
+            return False
+
+
 def logo_of(f):
     """True when a clip carries a logo or watermark: edges that sit still in a corner while the picture around them
     moves. Checked on 4 frames; a locked-off shot (everything still) is not a logo."""
@@ -258,6 +292,78 @@ def fit_cmd(src, out, w, h, seconds=None, start=0.0, pre=""):
             "-an", "-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p", str(out)]
 
 
+# ---- which moment of a video shows what the line says: its preview thumbnails scored against the words (CLIP)
+_MATCH, MATCH_LOCK, _BOARDS = [], threading.Lock(), {}
+
+
+def matcher():
+    """(image model, text model) of CLIP on onnxruntime (fastembed), or None where it is not installed: the picker then
+    falls back to a fixed place in the video."""
+    with MATCH_LOCK:
+        if not _MATCH:
+            try:
+                from fastembed import ImageEmbedding, TextEmbedding
+                _MATCH.append((ImageEmbedding("Qdrant/clip-ViT-B-32-vision"), TextEmbedding("Qdrant/clip-ViT-B-32-text")))
+            except Exception:      # not installed, or its model could not be fetched
+                _MATCH.append(None)
+        return _MATCH[0]
+
+
+def storyboard(vid):
+    """A YouTube video's own preview thumbnails (the ones the progress bar shows), as (seconds, pictures) across the
+    whole video: a few hundred kilobytes instead of the video. None when it has none."""
+    if vid in _BOARDS:
+        return _BOARDS[vid]
+    out = None
+    try:
+        import io
+        from PIL import Image
+        v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
+        r = subprocess.run(streamclips.ytdlp() + ["--no-warnings", "--no-playlist", *v4, "--dump-json", "--skip-download",
+                                                 "https://www.youtube.com/watch?v=" + vid], capture_output=True, text=True, timeout=120)
+        j = json.loads(r.stdout.splitlines()[0])
+        sbs = [f for f in j.get("formats") or [] if str(f.get("format_id", "")).startswith("sb") and f.get("fragments") and f.get("fps")]
+        if sbs:
+            sb = max(sbs, key=lambda f: f.get("width") or 0)
+            per, times, tiles = sb["rows"] * sb["columns"], [], []
+            for k, fr in enumerate(sb["fragments"][:12]):
+                with urllib.request.urlopen(urllib.request.Request(fr["url"], headers={"User-Agent": "Mozilla/5.0"}), timeout=30) as resp:
+                    img = Image.open(io.BytesIO(resp.read())).convert("RGB")
+                for n in range(per):
+                    t = (k * per + n) / sb["fps"]
+                    if t >= (j.get("duration") or 0) - 1:
+                        break
+                    c, rr = n % sb["columns"], n // sb["columns"]
+                    tiles.append(img.crop((c * sb["width"], rr * sb["height"], (c + 1) * sb["width"], (rr + 1) * sb["height"])))
+                    times.append(t)
+            out = (times, tiles) if tiles else None
+    except Exception:              # no storyboard, a changed format, the network: the fixed place is used
+        out = None
+    _BOARDS[vid] = out
+    return out
+
+
+def best_moment(vid, text, taken=()):
+    """(seconds, score) of the thumbnail that best shows `text`, away from moments already used; None with no matcher."""
+    m = matcher()
+    sb = storyboard(vid) if m else None
+    if not sb:
+        return None
+    import numpy as np
+    times, tiles = sb
+    with MATCH_LOCK:
+        key = ("emb", vid)
+        if key not in _BOARDS:
+            e = np.array(list(m[0].embed(tiles)))
+            _BOARDS[key] = e / np.linalg.norm(e, axis=1, keepdims=True)
+        q = np.array(list(m[1].embed(["a photo of " + str(text)])))[0]
+    s = _BOARDS[("emb", vid)] @ (q / np.linalg.norm(q))
+    s = s - 0.08 * np.array([any(abs(t - u) < 12 for u in taken) for t in times])       # not the same seconds twice
+    s[np.array([np.asarray(t).mean() < 16 for t in tiles])] -= 1.0                       # never a black frame
+    i = int(np.argmax(s))
+    return times[i], float(s[i])
+
+
 def fetch_clip(edit, key, sh, need, w, h, used):
     cands = search_youtube(sh["query"])
     if not cands:
@@ -265,13 +371,25 @@ def fetch_clip(edit, key, sh, need, w, h, used):
     first = min(len(cands) - 1, max(0, int(sh.get("pick") or 0)))
     v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
     out, why, marked = edit / "shots" / f"{key}.mp4", "the download failed", None
-    # a result that carries a channel's logo is passed over for the next one, three tries; a `pick` is taken as it is
-    for i in ([first] if sh.get("pick") is not None else list(range(first, min(len(cands), first + 3)))):
+    order = [first] if sh.get("pick") is not None else list(range(first, min(len(cands), first + 3)))
+    moments = {}
+    if sh.get("at") is None:        # each result's best moment for these words; the results are tried best match first
+        for i in order:
+            got_m = best_moment(cands[i]["id"], sh.get("see") or sh["query"], used.get("t:" + cands[i]["id"], ()))
+            if got_m:
+                moments[i] = got_m
+        if sh.get("pick") is None and moments:
+            order.sort(key=lambda i: -(moments[i][1] if i in moments else 0.0))
+    # a result that carries a channel's logo or burned-in subtitles is passed over for the next one; a `pick` is taken as it is
+    for i in order:
         c = cands[i]
         again = used.get(c["id"], 0)
         used[c["id"]] = again + 1
         frac = float(sh["at"]) if sh.get("at") is not None else (0.3 + 0.17 * again) % 0.8
         a = max(2.0, min(c["duration"] - need - 3, c["duration"] * max(0.02, min(0.92, frac))))
+        if i in moments:            # the matched thumbnail, with a third of the shot before it
+            a = max(1.0, min(c["duration"] - need - 1, moments[i][0] - need / 3))
+            used.setdefault("t:" + c["id"], []).append(moments[i][0])
         raw = edit / "shots" / f"{key}.raw.mp4"
         raw.unlink(missing_ok=True)
         url = "https://www.youtube.com/watch?v=" + c["id"]
@@ -290,13 +408,15 @@ def fetch_clip(edit, key, sh, need, w, h, used):
             why = "the clip could not be read"
             continue
         res = {"file": f"shots/{key}.mp4", "from": url, "title": c["title"], "by": c["channel"], "at": round(a, 1), "picked": i,
+               **({"match": round(moments[i][1], 3)} if i in moments else {}),
                "others": [f"{j}: {x['title'][:60]} ({x['duration']:.0f} s)" for j, x in enumerate(cands)]}
-        if not logo_of(tmp):
+        mark = "logo" if logo_of(tmp) else "subtitles" if subs_in(tmp) else None
+        if not mark:
             tmp.replace(out)
             return res
         if marked is None:              # the first marked one is kept in case every result is marked
             tmp.replace(edit / "shots" / f"{key}.marked.mp4")
-            marked = {**res, "logo": True}
+            marked = {**res, "logo": True, "mark": mark}
         else:
             tmp.unlink(missing_ok=True)
     if marked:
@@ -562,6 +682,18 @@ def fetch_ai(edit, key, sh, need, w, h):
     return {"file": f"shots/{key}.mp4", "title": "Generated: " + str(sh["prompt"])[:70], "by": prov[0].title() + " (AI-generated)", "ai": prov[0]}
 
 
+def cmd_tools():
+    """The two optional helpers, once, into this Python (the editor's venv): CLIP to match a clip's moment to its line
+    (fastembed) and a text reader to pass over clips with subtitles (RapidOCR). Both run on onnxruntime, which the
+    editor already has; RapidOCR goes in without its own OpenCV, since the editor's is used."""
+    pip = [sys.executable, "-m", "pip", "install", "-q"]
+    subprocess.run(pip + ["fastembed", "pyclipper", "shapely", "pyyaml", "six", "tqdm"], check=True)
+    subprocess.run(pip + ["--no-deps", "rapidocr-onnxruntime"], check=True)
+    ok = matcher() is not None
+    print("tools ready" if ok else "ERROR: the matcher did not load")
+    return 0 if ok else 1
+
+
 def cmd_setkey():
     """Saves the user's Pexels key in the editor's key file. Typed here, in the user's own Terminal, never in a chat."""
     import getpass
@@ -732,7 +864,7 @@ def cmd_find(edit, only=None):
             db[key] = got
             jsave(edit / "shots.json", db)
             print(f"MISSING {key}: {got.get('query')} ({got['missing']})" if got.get("missing") else
-                  (f"LOGO {key}: every result tried carries a logo; change the words or the kind. " if got.get("logo") else "") +
+                  (f"LOGO {key}: every result tried carries a logo or subtitles; change the words or the kind. " if got.get("logo") else "") +
                   (f"AI FAILED {key} ({got['ai_failed']}), its fallback is used. " if got.get("ai_failed") else "") +
                   f"{key}: {got.get('title') or got.get('file')}"[:110])
     keys = {sp["key"] for sp in spans(edit)}
@@ -1395,6 +1527,46 @@ def cmd_kit(edit):
     return 0
 
 
+# ---------------------------------------------------------------- the render, checked at every cut
+def cmd_qa(edit):
+    """Looks at the finished render just after every cut: a black or empty frame is reported by its shot, and every
+    shot's first frame goes on sheets (EDIT/sheets/qa-N.jpg, 24 a sheet) to look at before the user sees the video."""
+    import cv2
+    import numpy as np
+    edit = Path(edit)
+    src = edit / "render.mp4"
+    if not src.exists():
+        sys.exit("ERROR: no render yet.")
+    cap = cv2.VideoCapture(str(src))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    bad, tiles = [], []
+    for sp in spans(edit):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int((sp["a"] + min(0.5, (sp["b"] - sp["a"]) / 2)) * fps))
+        ok, fr = cap.read()
+        if not ok:
+            bad.append(f"{sp['key']}: no frame at {sp['a']:.1f} s")
+            continue
+        g = cv2.cvtColor(cv2.resize(fr, (320, 180)), cv2.COLOR_BGR2GRAY)
+        if g.mean() < 10:
+            bad.append(f"{sp['key']} ({mmss(sp['a'])}): a black frame")
+        elif g[: int(180 * 0.8)].std() < 5:
+            bad.append(f"{sp['key']} ({mmss(sp['a'])}): an empty frame (one flat colour)")
+        t = cv2.resize(fr, (320, 180))
+        cv2.putText(t, sp["key"], (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 0), 3)
+        cv2.putText(t, sp["key"], (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+        tiles.append(t)
+    cap.release()
+    (edit / "sheets").mkdir(exist_ok=True)
+    for f in (edit / "sheets").glob("qa-*.jpg"):
+        f.unlink()
+    for n in range(0, len(tiles), 24):
+        page = tiles[n:n + 24] + [np.zeros((180, 320, 3), np.uint8)] * (-len(tiles[n:n + 24]) % 6)
+        cv2.imwrite(str(edit / "sheets" / f"qa-{n // 24 + 1}.jpg"), np.vstack([np.hstack(page[r:r + 6]) for r in range(0, len(page), 6)]))
+        print(edit / "sheets" / f"qa-{n // 24 + 1}.jpg")
+    print("\n".join("FIX  " + b for b in bad) if bad else f"QA ok: {len(tiles)} shots, none black or empty")
+    return 1 if bad else 0
+
+
 # ---------------------------------------------------------------- Shorts from the finished video
 SHORT_CAPTIONS = {"size_pct": 5.2, "case": "sentence", "effect": "pop", "stroke": True, "words_per_caption": 3, "y_pct": 67}
 
@@ -1563,7 +1735,8 @@ def main(argv):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("setkey")
-    for name in ("check", "sheet", "build", "kit", "briefs"):
+    sub.add_parser("tools")
+    for name in ("check", "sheet", "build", "kit", "briefs", "qa"):
         sub.add_parser(name).add_argument("edit")
     sub.add_parser("bites").add_argument("edit")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
@@ -1577,7 +1750,7 @@ def main(argv):
             "sound": lambda: cmd_sound(a.edit, a.mood), "build": lambda: cmd_build(a.edit), "thumbs": lambda: cmd_thumbs(a.edit, a.title),
             "kit": lambda: cmd_kit(a.edit), "briefs": lambda: cmd_briefs(a.edit), "setkey": cmd_setkey,
             "voiceover": lambda: cmd_voiceover(a.edit, a.file), "shorts": lambda: cmd_shorts(a.edit, a.count, a.reveal),
-            "bites": lambda: cmd_bites(a.edit), "demo": demo}[a.cmd]()
+            "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo}[a.cmd]()
 
 
 if __name__ == "__main__":

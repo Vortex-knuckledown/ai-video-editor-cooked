@@ -2,7 +2,7 @@
   "name": "studio",
   "displayName": "cooked. studio",
   "description": "New videos with no footage of your own: a fully animated video from a text prompt (a script in scenes, an animation per scene, and any of an AI voiceover, on-screen text and music), and the best moments of long streams and gameplay videos as short clips with a facecam layout, captions, a cover image and a post caption; a long researched video from one prompt with found footage, pictures and graphics; UGC-style ads cut from filmed clips with different hooks; and subtitle files in other languages for any finished video. Uses the ai-editor plugin's animation, sound, transcription and renderer.",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "author": { "name": "Vortex-knuckledown" },
   "license": "MIT",
   "keywords": ["video", "animation", "explainer", "text-to-video", "voiceover", "motion-graphics", "stream-clips", "gaming"],

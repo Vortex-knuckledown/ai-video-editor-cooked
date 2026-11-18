@@ -2,6 +2,13 @@
 
 What changed for every user, newest first.
 
+## studio 0.12.0 (this fork, 2026-11-19)
+- Long video picks the right moment of a found video. Each shot says what must be in the frame; the video's own preview frames are scored against those words and the best-matching seconds are taken. Before, it took a fixed place in the video. In a test of six shots all six showed what was asked, and one keynote gave two different moments for two lines.
+- Found clips carrying someone else's subtitles are passed over, as clips with logos already were.
+- The finished video is checked just after every cut for a black or empty frame, and every shot's first frame is laid out for Claude to look at, before you see it.
+- A 30 millisecond fade at both ends of every part of a UGC ad, so a cut inside speech never clicks.
+- These use two small open-source helpers that run on what the editor already has (CLIP through fastembed, RapidOCR). The approach of checking each cut and fading audio at cuts comes from the video-use project.
+
 ## studio 0.11.0 (this fork, 2026-11-19)
 - New video has a sixth card, UGC ad: a person talking to the camera about a product. With no clips yet, Claude writes five hooks, a short script and a shot list to film from. With the filmed clips, it picks the best takes, cuts the false starts and makes several versions of the ad that open on a different hook and share the rest, with captions, the product shown over the voice, a closing card and music, one tab each in the editor. Never a made-up customer or review.
 - Make Shorts on a finished Long video's card: each section as a vertical clip with its name on top and big captions, saved into the video's exports folder.

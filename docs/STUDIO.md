@@ -62,6 +62,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.12.0 | Long video picks the matching moment of each clip, passes over subtitled clips, and checks the render at every cut (released 2026-11-19, tag `studio-v0.12.0`) |
 | studio 0.11.0 | UGC ad; Make Shorts from a Long video; sound bites; black bars cropped; Pixabay (released 2026-11-19, tag `studio-v0.11.0`) |
 | studio 0.10.0 | Long video cut like an edited channel: a new picture every 2 s, type on the footage, condensed capitals, small lit captions (released 2026-11-19, tag `studio-v0.10.0`) |
 | studio 0.9.0 | A narrator picker with previews; connections for Pexels, Runway and Higgsfield; AI-generated shots and your own voiceover in Long video (released 2026-11-19, tag `studio-v0.9.0`) |
@@ -75,6 +76,10 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 
 ## Next, in order
 
+0. **From other open-source projects** (researched 2026-11-19). Adopted: frame matching with CLIP through fastembed
+   and subtitle reading with RapidOCR (both on onnxruntime, installed by `longvideo.py tools`); the audio fade at
+   cuts and the check of the render at every cut, after browser-use/video-use. Tried and dropped: Chatterbox (it
+   ran a 16 GB Mac out of memory). Not tried: WhisperX for who-is-speaking in sound bites (it needs torch).
 0. **Needs a real key to try** (built from each service's docs, never run): ElevenLabs voices in the picker, Pexels,
    Runway, Higgsfield, Google's video model. Higgsfield's text-only route and Google's response format are the
    least certain.
