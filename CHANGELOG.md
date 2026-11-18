@@ -2,6 +2,14 @@
 
 What changed for every user, newest first.
 
+## studio 0.8.0 (this fork, 2026-11-18)
+- A natural voice, free. Videos are narrated by Kokoro, an open neural voice that runs on your computer, instead of the robotic macOS voice. Long video's panel has a Narrator choice of five voices. With an ElevenLabs key saved, ElevenLabs is still used first. `studio.py kokoro-setup` installs it (a 350 MB download, once).
+- Long video has animated graphics. Up to 12 shots a video are built for that video by their own animation agent: a globe with a route drawn across it, a 3D bar chart, a timeline, a map. Each has a simple graphic to fall back on if it does not pass its checks.
+- Long video passes over footage that carries a channel's logo or watermark and takes the next search result, and tries plain footage (4K, drone, b-roll) before a presenter's video.
+- Long video's flat graphics sit on a card with an accent line under the heading, and a big number counts up to its value.
+- A sound on every cut and graphic: a swell into each new section, a hit on a big number, a tick for every row of a list or chart, a click or a soft whoosh between shots.
+- Stock footage and pictures from Pexels, once you connect a free Pexels key (`longvideo.py setkey`, typed in your own Terminal). Not yet tried with a real key.
+
 ## studio 0.7.0 (this fork, 2026-11-18)
 - A long video comes out the length you asked for: the voice slows a little and each line gets a short pause until it matches.
 - Pictures are fetched one at a time and wait when a picture site says slow down, and a video has at most 20 of them. A shot that cannot be found shows the nearest picture again, never an empty frame.

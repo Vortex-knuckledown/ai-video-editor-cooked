@@ -58,6 +58,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.8.0 | A natural free voice (Kokoro); animated graphics, logo-free clips, fuller sound and Pexels stock in Long video (released 2026-11-18, tag `studio-v0.8.0`) |
 | studio 0.7.0 | Long video: a 2 to 10 minute video from one prompt, with thumbnails and a publishing kit (released 2026-11-18, tag `studio-v0.7.0`) |
 | studio 0.6.0 | Subtitles in other languages; a cover image and a post caption with every exported clip; Clip a stream from a channel link (released 2026-11-18, tag `studio-v0.6.0`) |
 | studio 0.5.0 | Make one like this; the four kinds of video as cards on New video; Export all; several streams ranked fairly (released 2026-11-18, tag `studio-v0.5.0`) |
@@ -67,8 +68,8 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 
 ## Next, in order
 
-0. **Long video, after the first version.** Stock footage and pictures from Pexels with the user's free key (no
-   rate limits, no logos); your own recorded voiceover instead of the AI voice; a check that drops
+0. **Long video, after the second version.** Pexels tried with a real key; your own recorded voiceover; found
+   clips with burned-in subtitles; a check that drops
    found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
    timeline); full 3D is not planned.
 

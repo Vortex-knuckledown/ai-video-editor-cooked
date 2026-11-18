@@ -297,6 +297,64 @@ def tts_mac(text, out, voice, rate=None):
     aiff.unlink()
 
 
+KOKORO_VOICE = "am_michael"     # a calm narrator; the others: am_fenrir, af_heart, bm_george, bf_emma (kokoro voices lists all)
+_KOKORO = []
+
+
+def kokoro_dir():
+    import os
+    home = os.environ.get("AI_EDITOR_HOME", "").strip()
+    return (Path(home) if home else Path.home() / ".ai-video-editor") / "models" / "kokoro"
+
+
+def kokoro_ready():
+    """The free neural voice is there: its package in this Python and its two model files on disk."""
+    d = kokoro_dir()
+    if not ((d / "kokoro-v1.0.onnx").is_file() and (d / "voices-v1.0.bin").is_file()):
+        return False
+    try:
+        import kokoro_onnx  # noqa: F401
+        import soundfile  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def tts_kokoro(text, out, voice, speed=1.0):
+    """Kokoro (an open neural voice, Apache 2.0) on this computer: nothing is sent anywhere, nothing is billed."""
+    import soundfile as sf
+    from kokoro_onnx import Kokoro
+    if not _KOKORO:
+        d = kokoro_dir()
+        _KOKORO.append(Kokoro(str(d / "kokoro-v1.0.onnx"), str(d / "voices-v1.0.bin")))
+    wav, sr = _KOKORO[0].create(text, voice=voice, speed=max(0.7, min(1.3, speed)), lang="en-gb" if voice[:1] == "b" else "en-us")
+    raw = Path(out).with_suffix(".k.wav")
+    sf.write(str(raw), wav, sr)
+    to_wav(raw, out)
+    raw.unlink()
+
+
+KOKORO_FILES = {"kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
+                "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"}
+
+
+def cmd_kokoro_setup():
+    """The free neural voice, once: its package into this Python (the editor's venv) and its model (about 350 MB)."""
+    if not kokoro_ready():
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "kokoro-onnx", "soundfile"], check=True)
+        use_editor()
+        from ai_editor import net
+        d = kokoro_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        for name, url in KOKORO_FILES.items():
+            if not (d / name).is_file():
+                print(f"downloading {name} ...", flush=True)
+                net.retrieve(url, d / (name + ".part"), 1800)
+                (d / (name + ".part")).rename(d / name)
+    print("kokoro ready" if kokoro_ready() else "ERROR: the Kokoro voice did not install")
+    return 0 if kokoro_ready() else 1
+
+
 def to_wav(src, out):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", str(out)],
                    check=True)
@@ -316,7 +374,11 @@ def engine_for(want):
     if want in ("auto", "eleven") and key:
         return "eleven", key
     if want == "eleven":
-        sys.exit("No ElevenLabs key saved. Say \"add my elevenlabs key\" (setup), or use --engine mac.")
+        sys.exit("No ElevenLabs key saved. Say \"add my elevenlabs key\" (setup), or use --engine kokoro.")
+    if want in ("auto", "kokoro") and kokoro_ready():
+        return "kokoro", None
+    if want == "kokoro":
+        sys.exit("The Kokoro voice is not installed: studio.py kokoro-setup (a 350 MB download, once), or use --engine mac.")
     if shutil.which("say"):
         return "mac", None
     sys.exit("No voice engine here: no ElevenLabs key and no macOS `say`. Use --engine none (on-screen words only).")
@@ -345,6 +407,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
     b, scenes = brief_of(edit), jload(edit / "scenes.json")["scenes"]
     eng, key = engine_for(engine if b["voice"] else "none")
     (edit / "audio").mkdir(exist_ok=True)
+    voice = voice or (str(b.get("voice_id") or "").strip() or None if eng == "kokoro" else None)
     like = jload(edit / "like" / "like.json", {}) if b.get("like") else {}
     if fit is None and like:
         fit = float(b.get("length") or like.get("length") or 0)
@@ -359,6 +422,8 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
             if not out.exists() or (stamp.read_text(encoding="utf-8") if stamp.exists() else "") != want:
                 if eng == "eleven":
                     tts_eleven(text, out, voice or DEFAULT_VOICE, key)
+                elif eng == "kokoro":
+                    tts_kokoro(text, out, voice or KOKORO_VOICE, (rate or 100) / 100.0)
                 else:
                     tts_mac(text, out, voice or MAC_VOICE, rate)
                 stamp.write_text(want, encoding="utf-8")
@@ -376,6 +441,13 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
             if abs(sum(vds) - want) > 0.05 * want:        # say's own pace differs a voice to a voice: one correction
                 rate = max(round(MAC_RATE * SLOWEST * 0.9), round(rate * sum(vds) / want))
                 vds = speak(rate)
+        elif eng == "kokoro" and fit:           # Kokoro takes a speed: slower when short, a little faster when long
+            total = LEAD_S + sum(vds) + len(scenes) * TAIL_S
+            speed = round(max(SLOWEST + 0.05, min(1.12, total / fit if total > fit else sum(vds) / (fit * 0.9))), 2)
+            if abs(speed - 1.0) >= 0.03:
+                vds = speak(round(100 * speed))
+            else:
+                speed = 1.0
         elif speed < 0.97:
             speed = 1.0
         if fit:
@@ -392,7 +464,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
         row["dur"] = round(dur, 3)
         rows.append(row)
         t += dur
-    tm = {"engine": eng, "voice": voice or (DEFAULT_VOICE if eng == "eleven" else MAC_VOICE if eng == "mac" else None),
+    tm = {"engine": eng, "voice": voice or (DEFAULT_VOICE if eng == "eleven" else KOKORO_VOICE if eng == "kokoro" else MAC_VOICE if eng == "mac" else None),
           "length": round(t, 3), "scenes": rows}
     if fit and eng != "none":
         tm["fit"] = {"target": round(fit, 1), "speed": speed, "air": air}
@@ -401,7 +473,8 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
         join_voice(edit, tm)
     for r in rows:
         print(f"{r['id']:<24} {r['start']:6.2f}s +{r['dur']:.2f}s" + (f"  voice {r['vo_dur']:.2f}s" if r.get("vo") else ""))
-    print(f"{len(rows)} scenes, {t:.1f} s, voice: {eng}" + (" (the free Mac voice; an ElevenLabs key sounds more natural)" if eng == "mac" else ""))
+    print(f"{len(rows)} scenes, {t:.1f} s, voice: {eng}" + (" (the free Mac voice: robotic. studio.py kokoro-setup installs a natural free one)" if eng == "mac" else
+                                                           " (Kokoro, a free neural voice on this computer)" if eng == "kokoro" else ""))
     if fit and eng != "none":
         print(f"fit   {t:.1f} s for {fit:.0f} s: the voice at {round(100 * speed)}% speed, {air:.2f} s of air after each line")
         words = sum(len(words_in(s.get("say"))) for s in scenes)
@@ -761,11 +834,12 @@ def main(argv):
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("root")
     sub.add_parser("demo")
+    sub.add_parser("kokoro-setup")
     for name in ("check-scenes", "words", "briefs", "build", "stills"):
         sub.add_parser(name).add_argument("edit")
     v = sub.add_parser("voice")
     v.add_argument("edit")
-    v.add_argument("--engine", default="auto", choices=("auto", "eleven", "mac", "none"))
+    v.add_argument("--engine", default="auto", choices=("auto", "eleven", "kokoro", "mac", "none"))
     v.add_argument("--voice")
     v.add_argument("--fit", type=float, help="seconds to reach: the voice slows a little, then each line gets air")
     m = sub.add_parser("music")
@@ -786,6 +860,8 @@ def main(argv):
         return demo()
     if a.cmd == "like":
         return cmd_like(a.edit, a.src, a.cookies_from_browser)
+    if a.cmd == "kokoro-setup":
+        return cmd_kokoro_setup()
     return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice, a.fit),
             "words": lambda: cmd_words(a.edit), "briefs": lambda: cmd_briefs(a.edit),
             "music": lambda: cmd_music(a.edit, a.mood), "build": lambda: cmd_build(a.edit),

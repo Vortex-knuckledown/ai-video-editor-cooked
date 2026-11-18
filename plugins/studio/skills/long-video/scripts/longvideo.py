@@ -49,9 +49,11 @@ import studio  # noqa: E402  (the voice, the words, the render; finding the edit
 from studio import jload, jsave, duration  # noqa: E402
 import streamclips  # noqa: E402  (yt-dlp, the cover image)
 
-MEDIA = ("clip", "photo", "own")
+MEDIA = ("clip", "stock", "photo", "own")
 GRAPHICS = ("title", "stat", "bars", "list", "quote", "source")
-NEEDS = {"clip": ("query",), "photo": ("query",), "own": ("file",), "title": ("text",), "stat": ("value", "label"),
+MAX_MOTION = 12           # animated hero graphics a video: each is built by its own agent, a few minutes apiece
+NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("file",), "motion": ("visual", "fallback"),
+         "title": ("text",), "stat": ("value", "label"),
          "bars": ("items",), "list": ("items",), "quote": ("text",), "source": ("title", "highlight")}
 MIN_SHOT_S = 1.6          # a shot shorter than this is dropped: the line's other shots take its time
 PACE_S = 4.5              # more than this a shot on average reads as slow
@@ -84,6 +86,9 @@ def check(edit):
                     errs.append(f"scene {s.get('id')} shot {k} ({kind}): no \"{f}\"")
             if kind in ("bars", "list") and not (isinstance(sh.get("items"), list) and 2 <= len(sh["items"]) <= 6):
                 errs.append(f"scene {s.get('id')} shot {k} ({kind}): 2 to 6 items")
+            if kind == "motion" and not (isinstance(sh.get("fallback"), dict) and sh["fallback"].get("kind") in GRAPHICS
+                                         and all(sh["fallback"].get(f) for f in NEEDS[sh["fallback"]["kind"]])):
+                errs.append(f"scene {s.get('id')} shot {k} (motion): \"fallback\" is a whole simple graphic ({', '.join(GRAPHICS)}), shown if the animation fails")
             if kind == "bars" and isinstance(sh.get("items"), list) and any(
                     not (isinstance(i, list) and len(i) == 2 and isinstance(i[1], (int, float))) for i in sh["items"]):
                 errs.append(f"scene {s.get('id')} shot {k} (bars): each item is [\"name\", number]")
@@ -99,6 +104,9 @@ def cmd_check(edit):
     est = sum(studio.estimate(s, b) for s in sc)
     shots = [sh for s in sc for sh in s["shots"]]
     kinds = {k: sum(sh["kind"] == k for sh in shots) for k in NEEDS}
+    if kinds["motion"] > MAX_MOTION:
+        print(f"FIX  {kinds['motion']} motion shots: {MAX_MOTION} at most. Keep them for the ideas a flat graphic cannot show")
+        return 1
     words = sum(len(studio.words_in(s.get("say"))) for s in sc)
     print(f"ok   {len(sc)} lines, {words} words, about {est // 60:.0f}:{est % 60:02.0f}, {len(shots)} shots "
           f"(one every {est / len(shots):.1f} s): " + ", ".join(f"{n} {k}" for k, n in kinds.items() if n))
@@ -113,7 +121,7 @@ def cmd_check(edit):
     if kinds["photo"] > 20:
         print(f"FIX  {kinds['photo']} photo shots: 20 at most (the picture sites are slow). Make the others clips or graphics")
         return 1
-    g = sum(kinds[k] for k in GRAPHICS)
+    g = sum(kinds[k] for k in GRAPHICS) + kinds["motion"]
     if g > 0.6 * len(shots):
         print(f"FIX  {g} of {len(shots)} shots are graphics: real footage and pictures carry a video, graphics make the points")
         return 1
@@ -133,10 +141,13 @@ def spans(edit):
         if not r:
             continue
         shots = s["shots"][:max(1, min(len(s["shots"]), int(r["dur"] / MIN_SHOT_S)))]
-        step = r["dur"] / len(shots)
+        # a shot's share of its line: "weight" (an animated graphic takes twice a clip's time unless told otherwise)
+        ws = [max(0.25, min(4.0, float(sh.get("weight") or (2 if sh.get("kind") == "motion" else 1)))) for sh in shots]
+        t = r["start"]
         for k, sh in enumerate(shots):
-            out.append({"key": f"{s['id']}-{k + 1}", "sid": s["id"], "a": round(r["start"] + k * step, 3),
-                        "b": round(r["start"] + (k + 1) * step, 3), "shot": sh, "n": len(out)})
+            z = r["start"] + r["dur"] if k + 1 == len(shots) else t + r["dur"] * ws[k] / sum(ws)
+            out.append({"key": f"{s['id']}-{k + 1}", "sid": s["id"], "a": round(t, 3), "b": round(z, 3), "shot": sh, "n": len(out)})
+            t = z
     return out
 
 
@@ -159,7 +170,44 @@ def search_youtube(query, n=6):
             break
         time.sleep(1)
     good = [c for c in rows if 20 <= c["duration"] <= 2400]       # not a Short's 10 s, not a 3 hour stream
-    return good or [c for c in rows if 8 <= c["duration"] <= 7200]
+    return sorted(good or [c for c in rows if 8 <= c["duration"] <= 7200], key=lambda c: -title_score(c))
+
+
+CLEAN = re.compile(r"\b(4k|8k|uhd|drone|aerial|b-?roll|cinematic|timelapse|time-lapse|slow motion|footage|no copyright|free to use|scenery|relaxing)\b", re.I)
+BUSY = re.compile(r"\b(news|podcast|reaction|reacts|interview|review|tutorial|how to|vlog|trailer|compilation|explained|live|episode|"
+                  r"full movie|lyrics|top \d+|shorts)\b|#", re.I)
+
+
+def title_score(c):
+    """Which search result to try first: plain footage before a presenter's video (which carries a face, titles, a logo)."""
+    t = f"{c.get('title', '')} {c.get('channel', '')}"
+    return 2 * bool(CLEAN.search(t)) - 2 * bool(BUSY.search(t)) - (c.get("duration", 0) > 1200)
+
+
+def logo_of(f):
+    """True when a clip carries a logo or watermark: edges that sit still in a corner while the picture around them
+    moves. Checked on 4 frames; a locked-off shot (everything still) is not a logo."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return False
+    cap = cv2.VideoCapture(str(f))
+    total, fs = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0), []
+    for k in range(4):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * (0.1 + 0.8 * k / 3)))
+        ok, fr = cap.read()
+        if ok:
+            fs.append(cv2.cvtColor(cv2.resize(fr, (640, 360)), cv2.COLOR_BGR2GRAY))
+    cap.release()
+    if len(fs) < 3:
+        return False
+    keep = np.logical_and.reduce([cv2.Canny(g, 80, 200) > 0 for g in fs])
+    H, W = keep.shape
+    ch, cw = int(H * 0.16), int(W * 0.2)
+    corner = max(float(c.mean()) for c in (keep[:ch, :cw], keep[:ch, -cw:], keep[-ch:, :cw], keep[-ch:, -cw:]))
+    middle = float(keep[int(H * 0.25):int(H * 0.75), int(W * 0.25):int(W * 0.75)].mean())
+    return corner >= 0.05 and corner > 2.5 * middle + 0.01
 
 
 def fit_cmd(src, out, w, h, seconds=None, start=0.0):
@@ -175,29 +223,135 @@ def fetch_clip(edit, key, sh, need, w, h, used):
     cands = search_youtube(sh["query"])
     if not cands:
         return {"missing": "nothing found on YouTube for this search"}
-    c = cands[min(len(cands) - 1, max(0, int(sh.get("pick") or 0)))]
-    again = used.get(c["id"], 0)
-    used[c["id"]] = again + 1
-    frac = float(sh["at"]) if sh.get("at") is not None else (0.3 + 0.17 * again) % 0.8
-    a = max(2.0, min(c["duration"] - need - 3, c["duration"] * max(0.02, min(0.92, frac))))
-    raw = edit / "shots" / f"{key}.raw.mp4"
-    raw.unlink(missing_ok=True)
+    first = min(len(cands) - 1, max(0, int(sh.get("pick") or 0)))
     v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
-    url = "https://www.youtube.com/watch?v=" + c["id"]
-    r = subprocess.run(streamclips.ytdlp() + ["--no-warnings", "--no-playlist", *v4, "-f",
-                                             "bv*[height<=1080][vcodec^=avc1]/bv*[height<=1080]/b[height<=1080]/b",
-                                             "--download-sections", f"*{a:.1f}-{a + need + 2.5:.1f}", "--merge-output-format", "mp4",
-                                             "-o", str(raw), url], capture_output=True, text=True, timeout=300)
-    if r.returncode or not raw.exists():
-        return {"missing": (r.stderr.strip().splitlines() or ["the download failed"])[-1][:160]}
-    out = edit / "shots" / f"{key}.mp4"
-    got = duration(raw)
-    r = subprocess.run(fit_cmd(raw, out, w, h, min(need, max(0.5, got - 0.1)), max(0.0, min(1.0, got - need))), capture_output=True, text=True)
+    out, why, marked = edit / "shots" / f"{key}.mp4", "the download failed", None
+    # a result that carries a channel's logo is passed over for the next one, three tries; a `pick` is taken as it is
+    for i in ([first] if sh.get("pick") is not None else list(range(first, min(len(cands), first + 3)))):
+        c = cands[i]
+        again = used.get(c["id"], 0)
+        used[c["id"]] = again + 1
+        frac = float(sh["at"]) if sh.get("at") is not None else (0.3 + 0.17 * again) % 0.8
+        a = max(2.0, min(c["duration"] - need - 3, c["duration"] * max(0.02, min(0.92, frac))))
+        raw = edit / "shots" / f"{key}.raw.mp4"
+        raw.unlink(missing_ok=True)
+        url = "https://www.youtube.com/watch?v=" + c["id"]
+        r = subprocess.run(streamclips.ytdlp() + ["--no-warnings", "--no-playlist", *v4, "-f",
+                                                 "bv*[height<=1080][vcodec^=avc1]/bv*[height<=1080]/b[height<=1080]/b",
+                                                 "--download-sections", f"*{a:.1f}-{a + need + 2.5:.1f}", "--merge-output-format", "mp4",
+                                                 "-o", str(raw), url], capture_output=True, text=True, timeout=300)
+        if r.returncode or not raw.exists():
+            why = (r.stderr.strip().splitlines() or ["the download failed"])[-1][:160]
+            continue
+        got = duration(raw)
+        tmp = edit / "shots" / f"{key}.try.mp4"
+        r = subprocess.run(fit_cmd(raw, tmp, w, h, min(need, max(0.5, got - 0.1)), max(0.0, min(1.0, got - need))), capture_output=True, text=True)
+        raw.unlink(missing_ok=True)
+        if r.returncode or not tmp.exists():
+            why = "the clip could not be read"
+            continue
+        res = {"file": f"shots/{key}.mp4", "from": url, "title": c["title"], "by": c["channel"], "at": round(a, 1), "picked": i,
+               "others": [f"{j}: {x['title'][:60]} ({x['duration']:.0f} s)" for j, x in enumerate(cands)]}
+        if not logo_of(tmp):
+            tmp.replace(out)
+            return res
+        if marked is None:              # the first marked one is kept in case every result is marked
+            tmp.replace(edit / "shots" / f"{key}.marked.mp4")
+            marked = {**res, "logo": True}
+        else:
+            tmp.unlink(missing_ok=True)
+    if marked:
+        (edit / "shots" / f"{key}.marked.mp4").replace(out)
+        return marked
+    return {"missing": why}
+
+
+# ---------------------------------------------------------------- stock footage and pictures (Pexels, with the user's free key)
+def pexels_key():
+    """The user's Pexels key: the PEXELS_API_KEY variable, else that line of the editor's key file. None: not connected."""
+    import os
+    if os.environ.get("PEXELS_API_KEY", "").strip():
+        return os.environ["PEXELS_API_KEY"].strip()
+    try:
+        studio.use_editor()
+        from ai_editor import keys
+        for line in keys.key_file().read_text(encoding="utf-8").splitlines():
+            if line.startswith("PEXELS_API_KEY="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'") or None
+    except (OSError, ImportError):
+        pass
+    return None
+
+
+def pexels(path, params, key):
+    studio.use_editor()
+    import net
+    req = urllib.request.Request(f"https://api.pexels.com/{path}?" + urllib.parse.urlencode(params), headers={"Authorization": key, "User-Agent": UA})
+    with net.urlopen(req, 40) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def search_pexels(query, n=8, w=1920, h=1080):
+    key = pexels_key()
+    if not key:
+        return []
+    res = pexels("v1/search", {"query": query, "per_page": n, "orientation": "landscape" if w >= h else "portrait"}, key).get("photos") or []
+    return [{"url": x["src"].get("large2x") or x["src"]["original"], "page": x.get("url"), "w": x.get("width") or 0, "h": x.get("height") or 0,
+             "title": (x.get("alt") or "")[:80], "by": (x.get("photographer") or "")[:80], "license": "Pexels"} for x in res]
+
+
+def fetch_stock(edit, key, sh, need, w, h):
+    """A stock clip from Pexels: free to use, no logo, no credit owed (one is given anyway)."""
+    pk = pexels_key()
+    if not pk:
+        return None
+    try:
+        vids = pexels("videos/search", {"query": sh["query"], "per_page": 8, "orientation": "landscape" if w >= h else "portrait"}, pk).get("videos") or []
+    except Exception as e:
+        return {"missing": f"Pexels did not answer ({type(e).__name__})"}
+    vids = [v for v in vids if (v.get("duration") or 0) >= need + 0.5] or vids
+    if not vids:
+        return {"missing": "no stock clip on Pexels for this search"}
+    v = vids[min(len(vids) - 1, max(0, int(sh.get("pick") or 0)))]
+    files = sorted([f for f in v.get("video_files") or [] if f.get("link") and (f.get("file_type") or "").endswith("mp4")],
+                   key=lambda f: (abs((f.get("height") or 0) - min(h, 1080)), -(f.get("width") or 0)))
+    if not files:
+        return {"missing": "that stock clip has no file to download"}
+    raw = edit / "shots" / f"{key}.raw.mp4"
+    try:
+        import net
+        with net.urlopen(urllib.request.Request(files[0]["link"], headers={"User-Agent": UA}), 180) as r:
+            raw.write_bytes(r.read())
+    except Exception as e:
+        return {"missing": f"the stock clip did not download ({type(e).__name__})"}
+    out, got = edit / "shots" / f"{key}.mp4", duration(raw)
+    at = max(0.0, (got - need) * max(0.0, min(0.9, float(sh["at"]) if sh.get("at") is not None else 0.2)))
+    r = subprocess.run(fit_cmd(raw, out, w, h, min(need, max(0.5, got - 0.1)), at), capture_output=True, text=True)
     raw.unlink(missing_ok=True)
     if r.returncode or not out.exists():
-        return {"missing": "the clip could not be read"}
-    return {"file": f"shots/{key}.mp4", "from": url, "title": c["title"], "by": c["channel"], "at": round(a, 1),
-            "others": [f"{i}: {x['title'][:60]} ({x['duration']:.0f} s)" for i, x in enumerate(cands)]}
+        return {"missing": "the stock clip could not be read"}
+    return {"file": f"shots/{key}.mp4", "from": v.get("url"), "title": "Stock clip", "by": ((v.get("user") or {}).get("name") or "") + " (Pexels)",
+            "license": "Pexels", "others": [f"{i}: {x.get('duration')} s by {(x.get('user') or {}).get('name')}" for i, x in enumerate(vids)]}
+
+
+def cmd_setkey():
+    """Saves the user's Pexels key in the editor's key file. Typed here, in the user's own Terminal, never in a chat."""
+    import getpass
+    studio.use_editor()
+    from ai_editor import keys
+    key = getpass.getpass("Paste your Pexels API key (pexels.com/api, free) and press Return: ").strip()
+    if len(key) < 20:
+        sys.exit("ERROR: that does not look like a Pexels key.")
+    try:
+        pexels("v1/search", {"query": "sky", "per_page": 1}, key)
+    except Exception as e:
+        sys.exit(f"ERROR: Pexels refused that key ({type(e).__name__}). Nothing was saved.")
+    f = keys.key_file()
+    lines = [ln for ln in (f.read_text(encoding="utf-8").splitlines() if f.exists() else []) if not ln.startswith("PEXELS_API_KEY=")]
+    f.parent.mkdir(parents=True, exist_ok=True)
+    keys.write_private(f, "\n".join(lines + [f"PEXELS_API_KEY={key}"]) + "\n")
+    print("Pexels is connected: stock clips and pictures are on for long videos.")
+    return 0
 
 
 def search_commons(query, n=8):
@@ -245,7 +399,7 @@ def fetch_photo(edit, key, sh, w, h):
     with PHOTO_LOCK:
         for attempt in range(3):
             asked = False
-            for search in (search_commons, search_openverse):
+            for search in (search_commons, search_openverse, search_pexels):
                 if COOL.get(search.__name__, 0) > time.time():
                     continue
                 asked = True
@@ -314,14 +468,21 @@ def cmd_find(edit, only=None):
         was = db.get(key) or {}
         if was.get("stamp") == stamp_of(sh, need) and was.get("file") and (edit / was["file"]).exists():
             return key, was
-        got = fetch_clip(edit, key, sh, need, w, h, used) if sh["kind"] == "clip" else \
-            fetch_photo(edit, key, sh, w, h) if sh["kind"] == "photo" else fetch_own(edit, key, sh, need, w, h)
+        if sh["kind"] == "stock":      # Pexels with a key; with none, the same words searched on YouTube when that is allowed
+            got = fetch_stock(edit, key, sh, need, w, h)
+            if got is None:
+                got = fetch_clip(edit, key, sh, need, w, h, used) if (studio.brief_of(edit).get("footage") or {}).get("youtube", True) \
+                    else {"missing": "stock footage needs a Pexels key (longvideo.py setkey), and YouTube footage is off"}
+        else:
+            got = fetch_clip(edit, key, sh, need, w, h, used) if sh["kind"] == "clip" else \
+                fetch_photo(edit, key, sh, w, h) if sh["kind"] == "photo" else fetch_own(edit, key, sh, need, w, h)
         return key, {**got, "kind": sh["kind"], "query": sh.get("query"), "stamp": stamp_of(sh, need)}
     with ThreadPoolExecutor(4) as ex:
         for key, got in ex.map(one, todo):
             db[key] = got
             jsave(edit / "shots.json", db)
             print(f"MISSING {key}: {got.get('query')} ({got['missing']})" if got.get("missing") else
+                  (f"LOGO {key}: every result tried carries a logo; change the words or the kind. " if got.get("logo") else "") +
                   f"{key}: {got.get('title') or got.get('file')}"[:110])
     keys = {sp["key"] for sp in spans(edit)}
     for k in [k for k in db if k not in keys]:          # a shot the script no longer has
@@ -367,6 +528,61 @@ def cmd_sheet(edit):
     return 0
 
 
+# ---------------------------------------------------------------- animated graphics (one clip-builder agent each)
+def cmd_briefs(edit):
+    """EDIT/motion/<key>/ for every `motion` shot: the animation template, beat.json and brief.md that one
+    ai-editor:clip-builder agent builds into a full-frame animated clip of exactly that shot's length."""
+    edit = Path(edit).resolve()
+    root = studio.use_editor()
+    import motion
+    import os
+    tm, words, sc, b = jload(edit / "timing.json"), jload(edit / "words.json"), jload(edit / "scenes.json"), studio.brief_of(edit)
+    if not tm or words is None:
+        sys.exit("ERROR: run studio.py voice and words first.")
+    todo = [sp for sp in spans(edit) if sp["shot"]["kind"] == "motion"]
+    if not todo:
+        print("0 briefs: no motion shots")
+        return 0
+    ok, why = motion.ensure_tools()
+    if not ok:
+        sys.exit("ERROR: the motion tools are missing: " + str(why))
+    look = studio.look_of(sc)
+    w, h = studio.size_of(edit)
+    gsap = motion.home() / "motion" / "node_modules" / "gsap" / "dist" / "gsap.min.js"
+    says = {s["id"]: s.get("say", "") for s in sc["scenes"]}
+    order = [s["id"] for s in sc["scenes"]]
+    for n, sp in enumerate(todo, 1):
+        sh, key, dur = sp["shot"], sp["key"], round(sp["b"] - sp["a"], 2)
+        i = order.index(sp["sid"])
+        mine = [{"w": x["w"], "t": round(x["start"] - sp["a"], 2)} for x in words if sp["a"] <= x["start"] < sp["b"]]
+        beat = {"id": key, "type": "scene", "props": {}, "start": sp["a"], "dur": dur, "clock": "video", "size": [w, h], "words": mine,
+                "line": says[sp["sid"]], "before": says[order[i - 1]] if i else "", "after": says[order[i + 1]] if i + 1 < len(order) else ""}
+        d = edit / "motion" / key
+        (d / "assets").mkdir(parents=True, exist_ok=True)
+        old = jload(d / "beat.json", {}) or {}
+        if not (d / "index.html").exists() or abs(old.get("dur", 0) - dur) > 0.01:
+            (d / "index.html").write_text(motion.fill_template(beat, look), encoding="utf-8")
+            (d / "gates.json").unlink(missing_ok=True)
+        shutil.copy(root / "skills" / "motion" / "template" / "hyperframes.json", d / "hyperframes.json")
+        if gsap.exists():
+            shutil.copy(gsap, d / "assets" / "gsap.min.js")
+        jsave(d / "beat.json", beat)
+        visual = str(sh["visual"]) + (" Use exactly these numbers and names, nothing invented: " + json.dumps(sh["data"]) if sh.get("data") else "") + \
+            " This is one shot inside a documentary cut from real footage: it must look designed and deep (layers, light, a moving camera," \
+            " easing), not a slide. The captions sit in the bottom fifth: keep that calm."
+        (d / "brief.md").write_text(studio.BRIEF.format(
+            id=key, card=root / "skills" / "motion" / "references" / "clip-brief-card.md", dir=d, w=w, h=h, dur=dur,
+            title=sc.get("title") or "", prompt=b.get("prompt") or "", look=json.dumps(look), visual=visual,
+            say=beat["line"], before=beat["before"], after=beat["after"], words=json.dumps(mine), n=n, total=len(todo), first="", last="",
+            start="- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
+            env=f'AI_EDITOR_HOME="{os.environ["AI_EDITOR_HOME"]}" ' if os.environ.get("AI_EDITOR_HOME") else "",
+            run=root / "lib" / "ai_editor" / "run.py", motion=root / "skills" / "motion" / "scripts" / "motion.py",
+            rounds=motion.ROUNDS), encoding="utf-8")
+        print(f"{key:<24} {dur:5.2f}s  {d / 'brief.md'}")
+    print(f"{len(todo)} brief(s). One ai-editor:clip-builder agent per brief, all in one message.")
+    return 0
+
+
 # ---------------------------------------------------------------- sound
 def cmd_sound(edit, mood="linear"):
     """audio/mix.wav: the voice, the music ducked under it, and a quiet sound on the cuts (a tick when a graphic
@@ -388,11 +604,27 @@ def cmd_sound(edit, mood="linear"):
         got, _ = sound.compose(mood, tm["length"], None, [s["a"] for s in sp[1:]], 0, sections)
         bed = np.pad(got, ((0, 0), (0, max(0, n - got.shape[1]))))[:, :n] * 0.42
     fx = np.zeros((2, n))
-    for k, s in enumerate(sp[1:], 1):
-        if s["shot"]["kind"] in GRAPHICS:
-            sound.place(fx, sound.sfx_tick(k), s["a"], 0.32)
-        elif k % 3 == 0:
-            sound.place(fx, sound.sfx_whoosh(0.6, True, k % 3), s["a"] - 0.5, 0.09)
+    root = sound.MOODS[mood]["root"]
+    sect, seen = {}, None
+    for sc_ in scenes_of(edit):
+        if sc_.get("section") and sc_["section"] != seen:
+            seen = sc_["section"]
+            sect[sc_["id"]] = True
+    for k, s in enumerate(sp[1:], 1):                    # a sound on every change of picture, quiet under the voice
+        kind, first = s["shot"]["kind"], s["key"].endswith("-1") and sect.get(s["sid"])
+        if first and s["a"] > 3:                          # a new section: a swell into it
+            sound.place(fx, sound.sfx_swell(1.4, root, k), s["a"] - 1.4, 0.13)
+        if kind in ("stat", "title", "motion"):
+            sound.place(fx, sound.sfx_hit(root, k), s["a"], 0.24)
+        elif kind in GRAPHICS:
+            sound.place(fx, sound.sfx_tick(k), s["a"], 0.3)
+            if kind in ("list", "bars"):                  # each row lands with its own tick
+                for j in range(1, min(6, len(s["shot"].get("items") or []))):
+                    sound.place(fx, sound.sfx_tick(k + j), s["a"] + 0.25 + j * 0.3, 0.16)
+        elif k % 2 == 0:
+            sound.place(fx, sound.sfx_whoosh(0.55, True, k % 3), s["a"] - 0.45, 0.085, pan=(-0.4 if k % 4 == 0 else 0.4))
+        else:
+            sound.place(fx, sound.sfx_click(k % 5), s["a"], 0.14)
     vo = edit / "audio" / "vo.wav"
     mix = bed + fx
     if tm["engine"] != "none" and vo.exists():
@@ -444,6 +676,29 @@ def graphic(S, sh, a, b, W, H, look):
     def right(text, t0, x_right, y, size, wrap, **kw):
         wd = min(wrap, tw(text, size, kw.get("weight", 700)))
         return T(text, t0, x=x_right - wd / 2, y=y, w=int(wrap), size=int(size), align="right", **kw)
+    def panel(cx, cy, pw, ph, t0=0.0):                      # a soft card behind a chart or a list, so it reads as one object
+        S.shape(a + t0, b, track="Graphics bg", x=cx, y=cy, w=pw, h=ph, radius=s * 0.03, fill="#FFFFFF", opacity=0.055,
+                anim={"in": "fade", "out": "none", "dur": 0.3}, keys={"scale": [[0, 0.97, "out"], [0.4, 1.0, "out"], [d, 1.015, "linear"]]})
+
+    def rule(cx, cy, wd, t0=0.15):                           # an accent line that draws itself under a heading
+        S.shape(a + t0, b, track="Graphics", x=cx, y=cy, w=wd, h=max(4, s * 0.006), radius=3, fill=acc,
+                keys={"w": [[0, 2, "out"], [0.45, wd, "out"]]})
+
+    def count_up(value, **kw):                               # a number that runs up to its value in the first half second
+        m = re.fullmatch(r"(\D*?)(\d[\d,]*)(\.\d+)?(\D.*)?", str(value).strip())
+        steps = 7
+        if not m or d < 1.4:
+            return T(value, 0, **kw)
+        pre, whole, frac, post = m.group(1), int(m.group(2).replace(",", "")), m.group(3) or "", m.group(4) or ""
+        if whole < 10:
+            return T(value, 0, **kw)
+        fmt = (lambda v: f"{v:,}") if "," in m.group(2) else str
+        keys = kw.pop("keys", None)
+        for i in range(steps):
+            v = int(whole * (1 - (1 - (i + 1) / (steps + 1)) ** 2))
+            S.text(f"{pre}{fmt(v)}{frac}{post}", a + i * 0.07, a + (i + 1) * 0.07, track="Graphics",
+                   **{**kw, "anim": kw.get("anim") if i == 0 else None})
+        return S.text(str(value), a + steps * 0.07, b, track="Graphics", **{**kw, "anim": None, "keys": keys or {}})
     kind = sh["kind"]
     if kind == "title":
         T(sh["text"], 0, x=W / 2, y=H * (0.38 if sh.get("sub") else 0.42), w=int(W * 0.84), size=int(s * 0.14), weight=900, color=ink,
@@ -451,8 +706,9 @@ def graphic(S, sh, a, b, W, H, look):
         if sh.get("sub"):
             T(sh["sub"], min(0.3, d / 3), x=W / 2, y=H * 0.6, w=int(W * 0.7), size=int(s * 0.055), weight=600, color=acc, anim=up)
     elif kind == "stat":
-        T(sh["value"], 0, x=W / 2, y=H * 0.34, w=int(W * 0.94), size=int(s * 0.32), weight=900, color=acc, anim=pop,
-          keys={"scale": [[0, 0.8, "out"], [0.35, 1.0, "out"], [d, 1.05, "linear"]]})
+        count_up(sh["value"], x=W / 2, y=H * 0.34, w=int(W * 0.94), size=int(s * 0.32), weight=900, color=acc, anim=pop,
+                 keys={"scale": [[0, 1.0, "out"], [max(0.1, d - 0.5), 1.05, "linear"]]})
+        rule(W / 2, H * 0.52, W * 0.12, 0.5)
         T(sh["label"], min(0.3, d / 3), x=W / 2, y=H * 0.62, w=int(W * 0.74), size=int(s * 0.066), weight=600, color=ink, anim=up)
     elif kind == "quote":
         T("\u201C", 0, x=W * 0.14, y=H * 0.2, w=int(W * 0.2), size=int(s * 0.34), weight=900, color=acc, anim=pop)
@@ -463,7 +719,9 @@ def graphic(S, sh, a, b, W, H, look):
         items, top = sh["items"][:6], H * (0.3 if sh.get("title") else 0.16)
         if sh.get("title"):
             T(sh["title"], 0, x=W / 2, y=H * 0.12, w=int(W * 0.84), size=int(s * 0.078), weight=800, color=ink, anim=up)
+            rule(W / 2, H * 0.19, W * 0.1)
         gap = min(H * 0.15, (H * 0.72 - top) / max(1, len(items) - 1)) if len(items) > 1 else 0
+        panel(W / 2, top + gap * (len(items) - 1) / 2, W * 0.76, gap * (len(items) - 1) + H * 0.16)
         size = min(s * 0.064, gap * 0.5) if gap else s * 0.064
         chip = size * 1.35
         for i, it in enumerate(items):
@@ -482,6 +740,7 @@ def graphic(S, sh, a, b, W, H, look):
         bh = min(s * 0.085, gap * 0.6) if gap else s * 0.085
         size = min(s * 0.056, bh * 0.8)
         best = max(range(len(items)), key=lambda i: float(items[i][1]))
+        panel(W / 2, y0 + gap * (len(items) - 1) / 2, W * 0.82, gap * (len(items) - 1) + H * 0.17)
         for i, (name, v) in enumerate(items):
             t0, y, bw = 0.2 + i * 0.12, y0 + i * gap, max(8.0, full * abs(float(v)) / top_v)
             grow = min(0.7, max(0.3, d * 0.3))
@@ -521,14 +780,22 @@ def cmd_build(edit):
     look = {**LOOK, **{k: v for k, v in (sc.get("look") or {}).items() if k in LOOK}} if isinstance(sc.get("look"), dict) else dict(LOOK)
     W, H = studio.size_of(edit)
     S = scene.Scene(W, H, studio.FPS, background=look["ground"], edit=edit)
-    S.track("Footage"); S.track("Graphics"); S.track("Graphics top")
-    miss, all_sp = [], spans(edit)
+    S.track("Footage"); S.track("Graphics bg"); S.track("Graphics"); S.track("Graphics top")
+    miss, fell, all_sp = [], [], spans(edit)
     stills = [(sp["n"], db[sp["key"]]["file"]) for sp in all_sp if sp["shot"]["kind"] in MEDIA
               and str((db.get(sp["key"]) or {}).get("file") or "").endswith(".jpg") and (edit / db[sp["key"]]["file"]).exists()]
     for sp in all_sp:
         sh, a, z, d = sp["shot"], sp["a"], sp["b"], sp["b"] - sp["a"]
         if sh["kind"] in GRAPHICS:
             graphic(S, sh, a, z, W, H, look)
+            continue
+        if sh["kind"] == "motion":
+            clip = studio.clip_of(edit, sp["key"])
+            if clip:
+                S.video(str(clip.relative_to(edit)), a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H)
+            else:                       # its animation did not pass: the simple graphic written beside it
+                fell.append(sp["key"])
+                graphic(S, sh["fallback"], a, z, W, H, look)
             continue
         got = db.get(sp["key"]) or {}
         f = edit / got["file"] if got.get("file") else None
@@ -566,6 +833,8 @@ def cmd_build(edit):
     n = len(spans(edit))
     print(f"{studio.SCENE_FILE}: {tm['length'] // 60:.0f}:{tm['length'] % 60:04.1f}, {n} shots (one every {tm['length'] / n:.1f} s)"
           + (f", captions {len(words)} words" if b["text"] and words else ""))
+    if fell:
+        print("FELL BACK (the animation did not pass, its simple graphic shows): " + " ".join(fell))
     if miss:
         print("MISSING (the nearest picture shows again instead; an empty frame where the video has no picture at all): " + " ".join(miss))
     return 0
@@ -687,6 +956,18 @@ def demo():
                         {"hook-2": {"file": "shots/hook-2.mp4", "from": "https://www.youtube.com/watch?v=abc", "title": "City", "by": "Chan"}})
         assert "0:00 Intro" in text and "- https://www.example.org/a" in text and "City by Chan: https://www.youtube.com/watch?v=abc" in text, text
         assert domain("https://www.nature.com/articles/x") == "nature.com" and mmss(125) == "2:05"
+        # a motion shot needs a whole simple graphic to fall back on, and takes twice a clip's share of its line
+        mo = json.loads(json.dumps(good))
+        mo["scenes"][0]["shots"] = [{"kind": "motion", "visual": "a globe turning"}, {"kind": "clip", "query": "city"}]
+        jsave(e / "scenes.json", mo)
+        assert any("fallback" in x for x in check(e)), check(e)
+        mo["scenes"][0]["shots"][0]["fallback"] = {"kind": "stat", "value": "250,000", "label": "new jobs"}
+        jsave(e / "scenes.json", mo)
+        assert check(e) == []
+        sp = spans(e)
+        assert abs((sp[0]["b"] - sp[0]["a"]) - 2 * (sp[1]["b"] - sp[1]["a"])) < 0.01, sp[:2]
+        assert cmd_build(e) == 0          # no clip built: the fallback graphic is drawn
+        assert title_score({"title": "Tokyo 4K drone footage", "duration": 300}) > title_score({"title": "Tokyo explained | podcast", "duration": 300})
         assert fit_cmd("a", "b", 1920, 1080)[-1] == "b" and "-t" in fit_cmd("a", "b", 1920, 1080, 3.0)
     print("longvideo demo ok")
     return 0
@@ -695,7 +976,8 @@ def demo():
 def main(argv):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("check", "sheet", "build", "kit"):
+    sub.add_parser("setkey")
+    for name in ("check", "sheet", "build", "kit", "briefs"):
         sub.add_parser(name).add_argument("edit")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
     p = sub.add_parser("sound"); p.add_argument("edit"); p.add_argument("--mood", default="linear")
@@ -704,7 +986,7 @@ def main(argv):
     a = ap.parse_args(argv)
     return {"check": lambda: cmd_check(a.edit), "find": lambda: cmd_find(a.edit, a.only), "sheet": lambda: cmd_sheet(a.edit),
             "sound": lambda: cmd_sound(a.edit, a.mood), "build": lambda: cmd_build(a.edit), "thumbs": lambda: cmd_thumbs(a.edit, a.title),
-            "kit": lambda: cmd_kit(a.edit), "demo": demo}[a.cmd]()
+            "kit": lambda: cmd_kit(a.edit), "briefs": lambda: cmd_briefs(a.edit), "setkey": cmd_setkey, "demo": demo}[a.cmd]()
 
 
 if __name__ == "__main__":
