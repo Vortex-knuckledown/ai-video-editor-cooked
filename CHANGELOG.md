@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.9.0 (this fork, 2026-11-19)
 - Pick your narrator and hear it first. Long video, Create from a prompt and Make one like this have a Narrator picker: 27 free voices (American and British, men and women), each played with a click. With an ElevenLabs key saved, the voices in your ElevenLabs account are listed too and the one you pick is used.
 - Settings has Connections for new videos: Pexels (free stock footage and pictures), Runway and Higgsfield (AI-generated shots). Each key is checked with the service before it is saved. Google's video model uses the Gemini key already there.
 - AI-generated shots in Long video, off unless you tick them: up to 6 shots a video made on your own Runway, Higgsfield or Google account, for what nobody filmed. Claude tells you how many and about how much, and asks, before any is made. A shot that fails falls back to footage. Not yet run with a real key for any of the three.

@@ -61,6 +61,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.9.0 | A narrator picker with previews; connections for Pexels, Runway and Higgsfield; AI-generated shots and your own voiceover in Long video (released 2026-11-19, tag `studio-v0.9.0`) |
 | studio 0.8.0 | A natural free voice (Kokoro); animated graphics, logo-free clips, fuller sound and Pexels stock in Long video (released 2026-11-18, tag `studio-v0.8.0`) |
 | studio 0.7.0 | Long video: a 2 to 10 minute video from one prompt, with thumbnails and a publishing kit (released 2026-11-18, tag `studio-v0.7.0`) |
 | studio 0.6.0 | Subtitles in other languages; a cover image and a post caption with every exported clip; Clip a stream from a channel link (released 2026-11-18, tag `studio-v0.6.0`) |
