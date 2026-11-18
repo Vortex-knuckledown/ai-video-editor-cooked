@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.12.0 (this fork, 2026-11-19)
 - Long video picks the right moment of a found video. Each shot says what must be in the frame; the video's own preview frames are scored against those words and the best-matching seconds are taken. Before, it took a fixed place in the video. In a test of six shots all six showed what was asked, and one keynote gave two different moments for two lines.
 - Found clips carrying someone else's subtitles are passed over, as clips with logos already were.
 - The finished video is checked just after every cut for a black or empty frame, and every shot's first frame is laid out for Claude to look at, before you see it.
