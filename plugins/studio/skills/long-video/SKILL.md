@@ -84,8 +84,17 @@ session: say so on the page, write from what you know, use no statistic you are 
 - **Structure**: a hook in the first two lines (a fact, a question or a claim that the video pays off), then the
   sections, each ending on a line that makes the next one wanted, then a close that answers the hook. No "in this
   video", no "let's dive in", no "smash that like button".
-- **Shots**: every line has 1 to 3, sharing its time equally, so a new picture every 2 to 4 seconds. Pick what a
-  viewer would want to see while hearing that line:
+- **Shots**: every line has 2 to 5, so a new picture every 1.5 to 3 seconds (`check` refuses slower than one every
+  3.4 s). That pace is what makes a video read as edited: measured on channels cut this way, the picture changes
+  every 1.3 to 2.3 seconds. Pick what a viewer would want to see while hearing that line, and prefer the specific
+  to the generic: the named person talking in an interview, the actual event, the actual place, the actual object,
+  before any scenery. A video about a person is mostly that person on screen.
+- **Type goes on the footage, not on a slide.** Any `clip`, `stock`, `photo`, `own` or `ai` shot can carry
+  `"over"`: `{"label": "PORT SAID, 1869"}` (a place and year, a chapter word, the name of the thing: 1 to 4 words,
+  big, centred), `{"name": "Ferdinand de Lesseps", "role": "French diplomat"}` (every recognisable person, the first
+  time they are seen), or `{"stat": "$9.6B", "note": "of trade held up a day"}` (a number on a small card beside
+  the footage). Use one on about a third of the footage shots. A full-frame `stat`, `title` or `quote` is for the few
+  moments that should stop the viewer; it is drawn over the nearest footage, darkened, never on an empty ground.
   - `clip` (`query`): moving footage of the thing itself. The search is typed into YouTube: 3 to 6 plain words for
     what is in the frame ("bees on honeycomb macro", "tokyo crossing night timelapse"), never the line's idea.
   - `stock` (`query`): generic footage with no logo and nothing to credit ("city traffic at night", "hands typing
