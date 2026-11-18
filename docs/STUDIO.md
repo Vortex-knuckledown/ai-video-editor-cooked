@@ -91,6 +91,28 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
    mismatch). The studio mixes its own music round it; the fix belongs in the original. A draft of the report is in
    `docs/upstream-issue-sound-score.md`; posting it is the owner's call.
 
+## It ships as one install
+
+This is to become software that someone installs once and connects to their own AI. So anything the studio uses has
+to be able to arrive with the installer and work on an ordinary laptop. Before adding a library, a model or code from
+another repository, it must pass all four:
+
+1. **A licence that lets us ship it**: MIT, Apache 2.0, BSD or similar. Never GPL or AGPL code (MoneyPrinterV2,
+   LosslessCut), and check a model's own licence apart from its code's.
+2. **One environment**: it installs into the editor's own Python environment (`~/.ai-video-editor/venv`) or its Node
+   one. Nothing that needs a second environment or pins a different version of a package we already use.
+3. **A modest download**: say what it adds. Today the whole tool is about 2.6 GB (the renderer 1.2 GB, the speech
+   models 0.8 GB, Python packages 0.5 GB, the animation tools 0.1 GB), plus ffmpeg and Node.
+4. **It runs on 16 GB of memory**, beside the renderer and the transcriber, faster than real time.
+
+| Looked at | Verdict |
+|---|---|
+| Kokoro (voice, Apache 2.0, 350 MB, runs on onnxruntime) | In. The bundled voice |
+| Chatterbox (voice, MIT) | Out, 2026-11-19. 4.3 GB, needs its own environment with an older torch, 2 to 2.7 times slower than real time on an M4, and it ran a 16 GB Mac out of memory |
+| ElevenLabs, Pixabay, Runway, Higgsfield, Google | In as connections: nothing to bundle, the user's own key |
+| OpenCLIP, EasyOCR, WhisperX | Not tried. Each brings torch (about 1 GB and more memory); a version on onnxruntime would pass, check before adding |
+| video-use (MIT) | Its ideas (an audio fade at every cut, checking the render at each cut) need no new dependency |
+
 ## Keeping up with the original
 
 ```bash
