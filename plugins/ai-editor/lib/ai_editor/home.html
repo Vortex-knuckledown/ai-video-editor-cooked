@@ -1087,6 +1087,11 @@ function logo(id,px=20){
 const KEYS=[
  {id:'elevenlabs',name:'ElevenLabs',tag:'exact words',text:'Keeps every "um" and false start, so the cut finds your retakes. The free transcriber tidies them away.',cost:'Has a free plan',url:'https://elevenlabs.io/app/settings/api-keys'},
  {id:'gemini',name:'Gemini',tag:"reads a creator's look",text:'Names the fonts, colours and graphics when it analyses a format. Without it, Claude looks at the frames. That uses more of your Claude usage.',cost:'Free, no card',url:'https://aistudio.google.com/apikey'}];
+// studio: the connections Long video can use. Kept out of KEYS so setup never asks for them.
+const STUDIO_KEYS=[
+ {id:'pexels',name:'Pexels',tag:'free stock footage and pictures',cost:'Free',url:'https://www.pexels.com/api/'},
+ {id:'runway',name:'Runway',tag:'AI-generated shots',cost:'Paid by the second, from about $0.12',url:'https://dev.runwayml.com/'},
+ {id:'higgsfield',name:'Higgsfield',tag:'AI-generated shots',cost:'Paid from your Higgsfield balance',url:'https://cloud.higgsfield.ai/'}];
 const PARTS=[['captions','Captions'],['pace','Pace'],['graphics','Graphics'],['sound','Sound']];
 // creator-teardown quick mode, in order. Claude reports these step names (references/home.md).
 const PLAN=['Listed their videos','Downloaded the top 5 and 2 median','Transcribed every word','Measured cuts, zooms and camera moves','Reading captions and faces','Naming graphics','Sound effects and music','Writing the style'];
@@ -1535,7 +1540,7 @@ const KHOW={long:['Say what the video is about and how long. Claude researches i
 const nvKind=()=>nv.long?'long':nv.like?'like':nv.stream?'stream':nv.prompt?'prompt':'clips';
 function setKind(k){
   const keep={prompt:nv.prompt,like:nv.like,stream:nv.stream,long:nv.long}[k];nv.prompt=nv.like=nv.stream=nv.long=null;
-  if(k==='long')nv.long=keep||{text:'',minutes:3,shape:'16:9',youtube:true,photos:true,caption:true,music:true,own:'',voice:'am_michael',msg:''};
+  if(k==='long')nv.long=keep||{text:'',minutes:3,shape:'16:9',youtube:true,photos:true,caption:true,music:true,own:'',ai:false,voiceover:'',msg:''};
   if(k==='prompt')nv.prompt=keep||{text:'',refs:'',length:30,voice:true,caption:true,music:true,msg:''};
   if(k==='like')nv.like=keep||{link:'',topic:'',shape:'auto',match:true,voice:true,caption:true,music:true,msg:''};
   if(k==='stream')nv.stream=keep||{links:'',latest:1,count:3,length:'short',layout:'auto',captions:true,titles:true,style:'',msg:''};
@@ -1544,6 +1549,30 @@ function setKind(k){
 }
 const kindCards=()=>`<div class="kinds" role="radiogroup" aria-label="What kind of video">${KINDS.map(([k,t,d])=>`<button class="kind ${nvKind()===k?'on':''}" role="radio" aria-checked="${nvKind()===k}" onclick="setKind('${k}')"><div class="art"><svg width="150" height="80" viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${KART[k]}</svg></div><div><b>${t}</b><div class="sub">${d}</div></div></button>`).join('')}</div>`;
 const kindHow=k=>`<div class="khow">${KHOW[k].map((t,i)=>`<div><i>${i+1}</i><span style="font-size:14px;line-height:20px;padding-top:3px">${t}</span></div>`).join('')}</div>`;
+// ---- studio: the voice picker, shared by Long video, Create from a prompt and Make one like this. Kokoro's voices are
+// free and run on this computer; with an ElevenLabs key saved, the account's voices are listed too. A click picks a
+// voice and plays a few seconds of it.
+let VO=null,VOA=null;
+async function loadVoices(){if(VO)return;VO={loading:1};try{VO=await (await fetch('/studio/voices')).json()}catch(e){VO={kokoro:{ready:false,voices:[]},eleven:{ready:false,voices:[]}}}render()}
+function pickVoice(engine,id,preview){
+  nv.voice={engine,id};
+  try{if(VOA)VOA.pause();VOA=new Audio(engine==='kokoro'?'/studio/voice/preview?id='+encodeURIComponent(id):preview);VOA.play().catch(()=>{})}catch(e){}
+  render();
+}
+function voiceSec(){
+  if(!VO){loadVoices();return ''}
+  if(VO.loading)return `<div class="sec"><div class="h">Narrator</div><div class="muted">Loading the voices...</div></div>`;
+  nv.voice=nv.voice||{engine:'kokoro',id:'am_michael'};nv.vtab=nv.vtab||(VO.eleven.ready&&VO.eleven.voices.length?'eleven':'kokoro');
+  const V=nv.voice,el=VO.eleven,ko=VO.kokoro,tab=nv.vtab;
+  const pill=(engine,v)=>`<button class="pill ${V.engine===engine&&V.id===v.id?'on':''}" title="${esc(v.desc||'')}" onclick="pickVoice('${engine}',${J(v.id)},${J(v.preview||'')})">${esc(v.name)}</button>`;
+  const groups=['American · man','American · woman','British · man','British · woman'].map(g=>[g,ko.voices.filter(v=>v.desc===g)]).filter(x=>x[1].length);
+  const body=tab==='eleven'?(el.voices.length?`<div class="row" style="flex-wrap:wrap;gap:8px">${el.voices.map(v=>pill('eleven',v)).join('')}</div>`:`<div class="muted">${esc(el.msg||'No voices in your ElevenLabs account yet.')}</div>`)
+    :groups.map(([g,vs])=>`<div class="muted" style="font-size:12px;margin-top:2px">${g}</div><div class="row" style="flex-wrap:wrap;gap:8px">${vs.map(v=>pill('kokoro',v)).join('')}</div>`).join('');
+  return `<div class="sec"><div class="between"><span class="h">Narrator</span><div class="row" style="gap:6px"><button class="pill ${tab==='kokoro'?'on':''}" onclick="nv.vtab='kokoro';render()">Free voices</button><button class="pill ${tab==='eleven'?'on':''}" onclick="nv.vtab='eleven';render()">ElevenLabs</button></div></div>
+    ${tab==='eleven'&&!el.ready?`<div class="sub" style="font-size:13px;line-height:19px">The most natural voices, from your own ElevenLabs account (paid to ElevenLabs). <button class="hlink" style="font-size:13px" onclick="rgo('settings')">Connect it in Settings</button>, then pick a voice here.</div>`:body}
+    <div class="muted faint" style="line-height:18px">${tab==='kokoro'?(ko.ready?'Click a voice to hear it. These run on your computer and cost nothing.':'These install on your first video (a 350 MB download, once).'):el.ready?'Click a voice to hear its sample. Each video uses your ElevenLabs plan.':''}</div></div>`;
+}
+const voiceBody=()=>nv.voice?{voice_engine:nv.voice.engine,voice_id:nv.voice.id}:{};
 // ---- studio: Long video (plugins/studio, the long-video skill). One prompt in, a 2 to 10 minute video out: researched,
 // narrated, a new shot every few seconds (found footage, free pictures, graphics), with thumbnails and a publishing kit.
 function longSide(){
@@ -1558,6 +1587,7 @@ function longSide(){
     <div class="sec"><div class="h">What it shows</div><div style="display:flex;flex-direction:column;gap:8px">
       ${tick('youtube','Footage found on YouTube','A few seconds each from other people\'s videos, listed in your publishing kit. Publishing them is your call.')}
       ${tick('photos','Free pictures','From Wikimedia Commons and Openverse: free to reuse, credited in the kit.')}
+      ${aiOn()?tick('ai','AI-generated shots','A few shots made by '+aiName()+' for what nobody filmed. Each one spends credits on your account there; Claude tells you how many first.'):`<div class="sub" style="font-size:13px;line-height:18px">AI-generated shots: <button class="hlink" style="font-size:13px" onclick="rgo('settings')">connect Runway, Google or Higgsfield in Settings</button> to use them.</div>`}
       <div class="sub" style="font-size:13px;line-height:18px">Charts, lists, quotes and big numbers are always made from the script.</div></div></div>
     <div class="sec"><div class="h">Your own clips <span class="muted">(optional)</span></div>
       <input class="input" style="height:38px;min-height:38px;padding:0 10px;font-family:inherit" placeholder="A folder's path, like ~/Movies/my-broll" value="${esc(P.own)}" oninput="nv.long.own=this.value"></div>
@@ -1565,17 +1595,20 @@ function longSide(){
       ${tick('caption','Captions','Every word, as it is said.')}
       ${tick('music','Music and sound','Music made for this video, and a quiet sound on the cuts.')}
 </div></div>
-    <div class="sec"><div class="h">Narrator</div><div class="row" style="flex-wrap:wrap;gap:8px">${[['am_michael','Michael · calm'],['am_fenrir','Fenrir · deep'],['af_heart','Heart · warm'],['bm_george','George · British'],['bf_emma','Emma · British']].map(([v,t])=>`<button class="pill ${P.voice===v?'on':''}" onclick="nv.long.voice='${v}';render()">${t}</button>`).join('')}</div>
-      <div class="muted faint" style="line-height:18px">A free natural voice that runs on your computer. With an ElevenLabs key saved, that voice is used instead.</div></div>
+    ${P.voiceover.trim()?'':voiceSec()}
+    <div class="sec"><div class="h">Your own voiceover <span class="muted">(optional)</span></div>
+      <input class="input" style="height:38px;min-height:38px;padding:0 10px;font-family:inherit" placeholder="A recording's path, like ~/Desktop/voiceover.m4a" value="${esc(P.voiceover)}" oninput="nv.long.voiceover=this.value;longReady()" onchange="render()">
+      <div class="muted faint" style="line-height:18px">Record yourself reading your script and put the file's path here. The video is cut to your words, so no script is written and no AI voice is used.</div></div>
     ${P.msg?`<div class="sec"><div class="msg bad">${CROSS}<span>${esc(P.msg)}</span></div></div>`:''}
     <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${P.minutes} min · ${P.shape==='16:9'?'Wide':'Tall'} · ${[P.youtube&&'footage',P.photos&&'pictures','graphics'].filter(Boolean).join(', ')}</span></div>
-      <button class="go" id="make" ${P.text.trim().length>=8?'':'disabled'} onclick="makeLong()">Make my video</button>
+      <button class="go" id="make" ${P.text.trim().length>=8||P.voiceover.trim()?'':'disabled'} onclick="makeLong()">Make my video</button>
       <div class="muted faint" style="line-height:18px">You approve the script first. It opens in the editor, so you can change anything.</div></div></div>`;
 }
-function longReady(){const b=$('#make');if(b)b.disabled=nv.long.text.trim().length<8}
+const AIK=['runway','higgsfield','gemini'],aiOn=()=>AIK.some(k=>(S.keys[k]||{}).set),aiName=()=>({runway:'Runway',gemini:'Google',higgsfield:'Higgsfield'})[AIK.find(k=>(S.keys[k]||{}).set)];
+function longReady(){const b=$('#make');if(b)b.disabled=nv.long.text.trim().length<8&&!nv.long.voiceover.trim()}
 async function makeLong(){
   const P=nv.long,b=$('#make');if(b)b.disabled=true;
-  const r=await post('/job',{type:'longvideo',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,text:!!P.caption,music:!!P.music,own:P.own.trim(),voice_id:P.voice});
+  const r=await post('/job',{type:'longvideo',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,text:!!P.caption,music:!!P.music,own:P.own.trim(),ai:!!P.ai&&aiOn(),voiceover:P.voiceover.trim(),...voiceBody()});
   if(!r._ok){nv.long.msg=r.msg||r.error||'That did not work.';render();return}
   nv.long=null;await load();toEditor(r);
 }
@@ -1593,9 +1626,10 @@ function promptSide(){
     <div class="sec"><div class="h">Shape</div><div class="row">${[['9:16','Tall · 9:16'],['16:9','Wide · 16:9']].map(([a,t])=>`<button class="pill ${aspectOf()===a?'on':''}" onclick="nv.aspect='${a}';nv.aspectSet=1;render()">${t}</button>`).join('')}</div></div>
     <div class="sec"><div class="h">Length</div><div class="row">${[15,30,60,90].map(n=>`<button class="pill ${P.length===n?'on':''}" onclick="nv.prompt.length=${n};render()">${n} s</button>`).join('')}</div></div>
     <div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
-      ${tick('voice','AI voiceover','ElevenLabs with your key, else the free Mac voice.')}
+      ${tick('voice','AI voiceover','The narrator you pick below.')}
       ${tick('caption','On-screen text','Word-timed captions of what is said.')}
       ${tick('music','Music','Made for this video, so nothing to licence. It dips under the voice.')}</div></div>
+    ${P.voice?voiceSec():''}
     ${P.msg?`<div class="sec"><div class="msg bad">${CROSS}<span>${esc(P.msg)}</span></div></div>`:''}
     <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${aspectOf()==='9:16'?'Tall':'Wide'} ${aspectOf()} · ${P.length} s · ${['voice','caption','music'].filter(k=>P[k]).map(k=>({voice:'Voice',caption:'Text',music:'Music'})[k]).join(', ')||'Pick at least one'}</span></div>
       <button class="go" id="make" ${ok?'':'disabled'} onclick="makeAnimated()">Make my video</button>
@@ -1604,7 +1638,7 @@ function promptSide(){
 function promptReady(){const P=nv.prompt,b=$('#make');if(b)b.disabled=!(P.text.trim().length>=8&&(P.voice||P.caption||P.music))}
 async function makeAnimated(){
   const P=nv.prompt,b=$('#make');if(b)b.disabled=true;
-  const r=await post('/job',{type:'animated',prompt:P.text,refs:P.refs.split(/\s+/).filter(u=>/^https?:\/\//.test(u)),aspect:aspectOf(),length:P.length,voice:!!P.voice,text:!!P.caption,music:!!P.music});
+  const r=await post('/job',{type:'animated',prompt:P.text,refs:P.refs.split(/\s+/).filter(u=>/^https?:\/\//.test(u)),aspect:aspectOf(),length:P.length,voice:!!P.voice,text:!!P.caption,music:!!P.music,...voiceBody()});
   if(!r._ok){nv.prompt.msg=r.msg||r.error||'That did not work.';render();return}
   nv.prompt=null;await load();toEditor(r);
 }
@@ -1632,7 +1666,7 @@ function likeSide(){
 function likeReady(){const b=$('#make');if(b)b.disabled=!likeOk()}
 async function makeLike(){
   const P=nv.like,b=$('#make'),a=k=>P.match?'auto':!!P[k];if(b)b.disabled=true;
-  const r=await post('/job',{type:'animated',like:P.link.trim(),prompt:P.topic,aspect:P.shape,length:0,voice:a('voice'),text:a('caption'),music:a('music')});
+  const r=await post('/job',{type:'animated',like:P.link.trim(),prompt:P.topic,aspect:P.shape,length:0,voice:a('voice'),text:a('caption'),music:a('music'),...voiceBody()});
   if(!r._ok){nv.like.msg=r.msg||r.error||'That did not work.';render();return}
   nv.like=null;await load();toEditor(r);
 }
@@ -2798,9 +2832,9 @@ document.addEventListener('scroll',e=>{const ms=[...$('#menus').children];if(ms.
 addEventListener('keydown',e=>{if(e.key!=='Escape')return;if(ui.skdel){ui.skdel=null;render()}else if(ui.del){ui.del=null;render()}else if(ui.create){ui.create=false;render()}else if(ui.bconn){ui.bconn=null;render()}else if(ui.cmenu||ui.clipmenu){ui.cmenu=ui.clipmenu=null;render()}});
 // ---- Settings: keys (each with its own status), updates, the videos folder, the theme, this computer
 const FINDER=()=>/Mac/.test(navigator.platform)?'Finder':'Explorer';
-const ST_HINT={gemini:'Paste the key. It starts with AIza or AQ.'};
+const ST_HINT={gemini:'Paste the key. It starts with AIza or AQ.',higgsfield:'Paste your key id, a colon, then your key secret (id:secret)'};
 // ElevenLabs' "Create API key" form, as testers should leave it (they did not know which switches to touch)
-const ST_PERMS=[['Speech to Text','Access',1],['Text to Speech, Voices, Dubbing and the rest','No access'],['Credit quota','Set a limit',1]];
+const ST_PERMS=[['Speech to Text','Access',1],['Text to Speech','Access',1],['Voices','Read',1],['Dubbing and the rest','No access'],['Credit quota','Set a limit',1]];   // fork: Text to Speech and Voices too, for the narrator
 function stHelp(k){
   if(k.id!=='elevenlabs')return '';
   return `<div class="st-perm"><div class="st-permhd"><span>On ElevenLabs, create the key like this</span><a href="${k.url}" target="_blank" rel="noopener">Open ElevenLabs</a></div>
@@ -2808,7 +2842,7 @@ function stHelp(k){
 }
 // ---- Settings: keys (each with its own status and a little of its brand colour), updates, the videos folder, the theme
 const KLT={elevenlabs:'var(--soft)',gemini:'color-mix(in srgb,#9168C0 14%,var(--skbg))'};
-const KDS={elevenlabs:'Exact words, so the cut finds your retakes',gemini:"Reads a creator's look when it analyses them",zernio:'Does the posting for cooked.'};
+const KDS={pexels:'Stock clips and pictures with no logos, for Long video',runway:'A few seconds of generated video for a shot nobody filmed',higgsfield:'A found picture brought to life as a moving shot',elevenlabs:'Exact words, so the cut finds your retakes',gemini:"Reads a creator's look when it analyses them",zernio:'Does the posting for cooked.'};
 const OKTICK=ic('check',14,2.6);
 function stKey(k){
   const st=S.keys[k.id]||{},u=ui.keys[k.id]||{},c=st.check,editing=u.edit||!st.set;
@@ -2910,7 +2944,8 @@ function stKeys(){
 function kmOpen(){document.getElementById('kmdlg').showModal()}
 function vSettings(){
   return `<div class="pgc"><div class="ph"><h1>Settings</h1><p>Keys, updates, where your videos live, and the look.</p></div><div class="sgrid">
-    <div class="scol"><div class="scd" style="gap:16px"><div class="hd"><b>Keys</b><span class="st-lock">${ic('lock',14)}Saved on this computer only</span></div>${KEYS.map(stKey).join('')}${stModal()}</div>${stPost()}</div>
+    <div class="scol"><div class="scd" style="gap:16px"><div class="hd"><b>Keys</b><span class="st-lock">${ic('lock',14)}Saved on this computer only</span></div>${KEYS.map(stKey).join('')}${stModal()}</div>
+      <div class="scd" style="gap:16px"><div class="hd"><b>Connections for new videos</b><span class="st-lock">${ic('lock',14)}Saved on this computer only</span></div><div class="sub" style="font-size:13px;line-height:19px">Optional. ElevenLabs above gives the most natural narrator. These add footage: Pexels is free; Runway, Google and Higgsfield make AI-generated shots and charge your account with them for each one. Google uses the Gemini key above.</div>${STUDIO_KEYS.map(stKey).join('')}</div>${stPost()}</div>
     <div class="scol">${stUpdate()}${stSupport()}${stFolder()}${stLook()}${stKeys()}${stAlerts()}
       <div class="scd"><label class="srow" style="cursor:pointer"><div><div>Recent clips</div><div class="t2">From Movies, Desktop and Downloads</div></div><input type="checkbox" class="st-check" ${R&&R.scan_home?'checked':''} onchange="scanHome(this.checked)"></label>
         ${toolsRow()}</div></div></div></div>`;

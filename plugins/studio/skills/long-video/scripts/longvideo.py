@@ -37,6 +37,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -49,10 +50,12 @@ import studio  # noqa: E402  (the voice, the words, the render; finding the edit
 from studio import jload, jsave, duration  # noqa: E402
 import streamclips  # noqa: E402  (yt-dlp, the cover image)
 
-MEDIA = ("clip", "stock", "photo", "own")
+MEDIA = ("clip", "stock", "photo", "own", "ai")
+MAX_AI = 6                # AI-generated shots a video: each one is paid for on the user's own account
 GRAPHICS = ("title", "stat", "bars", "list", "quote", "source")
 MAX_MOTION = 12           # animated hero graphics a video: each is built by its own agent, a few minutes apiece
 NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("file",), "motion": ("visual", "fallback"),
+         "ai": ("prompt", "fallback"),
          "title": ("text",), "stat": ("value", "label"),
          "bars": ("items",), "list": ("items",), "quote": ("text",), "source": ("title", "highlight")}
 MIN_SHOT_S = 1.6          # a shot shorter than this is dropped: the line's other shots take its time
@@ -89,6 +92,9 @@ def check(edit):
             if kind == "motion" and not (isinstance(sh.get("fallback"), dict) and sh["fallback"].get("kind") in GRAPHICS
                                          and all(sh["fallback"].get(f) for f in NEEDS[sh["fallback"]["kind"]])):
                 errs.append(f"scene {s.get('id')} shot {k} (motion): \"fallback\" is a whole simple graphic ({', '.join(GRAPHICS)}), shown if the animation fails")
+            if kind == "ai" and not (isinstance(sh.get("fallback"), dict) and sh["fallback"].get("kind") in ("clip", "stock", "photo")
+                                     and sh["fallback"].get("query")):
+                errs.append(f"scene {s.get('id')} shot {k} (ai): \"fallback\" is a clip, stock or photo shot, fetched if the generation fails")
             if kind == "bars" and isinstance(sh.get("items"), list) and any(
                     not (isinstance(i, list) and len(i) == 2 and isinstance(i[1], (int, float))) for i in sh["items"]):
                 errs.append(f"scene {s.get('id')} shot {k} (bars): each item is [\"name\", number]")
@@ -104,6 +110,19 @@ def cmd_check(edit):
     est = sum(studio.estimate(s, b) for s in sc)
     shots = [sh for s in sc for sh in s["shots"]]
     kinds = {k: sum(sh["kind"] == k for sh in shots) for k in NEEDS}
+    if kinds["ai"]:
+        prov = ai_provider()
+        if not b.get("ai") or not prov:
+            print(f"FIX  {kinds['ai']} ai shots, but " + ("AI-generated shots are off for this video" if prov else "no generator is connected (Settings)") +
+                  ": make them clips, stock or photos")
+            return 1
+        if kinds["ai"] > MAX_AI:
+            print(f"FIX  {kinds['ai']} ai shots: {MAX_AI} at most (each is paid for)")
+            return 1
+        rate = AI_RATE.get(prov[0])
+        print(f"ai   {kinds['ai']} shots of {AI_SECONDS} s on {prov[0].title()}: " +
+              (f"about ${kinds['ai'] * AI_SECONDS * rate:.2f} on the user's account" if rate else "priced by Higgsfield, from the user's balance") +
+              ". Ask before `find`.")
     if kinds["motion"] > MAX_MOTION:
         print(f"FIX  {kinds['motion']} motion shots: {MAX_MOTION} at most. Keep them for the ideas a flat graphic cannot show")
         return 1
@@ -334,6 +353,143 @@ def fetch_stock(edit, key, sh, need, w, h):
             "license": "Pexels", "others": [f"{i}: {x.get('duration')} s by {(x.get('user') or {}).get('name')}" for i, x in enumerate(vids)]}
 
 
+# ---------------------------------------------------------------- AI-generated shots (the user's own account: Runway, Higgsfield or Google)
+AI_SECONDS = 5
+AI_RATE = {"runway": 0.12, "gemini": 0.07}      # about, in dollars a second, from each vendor's price page (gen4.5; 720p)
+
+
+def ai_provider():
+    """(name, key) of the first generator the user has connected, or None."""
+    try:
+        studio.use_editor()
+        from ai_editor import keys
+        for name in ("runway", "higgsfield", "gemini"):
+            k = keys.get(name)[0]
+            if k:
+                return name, k
+    except ImportError:
+        pass
+    return None
+
+
+def http_json(url, headers, body=None, timeout=60):
+    studio.use_editor()
+    import net
+    req = urllib.request.Request(url, data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"User-Agent": UA, "Content-Type": "application/json", **headers})
+    with net.urlopen(req, timeout) as r:
+        return json.loads(r.read().decode("utf-8") or "{}")
+
+
+def save_url(url, out, headers=None):
+    studio.use_editor()
+    import net
+    with net.urlopen(urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})}), 300) as r:
+        Path(out).write_bytes(r.read())
+
+
+def gen_runway(prompt, out, wide, key):
+    """Runway's developer API: a text-to-video task, polled until it is done (docs.dev.runwayml.com)."""
+    hd = {"Authorization": f"Bearer {key}", "X-Runway-Version": "2024-11-06"}
+    task = None
+    for model in ("gen4.5", "seedance2_5"):
+        try:
+            task = http_json("https://api.dev.runwayml.com/v1/text_to_video", hd,
+                             {"model": model, "promptText": prompt[:900], "ratio": "1280:720" if wide else "720:1280", "duration": AI_SECONDS})
+            break
+        except urllib.error.HTTPError as e:
+            if e.code != 400:
+                raise
+    if not task or not task.get("id"):
+        raise RuntimeError("Runway did not start the generation")
+    for _ in range(120):
+        time.sleep(5)
+        t = http_json(f"https://api.dev.runwayml.com/v1/tasks/{task['id']}", hd)
+        if t.get("status") == "SUCCEEDED":
+            save_url((t.get("output") or [None])[0], out)
+            return
+        if t.get("status") in ("FAILED", "CANCELLED"):
+            raise RuntimeError("Runway: " + str(t.get("failure") or t.get("failureCode") or t["status"])[:120])
+    raise RuntimeError("Runway took over 10 minutes")
+
+
+def gen_higgsfield(prompt, out, wide, key, image_url=None):
+    """Higgsfield (docs.higgsfield.ai): Hailuo 2.3. With a picture's address it animates that picture; the text-only
+    route is not in their docs under this name and may answer 404."""
+    hd = {"Authorization": f"Key {key}"}
+    base = "https://api.higgsfield.ai/minimax/hailuo-2.3/standard/"
+    job = http_json(base + ("image-to-video" if image_url else "text-to-video"), hd,
+                    {"prompt": prompt[:900], "duration": 6, **({"image_url": image_url} if image_url else {})})
+    url = job.get("status_url") or f"https://api.higgsfield.ai/requests/{job.get('request_id')}/status"
+    for _ in range(120):
+        time.sleep(5)
+        t = http_json(url, hd)
+        if t.get("status") == "completed":
+            save_url(((t.get("video") or {}).get("url")), out)
+            return
+        if t.get("status") in ("failed", "nsfw", "canceled"):
+            raise RuntimeError("Higgsfield: " + str(t.get("status")))
+    raise RuntimeError("Higgsfield took over 10 minutes")
+
+
+def gen_google(prompt, out, wide, key):
+    """Google's video model on the Gemini API (gemini-omni-1.2-flash, /v1beta/interactions). Paid: a free Gemini key
+    is refused. Written from Google's docs and not yet run with a paid key."""
+    import base64
+    res = http_json("https://generativelanguage.googleapis.com/v1beta/interactions", {"x-goog-api-key": key},
+                    {"model": "gemini-omni-1.2-flash", "input": prompt[:900],
+                     "response_format": {"type": "video", "aspect_ratio": "16:9" if wide else "9:16", "resolution": "720p", "duration": f"{AI_SECONDS}s"}}, 600)
+
+    def find(o):
+        if isinstance(o, dict):
+            if o.get("type") == "video" and (o.get("data") or o.get("uri")):
+                return o
+            if isinstance(o.get("output_video"), dict):
+                return o["output_video"]
+            for v in o.values():
+                got = find(v)
+                if got:
+                    return got
+        elif isinstance(o, list):
+            for v in o:
+                got = find(v)
+                if got:
+                    return got
+        return None
+    v = find(res)
+    if not v:
+        raise RuntimeError("Google returned no video")
+    if v.get("data"):
+        Path(out).write_bytes(base64.b64decode(v["data"]))
+    else:
+        save_url(v["uri"], out, {"x-goog-api-key": key})
+
+
+def fetch_ai(edit, key, sh, need, w, h):
+    prov = ai_provider()
+    if not prov or not studio.brief_of(edit).get("ai"):
+        return {"missing": "no AI generator is connected, or AI shots are off for this video"}
+    raw = edit / "shots" / f"{key}.ai.mp4"
+    prompt = str(sh["prompt"]) + " Cinematic, natural light, realistic, no text, no captions, no logos."
+    try:
+        if prov[0] == "runway":
+            gen_runway(prompt, raw, w >= h, prov[1])
+        elif prov[0] == "higgsfield":
+            gen_higgsfield(prompt, raw, w >= h, prov[1], sh.get("image_url"))
+        else:
+            gen_google(prompt, raw, w >= h, prov[1])
+    except Exception as e:      # refused, out of credits, a changed API: the shot's fallback is fetched instead
+        why = f"HTTP {e.code}" if isinstance(e, urllib.error.HTTPError) else str(e)[:140] or type(e).__name__
+        return {"missing": f"{prov[0].title()} did not make it ({why})"}
+    out = edit / "shots" / f"{key}.mp4"
+    got = duration(raw)
+    r = subprocess.run(fit_cmd(raw, out, w, h, min(need, max(0.5, got - 0.05)), 0.0), capture_output=True, text=True)
+    raw.unlink(missing_ok=True)
+    if r.returncode or not out.exists():
+        return {"missing": "the generated clip could not be read"}
+    return {"file": f"shots/{key}.mp4", "title": "Generated: " + str(sh["prompt"])[:70], "by": prov[0].title() + " (AI-generated)", "ai": prov[0]}
+
+
 def cmd_setkey():
     """Saves the user's Pexels key in the editor's key file. Typed here, in the user's own Terminal, never in a chat."""
     import getpass
@@ -357,7 +513,7 @@ def cmd_setkey():
 def search_commons(query, n=8):
     q = urllib.parse.urlencode({"action": "query", "format": "json", "generator": "search", "gsrsearch": f"{query} filetype:bitmap",
                                 "gsrnamespace": 6, "gsrlimit": n, "prop": "imageinfo", "iiprop": "url|size|mime|extmetadata",
-                                "iiurlwidth": 1920})
+                                "iiurlwidth": 1280})
     req = urllib.request.Request("https://commons.wikimedia.org/w/api.php?" + q, headers={"User-Agent": UA})
     studio.use_editor()
     import net
@@ -366,7 +522,9 @@ def search_commons(query, n=8):
     out = []
     for p in sorted(pages.values(), key=lambda p: p.get("index", 99)):
         ii = (p.get("imageinfo") or [{}])[0]
-        if ii.get("mime") in ("image/jpeg", "image/png") and (ii.get("width") or 0) >= 900:
+        # only a picture wider than the thumbnail asked for: Wikimedia serves resized thumbnails freely, and answers
+        # "too many requests" for whole original files after two or three
+        if ii.get("mime") in ("image/jpeg", "image/png") and (ii.get("width") or 0) > 1300 and "/thumb/" in str(ii.get("thumburl") or ""):
             md = ii.get("extmetadata") or {}
             clean = lambda k: re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", "", str((md.get(k) or {}).get("value") or "")))).strip()[:80]  # noqa: E731
             out.append({"url": ii.get("thumburl") or ii["url"], "page": ii.get("descriptionurl"), "w": ii["width"], "h": ii["height"],
@@ -388,7 +546,7 @@ def search_openverse(query, n=8):
 
 
 PHOTO_LOCK = threading.Lock()      # the picture sites slow a caller down that asks for several at once
-PHOTO_GAP_S = 3.2                  # between two pictures: under Openverse's 20 a minute for a caller with no key
+PHOTO_GAP_S = 1.2                  # between two pictures: one at a time and unhurried keeps both sites answering
 COOL = {}                          # site -> the time it may be asked again, after it said "too many requests"
 
 
@@ -452,7 +610,8 @@ def fetch_own(edit, key, sh, need, w, h):
 
 
 def stamp_of(sh, need):
-    return json.dumps([sh.get("kind"), sh.get("query"), sh.get("file"), sh.get("pick"), sh.get("at"), sh.get("in"), round(need, 1)])
+    return json.dumps([sh.get("kind"), sh.get("query"), sh.get("file"), sh.get("pick"), sh.get("at"), sh.get("in"), round(need, 1),
+                       sh.get("prompt"), (sh.get("fallback") or {}).get("query")])
 
 
 def cmd_find(edit, only=None):
@@ -468,7 +627,14 @@ def cmd_find(edit, only=None):
         was = db.get(key) or {}
         if was.get("stamp") == stamp_of(sh, need) and was.get("file") and (edit / was["file"]).exists():
             return key, was
-        if sh["kind"] == "stock":      # Pexels with a key; with none, the same words searched on YouTube when that is allowed
+        if sh["kind"] == "ai":         # generated on the user's account; when that fails, its fallback shot is fetched
+            got = fetch_ai(edit, key, sh, need, w, h)
+            if got.get("missing"):
+                fb, why = sh["fallback"], got["missing"]
+                got = fetch_stock(edit, key, fb, need, w, h) if fb["kind"] == "stock" else None
+                got = got or (fetch_photo(edit, key, fb, w, h) if fb["kind"] == "photo" else fetch_clip(edit, key, fb, need, w, h, used))
+                got = {**got, "ai_failed": why, "query": fb.get("query")}
+        elif sh["kind"] == "stock":      # Pexels with a key; with none, the same words searched on YouTube when that is allowed
             got = fetch_stock(edit, key, sh, need, w, h)
             if got is None:
                 got = fetch_clip(edit, key, sh, need, w, h, used) if (studio.brief_of(edit).get("footage") or {}).get("youtube", True) \
@@ -483,6 +649,7 @@ def cmd_find(edit, only=None):
             jsave(edit / "shots.json", db)
             print(f"MISSING {key}: {got.get('query')} ({got['missing']})" if got.get("missing") else
                   (f"LOGO {key}: every result tried carries a logo; change the words or the kind. " if got.get("logo") else "") +
+                  (f"AI FAILED {key} ({got['ai_failed']}), its fallback is used. " if got.get("ai_failed") else "") +
                   f"{key}: {got.get('title') or got.get('file')}"[:110])
     keys = {sp["key"] for sp in spans(edit)}
     for k in [k for k in db if k not in keys]:          # a shot the script no longer has
@@ -525,6 +692,57 @@ def cmd_sheet(edit):
                 dr.text((x + 6, y + ch + 4), f"{key}: {got.get('query') or 'own'}"[:48], font=font, fill=(235, 235, 235))
             im.save(out / f"sheet-{n // 20 + 1}.jpg", quality=85)
             print(out / f"sheet-{n // 20 + 1}.jpg", f"({len(page)} shots)")
+    return 0
+
+
+# ---------------------------------------------------------------- the user's own recorded voiceover
+def lines_of(words, lo=7, hi=22, gap=0.7):
+    """A recording's words as spoken lines: a line ends at a sentence end or a pause once it has `lo` words, and at
+    `hi` words whatever comes. [[first word index, last word index], ...]."""
+    out, a = [], 0
+    for i, w in enumerate(words):
+        n = i - a + 1
+        pause = i + 1 < len(words) and words[i + 1]["start"] - w["end"] >= gap
+        if i + 1 == len(words) or n >= hi or (n >= lo and (re.search(r"[.!?]$", w["w"]) or pause)):
+            out.append([a, i])
+            a = i + 1
+    if len(out) > 1 and out[-1][1] - out[-1][0] + 1 < 4:      # a few words left over join the line before
+        out[-2][1] = out[-1][1]
+        out.pop()
+    return out
+
+
+def cmd_voiceover(edit, src):
+    """The user's recording as the video's voice: audio/vo.wav, words.json, timing.json (engine "own"), and
+    scenes.json with one scene a spoken line (ids l01, l02, ...) whose shots Claude then writes. Run again after the
+    shots are written and they are kept for every line that still says the same."""
+    edit, src = Path(edit), Path(str(src)).expanduser()
+    if not src.is_file():
+        sys.exit(f"ERROR: no recording at {src}")
+    (edit / "audio").mkdir(parents=True, exist_ok=True)
+    studio.to_wav(src, edit / "audio" / "vo.wav")
+    (edit / "audio" / "vo.words.raw.json").unlink(missing_ok=True)
+    words = streamclips.words_of(edit / "audio" / "vo.wav", edit / "audio" / "vo.words.raw.json")
+    if len(words) < 8:
+        sys.exit("ERROR: almost nothing is said in that recording.")
+    total = duration(edit / "audio" / "vo.wav")
+    old = {s.get("say"): s for s in scenes_of(edit)}
+    was = jload(edit / "scenes.json", {}) or {}
+    scenes, rows = [], []
+    ls = lines_of(words)
+    for k, (a, z) in enumerate(ls):
+        say = " ".join(w["w"] for w in words[a:z + 1])
+        start = 0.0 if k == 0 else (words[ls[k - 1][1]]["end"] + words[a]["start"]) / 2
+        end = total if k + 1 == len(ls) else (words[z]["end"] + words[ls[k + 1][0]]["start"]) / 2
+        sid = f"l{k + 1:02d}"
+        keep = old.get(say) or {}
+        scenes.append({**{x: keep[x] for x in ("section", "source", "source_label") if keep.get(x)}, "id": sid, "say": say, "visual": "-",
+                       "shots": keep.get("shots") or [{"kind": "title", "text": "(shots to write)"}]})
+        rows.append({"id": sid, "start": round(start, 3), "dur": round(end - start, 3)})
+    jsave(edit / "scenes.json", {**{k: v for k, v in was.items() if k != "scenes"}, "scenes": scenes})
+    jsave(edit / "timing.json", {"engine": "own", "voice": src.name, "length": round(total, 3), "scenes": rows})
+    jsave(edit / "words.json", [{"w": w["w"], "start": round(w["start"], 3), "end": round(w["end"], 3)} for w in words])
+    print(f"VOICEOVER {mmss(round(total))}, {len(words)} words, {len(scenes)} lines in scenes.json: write each line's shots")
     return 0
 
 
@@ -967,6 +1185,15 @@ def demo():
         sp = spans(e)
         assert abs((sp[0]["b"] - sp[0]["a"]) - 2 * (sp[1]["b"] - sp[1]["a"])) < 0.01, sp[:2]
         assert cmd_build(e) == 0          # no clip built: the fallback graphic is drawn
+        ws = [{"w": w, "start": i * 0.4, "end": i * 0.4 + 0.3} for i, w in enumerate(
+            ("This is the first line of my own recording, and it runs on. Then a second one starts here and it keeps going for a while. Done now.").split())]
+        ls = lines_of(ws)
+        assert ls[0][0] == 0 and ls[-1][1] == len(ws) - 1 and all(z - a + 1 >= 4 for a, z in ls) and len(ls) == 2, ls
+        ai = json.loads(json.dumps(good))
+        ai["scenes"][0]["shots"] = [{"kind": "ai", "prompt": "a storm over a harbour"}]
+        jsave(e / "scenes.json", ai)
+        assert any("fallback" in x for x in check(e)), check(e)
+        jsave(e / "scenes.json", good)
         assert title_score({"title": "Tokyo 4K drone footage", "duration": 300}) > title_score({"title": "Tokyo explained | podcast", "duration": 300})
         assert fit_cmd("a", "b", 1920, 1080)[-1] == "b" and "-t" in fit_cmd("a", "b", 1920, 1080, 3.0)
     print("longvideo demo ok")
@@ -980,13 +1207,15 @@ def main(argv):
     for name in ("check", "sheet", "build", "kit", "briefs"):
         sub.add_parser(name).add_argument("edit")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
+    p = sub.add_parser("voiceover"); p.add_argument("edit"); p.add_argument("file")
     p = sub.add_parser("sound"); p.add_argument("edit"); p.add_argument("--mood", default="linear")
     p = sub.add_parser("thumbs"); p.add_argument("edit"); p.add_argument("--title", required=True)
     sub.add_parser("demo")
     a = ap.parse_args(argv)
     return {"check": lambda: cmd_check(a.edit), "find": lambda: cmd_find(a.edit, a.only), "sheet": lambda: cmd_sheet(a.edit),
             "sound": lambda: cmd_sound(a.edit, a.mood), "build": lambda: cmd_build(a.edit), "thumbs": lambda: cmd_thumbs(a.edit, a.title),
-            "kit": lambda: cmd_kit(a.edit), "briefs": lambda: cmd_briefs(a.edit), "setkey": cmd_setkey, "demo": demo}[a.cmd]()
+            "kit": lambda: cmd_kit(a.edit), "briefs": lambda: cmd_briefs(a.edit), "setkey": cmd_setkey,
+            "voiceover": lambda: cmd_voiceover(a.edit, a.file), "demo": demo}[a.cmd]()
 
 
 if __name__ == "__main__":

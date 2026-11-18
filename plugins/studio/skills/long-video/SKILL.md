@@ -36,7 +36,9 @@ Say every step in the editor too: `python3 "$R" EDIT status "Researching"`. The 
 ## 0. The brief
 
 `EDIT/brief.json`: `{"prompt", "minutes", "aspect": "16:9"|"9:16", "voice": true, "text", "music",
-"footage": {"youtube": true|false, "photos": true|false}, "own": "<a folder of the user's clips>"|null}`.
+"footage": {"youtube": true|false, "photos": true|false}, "own": "<a folder of the user's clips>"|null,
+"voice_engine": "kokoro"|"eleven", "voice_id", "ai": true|false, "voiceover": "<the user's own recording>"|null}`.
+`voice_engine` and `voice_id` are the narrator the user picked on the page: `voice` reads them itself.
 Asked in chat instead of the page: make the edit folder (`python3 "$E/lib/ai_editor/library.py" path`, then
 `edits/<name>/`), write brief.json (3 minutes, 16:9, everything on), and
 `python3 "$R" EDIT start --raw --video <any 2 s clip> --stage edit` so the editor has the video.
@@ -44,6 +46,22 @@ Asked in chat instead of the page: make the edit folder (`python3 "$E/lib/ai_edi
 `footage.youtube` on: say once on the page, in one line, that the video uses a few seconds each from other people's
 YouTube videos, that every one is listed in the publishing kit, and that publishing them is the user's call (fair use
 depends on how they are used). Off: no `clip` shots at all, only pictures, the user's own clips and graphics.
+
+## 0c. The user's own voiceover (only when brief.json has `voiceover`)
+
+The recording is the script: nothing is written, nothing is approved, no AI voice is made.
+
+```bash
+python3 "$PY" "$L" voiceover EDIT "<brief.json voiceover>"
+```
+
+It transcribes the recording and writes scenes.json with one scene a spoken line (`l01`, `l02`, ...), timing.json
+and words.json. Then, in scenes.json: give the video a `title` and `look`, give the lines their `section`s, and
+replace every line's placeholder shot with real `shots` (step 2's rules; `say` is what was heard and stays as it
+is, mishearings too). Research only to get graphics right (a number the speaker says, a name's spelling), and put
+no fact on screen the speaker did not say. `check`, then skip steps 2's approval and 3 entirely (never run
+`voice` or `words`: they would replace the recording) and go on at step 4. On a note about the words: say on the
+page that the words are the user's recording and only the pictures can change.
 
 ## 1. Research
 
@@ -80,6 +98,13 @@ session: say so on the page, write from what you know, use no statistic you are 
     words. `quote` (`text`, `by`): someone's own words. `source` (`title`, `by`, `highlight`): the paper or article
     a claim comes from, with the sentence that matters, in its own words. `title` (`text`, `sub`): a section's
     opening, or the close.
+  - `ai` (`prompt`, `fallback`): a shot generated on the user's own Runway, Higgsfield or Google account, only when
+    brief.json `ai` is true: for what nobody filmed and no photo shows (a scene from before cameras, a thing too
+    small or too far to film). `prompt`: one sentence of what is in the frame and how the camera moves, no text in
+    it, no real person by name. `fallback`: a `clip`, `stock` or `photo` shot fetched if the generation fails. 6 at
+    most. Each costs the user money: `check` prints how many and about how much. Before `find`, ask in the
+    question box "Generate N AI shots for about $X on your <vendor> account?" with "Yes, generate them"
+    (recommended) and "Use footage instead" (then change them to their fallbacks). Never generate without that yes.
   - `motion` (`visual`, `data`, `fallback`): an animated graphic built for this video by its own agent, with depth,
     light and a moving camera: a map with a route drawn across it, a 3D bar chart, a timeline, a cutaway of how a
     thing works, a ranked list of cards, a document with a line lighting up. `visual`: two or three sentences on
@@ -203,8 +228,8 @@ On `APPROVE` the video is done: `EDIT/render.mp4`.
 - A found clip is a few seconds, with its own sound off, under the user's narration, and credited in the kit. Never
   a whole video, never a clip as the point of the video.
 - Pictures come only from Wikimedia Commons, Openverse and Pexels (free to reuse, credited in the kit).
-- Pexels is connected by the user in their own Terminal, never in the chat:
-  `python3 "$PY" "$L" setkey` asks for the key (free, from pexels.com/api), checks it and saves it.
+- Pexels, Runway, Higgsfield and ElevenLabs are connected by the user in the app's Settings (Connections for new
+  videos), never in the chat. A generated shot is credited in the kit as AI-generated.
 - Nothing is uploaded or posted: the video and the kit stay on the user's computer.
 - Never paste or ask for an API key in the chat.
 

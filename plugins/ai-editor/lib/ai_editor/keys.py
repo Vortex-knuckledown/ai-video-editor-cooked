@@ -34,11 +34,13 @@ def key_file():
     """$AI_EDITOR_HOME/.env when AI_EDITOR_HOME is set, else the shared KEY_FILE."""
     home = os.environ.get("AI_EDITOR_HOME", "").strip()
     return Path(home) / ".env" if home else KEY_FILE
-VARS = {"gemini": "GEMINI_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY", "zernio": "ZERNIO_API_KEY"}
+VARS = {"gemini": "GEMINI_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY", "zernio": "ZERNIO_API_KEY",
+        # fork: the studio plugin's connections (stock footage, AI-generated shots). Higgsfield's is "key id:key secret".
+        "pexels": "PEXELS_API_KEY", "runway": "RUNWAYML_API_SECRET", "higgsfield": "HIGGSFIELD_API_KEY"}
 # The fixed start of each vendor's key, checked before any request. Google keys start with AQ. or AIza
 # (creator-teardown references/setup.md). ElevenLabs' older keys have none.
 PREFIX = {"gemini": ("AIza", "AQ.")}   # AI Studio issues AQ. keys since mid-2026; older keys start AIza
-NAMES = {"gemini": "Gemini", "elevenlabs": "ElevenLabs", "zernio": "Zernio"}
+NAMES = {"gemini": "Gemini", "elevenlabs": "ElevenLabs", "zernio": "Zernio", "pexels": "Pexels", "runway": "Runway", "higgsfield": "Higgsfield"}
 
 
 def get(name):
@@ -140,6 +142,16 @@ def verify(name, key):
     if name == "gemini":
         code, body = _get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
                           {"x-goog-api-key": key})
+    elif name == "pexels":   # fork: one search result, free
+        code, body = _get("https://api.pexels.com/v1/search?query=sky&per_page=1", {"Authorization": key})
+    elif name == "runway":   # fork: the organisation the key belongs to, no credits spent
+        code, body = _get("https://api.dev.runwayml.com/v1/organization", {"Authorization": f"Bearer {key}", "X-Runway-Version": "2024-11-06"})
+    elif name == "higgsfield":   # fork: Higgsfield documents no account call; a request that does not exist answers 401 only to bad credentials
+        if ":" not in key:
+            return False, "paste it as your key id, a colon, then your key secret (id:secret). Nothing was sent"
+        code, body = _get("https://api.higgsfield.ai/requests/00000000-0000-0000-0000-000000000000/status", {"Authorization": f"Key {key}"})
+        if code not in (0, 401, 403):
+            code = 200
     elif name == "zernio":   # the posting key (post.py): listing the connected accounts is free
         code, body = _get("https://zernio.com/api/v1/profiles", {"Authorization": f"Bearer {key}"})
     else:

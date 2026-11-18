@@ -24,6 +24,9 @@ shows at a glance which lines are ours:
   Claude is only listening for the next video.
 - `links.py`: a download that times out on a network with broken IPv6 runs once more on IPv4.
 - `askhook.py`: a hidden Claude's question waits for the next page that opens instead of its unseen Terminal.
+- `keys.py`: three more key names (`pexels`, `runway`, `higgsfield`) and their free checks, for the studio's connections.
+- `home.py` and `home.html` also carry the voice picker (`/studio/voices`, `/studio/voice/preview`) and the
+  Connections card in Settings.
 
 ## New video: the five ways in
 
@@ -58,6 +61,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.9.0 | A narrator picker with previews; connections for Pexels, Runway and Higgsfield; AI-generated shots and your own voiceover in Long video (released 2026-11-19, tag `studio-v0.9.0`) |
 | studio 0.8.0 | A natural free voice (Kokoro); animated graphics, logo-free clips, fuller sound and Pexels stock in Long video (released 2026-11-18, tag `studio-v0.8.0`) |
 | studio 0.7.0 | Long video: a 2 to 10 minute video from one prompt, with thumbnails and a publishing kit (released 2026-11-18, tag `studio-v0.7.0`) |
 | studio 0.6.0 | Subtitles in other languages; a cover image and a post caption with every exported clip; Clip a stream from a channel link (released 2026-11-18, tag `studio-v0.6.0`) |
@@ -68,8 +72,10 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 
 ## Next, in order
 
-0. **Long video, after the second version.** Pexels tried with a real key; your own recorded voiceover; found
-   clips with burned-in subtitles; a check that drops
+0. **Needs a real key to try** (built from each service's docs, never run): ElevenLabs voices in the picker, Pexels,
+   Runway, Higgsfield, Google's video model. Higgsfield's text-only route and Google's response format are the
+   least certain.
+0. **Long video, still open.** Found clips with burned-in subtitles are not detected (only logos); a check that drops
    found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
    timeline); full 3D is not planned.
 

@@ -103,6 +103,48 @@ UPDATE = Path(__file__).resolve().parents[2] / "skills" / "update" / "scripts" /
 TRANSCRIBE = Path(__file__).resolve().parents[2] / "skills" / "cut" / "scripts" / "transcribe.py"
 EDIT_PY = Path(__file__).resolve().parents[2] / "skills" / "style-edit" / "scripts" / "edit.py"
 BEAT_S = 6
+# studio: the voice picker. Kokoro's voices (free, on this computer) and, with a key, the user's ElevenLabs voices.
+VOICE_CACHE = {}
+
+
+def voice_of(b):
+    """brief.json's voice fields from a job's body: {"voice_engine", "voice_id"} or {} (the skill's default)."""
+    eng, vid = str(b.get("voice_engine") or ""), str(b.get("voice_id") or "")
+    if eng == "kokoro" and re.fullmatch(r"[ab][fm]_[a-z]{2,12}", vid):
+        return {"voice_engine": "kokoro", "voice_id": vid}
+    if eng == "eleven" and re.fullmatch(r"[A-Za-z0-9]{12,40}", vid):
+        return {"voice_engine": "eleven", "voice_id": vid}
+    return {}
+
+
+def studio_voices():
+    """{"kokoro": {"ready", "voices"}, "eleven": {"ready", "voices", "msg"?}}: what the page's voice picker shows."""
+    t = studio_script("animated-video", "studio.py")
+    kd = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor") / "models" / "kokoro"
+    ready = bool(t) and (kd / "kokoro-v1.0.onnx").is_file() and (kd / "voices-v1.0.bin").is_file()
+    ids = re.findall(r'"([ab][fm]_[a-z]+)"', t.read_text(encoding="utf-8").split("KOKORO_VOICES = [", 1)[1].split("]", 1)[0]) if t else []
+    kind = {"am": "American · man", "af": "American · woman", "bm": "British · man", "bf": "British · woman"}
+    out = {"kokoro": {"ready": ready, "voices": [{"id": v, "name": v[3:].title(), "desc": kind[v[:2]]} for v in ids]},
+           "eleven": {"ready": False, "voices": []}}
+    key = keys.get("elevenlabs")[0]
+    if key:
+        c = VOICE_CACHE.get(key[-6:])
+        if not c or time.time() - c[0] > 600:
+            try:
+                req = urllib.request.Request("https://api.elevenlabs.io/v1/voices", headers={"xi-api-key": key, "User-Agent": "ai-video-editor"})
+                with keys.net.urlopen(req, 20) as r:
+                    vs = json.loads(r.read().decode("utf-8")).get("voices") or []
+                c = (time.time(), [{"id": v["voice_id"], "name": str(v.get("name") or "")[:40],
+                                    "desc": " · ".join(x for x in ((v.get("labels") or {}).get("accent"), (v.get("labels") or {}).get("gender"),
+                                                                    v.get("category")) if x)[:60],
+                                    "preview": v.get("preview_url")} for v in vs if v.get("voice_id")][:60], None)
+            except Exception as e:   # noqa: BLE001  a key without the voices permission, no network: say so, Kokoro still works
+                c = (time.time(), [], "ElevenLabs did not list your voices (" + (f"HTTP {e.code}" if hasattr(e, "code") else type(e).__name__) + "). Its default voice is used.")
+            VOICE_CACHE[key[-6:]] = c
+        out["eleven"] = {"ready": True, "voices": c[1], **({"msg": c[2]} if c[2] else {})}
+    return out
+
+
 # studio: Export all. The studio plugin sits beside this one in the repo, or in Claude Code's plugin cache.
 def studio_script(skill, name):
     here = Path(__file__).resolve()
@@ -2243,6 +2285,20 @@ def make_handler(token):
                 except Exception:   # noqa: BLE001
                     ok = False
                 return self.send(200, f.read_bytes(), "image/jpeg", cache="private, max-age=86400") if ok else self.send(404, {})
+            if path == "/studio/voices":   # studio: the voice picker's list
+                return self.send(200, studio_voices())
+            if path == "/studio/voice/preview":   # studio: a few seconds of a Kokoro voice, made once and kept
+                vid = q.get("id", [""])[0]
+                t = studio_script("animated-video", "studio.py")
+                if not t or not re.fullmatch(r"[ab][fm]_[a-z]{2,12}", vid):
+                    return self.send(404, {})
+                f = home() / "voice-previews" / f"kokoro-{vid}.wav"
+                if not f.is_file():
+                    subprocess.run([sys.executable, str(Path(__file__).with_name("run.py")), str(t), "preview", "--voice", vid, "--out", str(f)],
+                                   capture_output=True, timeout=120)
+                if not f.is_file():
+                    return self.send(404, {})
+                return self.send(200, f.read_bytes(), ctype="audio/wav", cache="max-age=86400")
             if path == "/thumb":
                 f = Path(q.get("p", [""])[0])
                 t = None
@@ -2972,7 +3028,7 @@ def make_handler(token):
             if like and b.get("aspect") not in ("9:16", "16:9"):
                 aspect = "auto"   # the liked video's own shape; the placeholder is tall until it is measured
             edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or ("like a video" if like else "animated"))
-            brief = {"prompt": prompt, "refs": refs, "aspect": aspect, "length": length, **opts, **({"like": like} if like else {})}
+            brief = {"prompt": prompt, "refs": refs, "aspect": aspect, "length": length, **opts, **({"like": like} if like else {}), **voice_of(b)}
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             w, h = (1920, 1080) if aspect == "16:9" else (1080, 1920)
             ph = edit / "placeholder.mp4"
@@ -3038,20 +3094,24 @@ def make_handler(token):
             """A long video from a prompt (the studio plugin's long-video skill): researched, narrated, a new shot every
             few seconds. brief.json in a new edit, the editor opened on a placeholder, one JOB longvideo for its own Claude."""
             prompt = re.sub(r"\s+", " ", str(b.get("prompt") or "")).strip()[:4000]
-            if len(prompt) < 8:
+            if len(prompt) < 8 and not str(b.get("voiceover") or "").strip():
                 return self.send(400, {"ok": False, "msg": "Say what the video is about first."})
             aspect = "9:16" if b.get("aspect") == "9:16" else "16:9"
             own = str(b.get("own") or "").strip()
             if own and not Path(os.path.expanduser(own)).is_dir():
                 return self.send(400, {"ok": False, "msg": "That folder of your own clips is not there."})
+            vo = os.path.expanduser(str(b.get("voiceover") or "").strip())   # the user's own recorded voiceover: the script is what it says
+            if vo and not (Path(vo).is_file() and Path(vo).suffix.lower() in (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".mp4", ".mov")):
+                return self.send(400, {"ok": False, "msg": "That voiceover file is not there (a .wav, .mp3 or .m4a recording)."})
             brief = {"prompt": prompt, "minutes": max(1, min(10, int(b.get("minutes") or 3))), "aspect": aspect, "voice": True,
                      "text": b.get("text") is not False, "music": b.get("music") is not False,
                      "footage": {"youtube": b.get("youtube") is not False, "photos": b.get("photos") is not False},
-                     "own": os.path.expanduser(own) if own else None,
-                     "voice_id": b.get("voice_id") if re.fullmatch(r"[ab][fm]_[a-z]{2,12}", str(b.get("voice_id") or "")) else "am_michael"}
-            edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]))
+                     "own": os.path.expanduser(own) if own else None, **voice_of(b),
+                     "ai": bool(b.get("ai")) and any(keys.get(n)[0] for n in ("runway", "gemini", "higgsfield")),   # AI-generated shots: only with a connection
+                     "voiceover": vo or None}
+            edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or "my voiceover")
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
-            self.placeholder(edit, aspect, prompt[:60])
+            self.placeholder(edit, aspect, prompt[:60] or "From your voiceover")
             j = update(lambda d: queue(d, "longvideo", {"edit": str(edit), "brief": str(edit / "brief.json"), "aspect": aspect}))
             claude_for(j["id"])
             return self.send(200, {"id": j["id"], "ids": [j["id"]], "edits": [str(edit)]})
