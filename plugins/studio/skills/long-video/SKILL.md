@@ -242,11 +242,6 @@ section as a vertical clip, into exports); `python3 "$PY" "$L" shorts EDIT` does
 - Pictures come only from Wikimedia Commons, Openverse and Pexels (free to reuse, credited in the kit).
 - Pexels, Runway, Higgsfield and ElevenLabs are connected by the user in the app's Settings (Connections for new
   videos), never in the chat. A generated shot is credited in the kit as AI-generated.
-- Nothing is uploaded or posted: the video and the kit stay on the user's computer.
-- Never paste or ask for an API key in the chat.
+- Nothing is uploaded or posted, and no API key is ever pasted or asked for in the chat.
 
-## Self-check
-
-```bash
-python3 "$PY" "$L" demo
-```
+Self-check: `python3 "$PY" "$L" demo`.
