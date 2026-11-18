@@ -31,7 +31,7 @@ shows at a glance which lines are ours:
 ## New video: the five ways in
 
 New video opens on five cards, one for each, with a small drawing; picking one shows its options on the right.
-The sixth, **UGC ad** (not released yet, branch `feature/ugc`): a person talking to the camera about a product, as
+The sixth, **UGC ad** (studio 0.11): a person talking to the camera about a product, as
 the pack to film from or, with the clips, several versions with different hooks. The fifth, **Long video** (studio 0.7): a 2 to 10 minute video from one prompt.
 Claude researches it with sources and shows you the script. On your OK it records an AI voice and gives every line a
 new shot every few seconds: seconds of footage found on YouTube, free pictures, your own clips, and graphics built
@@ -62,6 +62,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.11.0 | UGC ad; Make Shorts from a Long video; sound bites; black bars cropped; Pixabay (released 2026-11-19, tag `studio-v0.11.0`) |
 | studio 0.10.0 | Long video cut like an edited channel: a new picture every 2 s, type on the footage, condensed capitals, small lit captions (released 2026-11-19, tag `studio-v0.10.0`) |
 | studio 0.9.0 | A narrator picker with previews; connections for Pexels, Runway and Higgsfield; AI-generated shots and your own voiceover in Long video (released 2026-11-19, tag `studio-v0.9.0`) |
 | studio 0.8.0 | A natural free voice (Kokoro); animated graphics, logo-free clips, fuller sound and Pexels stock in Long video (released 2026-11-18, tag `studio-v0.8.0`) |

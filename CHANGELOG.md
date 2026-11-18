@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.11.0 (this fork, 2026-11-19)
 - New video has a sixth card, UGC ad: a person talking to the camera about a product. With no clips yet, Claude writes five hooks, a short script and a shot list to film from. With the filmed clips, it picks the best takes, cuts the false starts and makes several versions of the ad that open on a different hook and share the rest, with captions, the product shown over the voice, a closing card and music, one tab each in the editor. Never a made-up customer or review.
 - Make Shorts on a finished Long video's card: each section as a vertical clip with its name on top and big captions, saved into the video's exports folder.
 - Sound bites in Long video: a scene can be a person's own words from an interview or a talk, found by what they say and played with their own sound and a name tag.
