@@ -2,6 +2,12 @@
 
 What changed for every user, newest first.
 
+## Unreleased (studio)
+- Natural voices, free: 19 of Microsoft's neural voices (American, British, Indian, Australian) through the open-source edge-tts library, as a Natural tab in the narrator picker, with a click-to-hear preview. No key. The script's words are sent to Microsoft to be spoken. If the service does not answer, the offline voice takes that line.
+- ElevenLabs narration works with your saved key, and the picker selects your first ElevenLabs voice by default when a key is connected.
+- Real 3D in animated graphics: three.js is given to every animated shot, with how to wire it so each frame renders. A test scene (a lit globe, bars rising with depth, a moving camera) rendered through the animation system.
+- A sound bite prefers the seconds where the picture shows a person speaking, when the same words are said in more than one place.
+
 ## studio 0.12.0 (this fork, 2026-11-19)
 - Long video picks the right moment of a found video. Each shot says what must be in the frame; the video's own preview frames are scored against those words and the best-matching seconds are taken. Before, it took a fixed place in the video. In a test of six shots all six showed what was asked, and one keynote gave two different moments for two lines.
 - Found clips carrying someone else's subtitles are passed over, as clips with logos already were.

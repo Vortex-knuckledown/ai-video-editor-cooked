@@ -115,7 +115,13 @@ repository, it should pass all four:
 
 | Looked at | Verdict |
 |---|---|
-| Kokoro (voice, Apache 2.0, 350 MB, runs on onnxruntime) | In. The bundled voice |
+| Kokoro (voice, Apache 2.0, 350 MB, runs on onnxruntime) | In. The offline voice |
+| edge-tts (Microsoft's neural voices, free, a few kB) | In, 2026-11-19. The default free voice. It uses an unofficial route into Microsoft's service, so it may change; the offline voice is the fallback |
+| three.js (MIT, 1.3 MB) | In, 2026-11-19. Real 3D for animated shots, rendered by HyperFrames |
+| fastembed CLIP, RapidOCR (onnxruntime) | In, 0.12. Frame matching and subtitle reading |
+| LatentSync, MuseTalk (lip sync), LTX-Video, Wan (video generation) | Not on this computer: they need a graphics card with far more memory than a 16 GB laptop has. Through a hosted service with the user's key (fal.ai or Replicate run all four), not built |
+| WhisperX | Not added: it needs torch. The speaker in a sound bite is found by frame matching instead |
+| MoneyPrinterTurbo (MIT) | Its ideas taken: a free neural voice with no key (edge-tts), stock sources. Its code is for simpler stock-footage shorts |
 | Chatterbox (voice, MIT) | Out, 2026-11-19. 4.3 GB, needs its own environment with an older torch, 2 to 2.7 times slower than real time on an M4, and it ran a 16 GB Mac out of memory |
 | ElevenLabs, Pixabay, Runway, Higgsfield, Google | In as connections: nothing to bundle, the user's own key |
 | OpenCLIP, EasyOCR, WhisperX | Not tried. Each brings torch (about 1 GB and more memory); a version on onnxruntime would pass, check before adding |

@@ -334,6 +334,39 @@ def tts_kokoro(text, out, voice, speed=1.0):
     raw.unlink()
 
 
+# Microsoft's neural voices through the edge-tts library: free, no key, the most natural of the free ones. The text
+# is sent to Microsoft's read-aloud service to be spoken (an unofficial route into it: it may change or stop).
+EDGE_VOICE = "en-US-AndrewMultilingualNeural"
+EDGE_VOICES = [("en-US-AndrewMultilingualNeural", "Andrew", "American · man"), ("en-US-BrianMultilingualNeural", "Brian", "American · man"),
+               ("en-US-ChristopherNeural", "Christopher", "American · man"), ("en-US-GuyNeural", "Guy", "American · man"),
+               ("en-US-RogerNeural", "Roger", "American · man"), ("en-US-SteffanNeural", "Steffan", "American · man"),
+               ("en-US-AvaMultilingualNeural", "Ava", "American · woman"), ("en-US-EmmaMultilingualNeural", "Emma", "American · woman"),
+               ("en-US-AriaNeural", "Aria", "American · woman"), ("en-US-JennyNeural", "Jenny", "American · woman"),
+               ("en-US-MichelleNeural", "Michelle", "American · woman"),
+               ("en-GB-RyanNeural", "Ryan", "British · man"), ("en-GB-ThomasNeural", "Thomas", "British · man"),
+               ("en-GB-SoniaNeural", "Sonia", "British · woman"), ("en-GB-LibbyNeural", "Libby", "British · woman"),
+               ("en-IN-PrabhatNeural", "Prabhat", "Indian · man"), ("en-IN-NeerjaExpressiveNeural", "Neerja", "Indian · woman"),
+               ("en-AU-WilliamMultilingualNeural", "William", "Australian · man"), ("en-AU-NatashaNeural", "Natasha", "Australian · woman")]
+
+
+def edge_ready():
+    try:
+        import edge_tts  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def tts_edge(text, out, voice, speed=1.0):
+    import asyncio
+    import edge_tts
+    mp3 = Path(out).with_suffix(".edge.mp3")
+    rate = f"{round((max(0.7, min(1.3, speed)) - 1) * 100):+d}%"
+    asyncio.run(edge_tts.Communicate(text, voice, rate=rate).save(str(mp3)))
+    to_wav(mp3, out)
+    mp3.unlink()
+
+
 KOKORO_VOICES = ["am_michael", "am_fenrir", "am_adam", "am_echo", "am_eric", "am_liam", "am_onyx", "am_puck",
                  "af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky", "af_nova", "af_river", "af_jessica", "af_kore", "af_alloy", "af_aoede",
                  "bm_george", "bm_daniel", "bm_fable", "bm_lewis", "bf_emma", "bf_alice", "bf_isabella", "bf_lily"]
@@ -342,9 +375,13 @@ PREVIEW_LINE = "This is how I sound when I tell your story. One fact at a time, 
 
 def cmd_preview(engine, voice, out):
     """A few seconds of one voice as a WAV, for the page's voice picker."""
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    if engine == "edge" and voice in [v[0] for v in EDGE_VOICES] and edge_ready():
+        tts_edge(PREVIEW_LINE, out, voice)
+        print(out)
+        return 0
     if engine != "kokoro" or voice not in KOKORO_VOICES or not kokoro_ready():
         sys.exit("ERROR: no such voice here.")
-    Path(out).parent.mkdir(parents=True, exist_ok=True)
     tts_kokoro(PREVIEW_LINE, out, voice)
     print(out)
     return 0
@@ -391,6 +428,10 @@ def engine_for(want):
         return "eleven", key
     if want == "eleven":
         sys.exit("No ElevenLabs key saved. Say \"add my elevenlabs key\" (setup), or use --engine kokoro.")
+    if want in ("auto", "edge") and edge_ready():
+        return "edge", None
+    if want == "edge":
+        sys.exit("The Edge voices are not installed (pip install edge-tts into the editor's environment), or use --engine kokoro.")
     if want in ("auto", "kokoro") and kokoro_ready():
         return "kokoro", None
     if want == "kokoro":
@@ -422,7 +463,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
         sys.exit("ERROR: scenes.json: " + "; ".join(errs))
     b, scenes = brief_of(edit), jload(edit / "scenes.json")["scenes"]
     want = str(b.get("voice_engine") or "")       # the page's voice picker: "kokoro" or "eleven" with brief voice_id
-    if engine == "auto" and want in ("kokoro", "eleven"):
+    if engine == "auto" and want in ("kokoro", "eleven", "edge"):
         try:
             eng, key = engine_for(want if b["voice"] else "none")
         except SystemExit:                         # that engine is not there any more (a removed key): the best there is
@@ -432,7 +473,8 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
     (edit / "audio").mkdir(exist_ok=True)
     if not voice and str(b.get("voice_id") or "").strip():
         vid = str(b["voice_id"]).strip()
-        if (eng == "kokoro" and vid in KOKORO_VOICES) or (eng == "eleven" and want == "eleven" and re.fullmatch(r"[A-Za-z0-9]{12,40}", vid)):
+        if (eng == "kokoro" and vid in KOKORO_VOICES) or (eng == "eleven" and want == "eleven" and re.fullmatch(r"[A-Za-z0-9]{12,40}", vid)) \
+                or (eng == "edge" and vid in [v[0] for v in EDGE_VOICES]):
             voice = vid
     like = jload(edit / "like" / "like.json", {}) if b.get("like") else {}
     if fit is None and like:
@@ -453,6 +495,14 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
             elif not out.exists() or (stamp.read_text(encoding="utf-8") if stamp.exists() else "") != want:
                 if eng == "eleven":
                     tts_eleven(text, out, voice or DEFAULT_VOICE, key)
+                elif eng == "edge":
+                    try:
+                        tts_edge(text, out, voice or EDGE_VOICE, (rate or 100) / 100.0)
+                    except Exception as e:      # offline, or Microsoft's service refused: the voice on this computer
+                        if not kokoro_ready():
+                            sys.exit(f"ERROR: the Edge voice did not answer ({type(e).__name__}) and no other voice is installed.")
+                        print(f"note: the Edge voice did not answer ({type(e).__name__}); this line is in the Kokoro voice")
+                        tts_kokoro(text, out, KOKORO_VOICE, (rate or 100) / 100.0)
                 elif eng == "kokoro":
                     tts_kokoro(text, out, voice or KOKORO_VOICE, (rate or 100) / 100.0)
                 else:
@@ -472,7 +522,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
             if abs(sum(vds) - want) > 0.05 * want:        # say's own pace differs a voice to a voice: one correction
                 rate = max(round(MAC_RATE * SLOWEST * 0.9), round(rate * sum(vds) / want))
                 vds = speak(rate)
-        elif eng == "kokoro" and fit:           # Kokoro takes a speed: slower when short, a little faster when long
+        elif eng in ("kokoro", "edge") and fit:   # these take a speed: slower when short, a little faster when long
             total = LEAD_S + sum(vds) + len(scenes) * TAIL_S
             speed = round(max(SLOWEST + 0.05, min(1.12, total / fit if total > fit else sum(vds) / (fit * 0.9))), 2)
             if abs(speed - 1.0) >= 0.03:
@@ -495,7 +545,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
         row["dur"] = round(dur, 3)
         rows.append(row)
         t += dur
-    tm = {"engine": eng, "voice": voice or (DEFAULT_VOICE if eng == "eleven" else KOKORO_VOICE if eng == "kokoro" else MAC_VOICE if eng == "mac" else None),
+    tm = {"engine": eng, "voice": voice or (DEFAULT_VOICE if eng == "eleven" else KOKORO_VOICE if eng == "kokoro" else EDGE_VOICE if eng == "edge" else MAC_VOICE if eng == "mac" else None),
           "length": round(t, 3), "scenes": rows}
     if fit and eng != "none":
         tm["fit"] = {"target": round(fit, 1), "speed": speed, "air": air}
@@ -505,7 +555,8 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
     for r in rows:
         print(f"{r['id']:<24} {r['start']:6.2f}s +{r['dur']:.2f}s" + (f"  voice {r['vo_dur']:.2f}s" if r.get("vo") else ""))
     print(f"{len(rows)} scenes, {t:.1f} s, voice: {eng}" + (" (the free Mac voice: robotic. studio.py kokoro-setup installs a natural free one)" if eng == "mac" else
-                                                           " (Kokoro, a free neural voice on this computer)" if eng == "kokoro" else ""))
+                                                           " (Kokoro, a free neural voice on this computer)" if eng == "kokoro" else
+                                                           " (a Microsoft neural voice, free; the words were sent to Microsoft to be spoken)" if eng == "edge" else ""))
     if fit and eng != "none":
         print(f"fit   {t:.1f} s for {fit:.0f} s: the voice at {round(100 * speed)}% speed, {air:.2f} s of air after each line")
         words = sum(len(words_in(s.get("say"))) for s in scenes)
@@ -604,6 +655,47 @@ render. At most {rounds} checks; then stop and report.
 """
 
 
+# braces are doubled: the note goes through str.format with the brief
+THREE_NOTE = """
+Real 3D is available for this clip: three.js is in `assets/three.module.js` (with `assets/three.core.js` beside it).
+Use it when the scene is a thing in space (a globe, a product turning, bars or blocks with depth, a landscape, a
+camera flying through); stay with HTML and SVG for flat diagrams. How it must be wired so every frame renders:
+- a `<canvas>` the size of the frame inside `#scene`, and a `<script type="module">` after the main script that does
+  `import * as THREE from "./assets/three.module.js"`;
+- `new THREE.WebGLRenderer({{canvas, antialias: true, preserveDrawingBuffer: true}})`, lights, a camera;
+- never `requestAnimationFrame`: one `draw()` that sets every position from a single progress value and renders,
+  driven by the clip's own timeline: `tl.to(state, {{t: 1, duration: DURATION, ease: "none", onUpdate: draw}}, 0)`
+  with `tl = window.__timelines["<this clip's id>"]`;
+- call `draw()` once at the end of the module, with the scene already in its first state, so frame 0 is not empty.
+Keep labels and numbers as HTML over the canvas (sharp type), moved by the same timeline.
+"""
+
+
+def three_assets(d):
+    """three.js copied into a clip's assets when it is installed beside the motion tools; True when it is there."""
+    use_editor()
+    import motion
+    b = motion.home() / "motion" / "node_modules" / "three" / "build"
+    if not (b / "three.module.js").exists():
+        return False
+    for f in ("three.module.js", "three.core.js"):
+        if (b / f).exists():
+            shutil.copy(b / f, Path(d) / "assets" / f)
+    return True
+
+
+def cmd_three_setup():
+    """three.js (MIT), once, beside the motion tools: real 3D for animated scenes."""
+    use_editor()
+    import motion
+    d = motion.home() / "motion"
+    if not (d / "node_modules" / "three" / "build" / "three.module.js").exists():
+        subprocess.run(["npm", "i", "three", "--silent"], cwd=d, check=True)
+    ok = (d / "node_modules" / "three" / "build" / "three.module.js").exists()
+    print("three.js ready" if ok else "ERROR: three.js did not install")
+    return 0 if ok else 1
+
+
 def look_of(sc):
     use_editor()
     import motion
@@ -651,7 +743,8 @@ def cmd_briefs(edit):
         if gsap.exists():
             shutil.copy(gsap, d / "assets" / "gsap.min.js")
         jsave(d / "beat.json", beat)
-        (d / "brief.md").write_text(BRIEF.format(
+        three = THREE_NOTE if three_assets(d) else ""
+        (d / "brief.md").write_text(three.join(BRIEF.split("\n{start}Build:", 1)[:1] + ["\n{start}Build:" + BRIEF.split("\n{start}Build:", 1)[1]]).format(
             id=r["id"], card=root / "skills" / "motion" / "references" / "clip-brief-card.md", dir=d, w=w, h=h, dur=beat["dur"],
             title=sc.get("title") or "", prompt=b.get("prompt") or "", look=json.dumps(look), visual=s.get("visual", ""),
             say=beat["line"], before=beat["before"], after=beat["after"], words=json.dumps(beat["words"]),
@@ -866,6 +959,7 @@ def main(argv):
     sub.add_parser("root")
     sub.add_parser("demo")
     sub.add_parser("kokoro-setup")
+    sub.add_parser("three-setup")
     pv = sub.add_parser("preview")
     pv.add_argument("--engine", default="kokoro")
     pv.add_argument("--voice", required=True)
@@ -874,7 +968,7 @@ def main(argv):
         sub.add_parser(name).add_argument("edit")
     v = sub.add_parser("voice")
     v.add_argument("edit")
-    v.add_argument("--engine", default="auto", choices=("auto", "eleven", "kokoro", "mac", "none"))
+    v.add_argument("--engine", default="auto", choices=("auto", "eleven", "edge", "kokoro", "mac", "none"))
     v.add_argument("--voice")
     v.add_argument("--fit", type=float, help="seconds to reach: the voice slows a little, then each line gets air")
     m = sub.add_parser("music")
@@ -897,6 +991,8 @@ def main(argv):
         return cmd_like(a.edit, a.src, a.cookies_from_browser)
     if a.cmd == "kokoro-setup":
         return cmd_kokoro_setup()
+    if a.cmd == "three-setup":
+        return cmd_three_setup()
     if a.cmd == "preview":
         return cmd_preview(a.engine, a.voice, a.out)
     return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice, a.fit),
