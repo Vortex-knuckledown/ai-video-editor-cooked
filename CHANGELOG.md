@@ -2,6 +2,13 @@
 
 What changed for every user, newest first.
 
+## studio 0.11.0 (this fork, 2026-11-19)
+- New video has a sixth card, UGC ad: a person talking to the camera about a product. With no clips yet, Claude writes five hooks, a short script and a shot list to film from. With the filmed clips, it picks the best takes, cuts the false starts and makes several versions of the ad that open on a different hook and share the rest, with captions, the product shown over the voice, a closing card and music, one tab each in the editor. Never a made-up customer or review.
+- Make Shorts on a finished Long video's card: each section as a vertical clip with its name on top and big captions, saved into the video's exports folder.
+- Sound bites in Long video: a scene can be a person's own words from an interview or a talk, found by what they say and played with their own sound and a name tag.
+- Old footage with black bars baked in (a 4:3 broadcast inside a wide file) has the bars cut off before it fills the frame.
+- Pixabay is a connection for free stock clips and pictures, since Pexels has paused its API.
+
 ## studio 0.10.0 (this fork, 2026-11-19)
 - Long video is cut like the channels it was measured against. Three of Slot Studio's published videos were measured (the picture changes every 1.3 to 2.3 seconds, type sits on the footage, captions are small with the spoken word lit). Long video now aims for a new picture every 1.5 to 3 seconds, and a 2-minute test came out at one every 2.0 seconds, against 3.5 before.
 - Type goes on the footage. A shot can carry a big label (a place and year), a person's name and role, or a number on a small card. Full-frame numbers, titles and quotes are drawn over the nearest footage, darkened and without colour, never on an empty dark slide.

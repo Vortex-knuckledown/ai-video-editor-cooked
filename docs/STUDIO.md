@@ -16,7 +16,7 @@ The few lines added inside the original are marked `studio:` or `fork:` in the c
 shows at a glance which lines are ours:
 
 - `home.py` and `home.html`: the cards for the kinds of video on New video, their side panels and their jobs
-  (`animated`, `streamclips`, `subtitles`, `longvideo`); Export all on a stream video's card (`/studio/export`); the subtitles
+  (`animated`, `streamclips`, `subtitles`, `longvideo`, `ugc`); Export all on a stream video's card (`/studio/export`); the subtitles
   dialog in a video's menu.
 - `start/references/home.md`: which skill takes each new job.
 - `launcher.py` and `review.py`: Claude runs hidden in the background (no Terminal windows); Show Claude reveals it.
@@ -31,7 +31,8 @@ shows at a glance which lines are ours:
 ## New video: the five ways in
 
 New video opens on five cards, one for each, with a small drawing; picking one shows its options on the right.
-The fifth, **Long video** (studio 0.7): a 2 to 10 minute video from one prompt.
+The sixth, **UGC ad** (studio 0.11): a person talking to the camera about a product, as
+the pack to film from or, with the clips, several versions with different hooks. The fifth, **Long video** (studio 0.7): a 2 to 10 minute video from one prompt.
 Claude researches it with sources and shows you the script. On your OK it records an AI voice and gives every line a
 new shot every few seconds: seconds of footage found on YouTube, free pictures, your own clips, and graphics built
 from the script's numbers. It ends in the editor with three thumbnails and a publishing kit.
@@ -61,6 +62,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.11.0 | UGC ad; Make Shorts from a Long video; sound bites; black bars cropped; Pixabay (released 2026-11-19, tag `studio-v0.11.0`) |
 | studio 0.10.0 | Long video cut like an edited channel: a new picture every 2 s, type on the footage, condensed capitals, small lit captions (released 2026-11-19, tag `studio-v0.10.0`) |
 | studio 0.9.0 | A narrator picker with previews; connections for Pexels, Runway and Higgsfield; AI-generated shots and your own voiceover in Long video (released 2026-11-19, tag `studio-v0.9.0`) |
 | studio 0.8.0 | A natural free voice (Kokoro); animated graphics, logo-free clips, fuller sound and Pexels stock in Long video (released 2026-11-18, tag `studio-v0.8.0`) |
@@ -76,9 +78,10 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 0. **Needs a real key to try** (built from each service's docs, never run): ElevenLabs voices in the picker, Pexels,
    Runway, Higgsfield, Google's video model. Higgsfield's text-only route and Google's response format are the
    least certain.
-0. **Long video, still open.** Sound bites (cutting to an interviewee's own words); black side bars on old 4:3
-   footage; Pixabay in place of Pexels, which has paused its API; found clips with burned-in subtitles are not
-   detected (only logos); a check that drops
+0. **UGC ad, still open.** Tried only with stand-in takes, never with a real person's selfie clips. An AI presenter
+   (HeyGen or similar) is not built: brief `presenter` "ai" only adds the on-screen label.
+0. **Long video, still open.** Found clips with burned-in subtitles are not detected (only logos); a sound bite's
+   picture is whatever the source shows in those seconds (it may be the audience, not the speaker); a check that drops
    found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
    timeline); full 3D is not planned.
 

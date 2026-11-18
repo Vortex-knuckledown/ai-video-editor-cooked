@@ -19,6 +19,7 @@ import os
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -36,11 +37,11 @@ def key_file():
     return Path(home) / ".env" if home else KEY_FILE
 VARS = {"gemini": "GEMINI_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY", "zernio": "ZERNIO_API_KEY",
         # fork: the studio plugin's connections (stock footage, AI-generated shots). Higgsfield's is "key id:key secret".
-        "pexels": "PEXELS_API_KEY", "runway": "RUNWAYML_API_SECRET", "higgsfield": "HIGGSFIELD_API_KEY"}
+        "pexels": "PEXELS_API_KEY", "runway": "RUNWAYML_API_SECRET", "higgsfield": "HIGGSFIELD_API_KEY", "pixabay": "PIXABAY_API_KEY"}
 # The fixed start of each vendor's key, checked before any request. Google keys start with AQ. or AIza
 # (creator-teardown references/setup.md). ElevenLabs' older keys have none.
 PREFIX = {"gemini": ("AIza", "AQ.")}   # AI Studio issues AQ. keys since mid-2026; older keys start AIza
-NAMES = {"gemini": "Gemini", "elevenlabs": "ElevenLabs", "zernio": "Zernio", "pexels": "Pexels", "runway": "Runway", "higgsfield": "Higgsfield"}
+NAMES = {"gemini": "Gemini", "elevenlabs": "ElevenLabs", "zernio": "Zernio", "pexels": "Pexels", "runway": "Runway", "higgsfield": "Higgsfield", "pixabay": "Pixabay"}
 
 
 def get(name):
@@ -144,6 +145,8 @@ def verify(name, key):
                           {"x-goog-api-key": key})
     elif name == "pexels":   # fork: one search result, free
         code, body = _get("https://api.pexels.com/v1/search?query=sky&per_page=1", {"Authorization": key})
+    elif name == "pixabay":   # fork: one search result, free (Pixabay's API takes the key in the address)
+        code, body = _get("https://pixabay.com/api/?" + urllib.parse.urlencode({"key": key, "q": "sky", "per_page": 3}), {})
     elif name == "runway":   # fork: the organisation the key belongs to, no credits spent
         code, body = _get("https://api.dev.runwayml.com/v1/organization", {"Authorization": f"Bearer {key}", "X-Runway-Version": "2024-11-06"})
     elif name == "higgsfield":   # fork: Higgsfield documents no account call; a request that does not exist answers 401 only to bad credentials

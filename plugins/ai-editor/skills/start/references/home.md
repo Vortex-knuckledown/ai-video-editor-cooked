@@ -306,6 +306,14 @@ their length, the layout, captions and titles). The editor is already open on a 
 skill, no cut and no style-edit. Report with `status streamclips`. No studio skill in this session: say on the page
 that the studio plugin is not loaded (`/reload-plugins`) and mark the job `--failed`.
 
+### `JOB ugc edit=<dir> brief=<dir>/brief.json aspect=9:16 root=<dir>` (the studio plugin)
+
+New video's "UGC ad": a person talking to the camera about a product. Invoke the `studio:ugc-ad` skill (Skill tool)
+on `edit=` and follow it; it reads `brief.json` (the product, the filmed clips if any, how many versions). With no
+clips it writes the hooks, script and shot list and stops there. The editor is already open on a placeholder draft.
+Not the cut, style-edit or product-video skills. Report with `status ugc`. No studio skill in this session: say on
+the page that the studio plugin is not loaded (`/reload-plugins`) and mark the job `--failed`.
+
 ### `JOB longvideo edit=<dir> brief=<dir>/brief.json aspect=<16:9|9:16> root=<dir>` (the studio plugin)
 
 New video's "Long video": a 2 to 10 minute video from one prompt. Invoke the `studio:long-video` skill (Skill tool)

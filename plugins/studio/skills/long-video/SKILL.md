@@ -49,19 +49,8 @@ depends on how they are used). Off: no `clip` shots at all, only pictures, the u
 
 ## 0c. The user's own voiceover (only when brief.json has `voiceover`)
 
-The recording is the script: nothing is written, nothing is approved, no AI voice is made.
-
-```bash
-python3 "$PY" "$L" voiceover EDIT "<brief.json voiceover>"
-```
-
-It transcribes the recording and writes scenes.json with one scene a spoken line (`l01`, `l02`, ...), timing.json
-and words.json. Then, in scenes.json: give the video a `title` and `look`, give the lines their `section`s, and
-replace every line's placeholder shot with real `shots` (step 2's rules; `say` is what was heard and stays as it
-is, mishearings too). Research only to get graphics right (a number the speaker says, a name's spelling), and put
-no fact on screen the speaker did not say. `check`, then skip steps 2's approval and 3 entirely (never run
-`voice` or `words`: they would replace the recording) and go on at step 4. On a note about the words: say on the
-page that the words are the user's recording and only the pictures can change.
+The recording is the script: nothing is written or approved, no AI voice is made, and `voice` and `words` are never
+run. Read `${CLAUDE_SKILL_DIR}/references/voiceover.md` and follow it, then go on at step 4.
 
 ## 1. Research
 
@@ -125,11 +114,24 @@ session: say so on the page, write from what you know, use no statistic you are 
   in a video (the picture sites are slow to a caller with no key): a clip for anything that moves or still exists
   today, a photo only for a named person, document, map or moment in the past. Every number, name and
   quote in a graphic is in research.md. A section opens on footage or a `title`, never on a `list`.
+- **Sound bites**: in a video about people, 2 to 4 scenes are the person's own words instead of the narrator's, the
+  way a documentary cuts to an interview. Such a scene has no narration of its own:
+  `{"id": "jobs-said", "section": "...", "say": "(bite)", "fallback_say": "<one narrated line that makes the same
+  point>", "bite": {"query": "Steve Jobs Stanford commencement speech 2005", "find": ["fired", "Apple", "best"],
+  "name": "Steve Jobs", "role": "Stanford, 2005"}, "shots": [{"kind": "clip", "query": "<footage for the fallback>"}]}`.
+  `query` finds the interview or talk on YouTube; `find` is 2 to 4 words they must say in the few seconds wanted.
+  Only words the person is on record saying (research.md has the source), never a bite for a claim you need them to
+  have made. The line before a bite sets it up; the line after picks up from it.
 - `look`: a dark ground and one accent that fit the topic. `captions`: leave out for the default.
 
 ```bash
+python3 "$PY" "$L" bites EDIT        # only with bite scenes: finds each one, with its sound, and writes what is said
 python3 "$PY" "$L" check EDIT        # fix every FIX line: the fields, the length against the brief, the pace
 ```
+
+`bites` writes each found bite's words into its `say` (read them: a bite that does not make the point becomes a
+narrated line, delete its `bite`) and turns one it cannot find into its `fallback_say` by itself. In the script the
+user approves, a bite reads as `[Steve Jobs, in his own words:] "..."`.
 
 Show the script on the page: one AskUserQuestion call. The question is the script itself: the title, then each
 section's name and its lines as one paragraph (over 700 words: each section's name and first line only, and write
@@ -229,7 +231,8 @@ folder.
 On notes (`SEND`): each note has a time; `EDIT/timing.json` says which line it falls in, and that line's shots share
 its time in order. A shot: change it in scenes.json, `find --only <key>`, build, render. The words: change `say`,
 then voice, words, find (lengths change), sound, build, render. The music: `sound --mood <m>`. Then `round` again.
-On `APPROVE` the video is done: `EDIT/render.mp4`.
+On `APPROVE` the video is done: `EDIT/render.mp4`. Shorts: the video's card in Your videos has Make Shorts (each
+section as a vertical clip, into exports); `python3 "$PY" "$L" shorts EDIT` does the same when the user asks in words.
 
 ## Rules
 
@@ -239,11 +242,6 @@ On `APPROVE` the video is done: `EDIT/render.mp4`.
 - Pictures come only from Wikimedia Commons, Openverse and Pexels (free to reuse, credited in the kit).
 - Pexels, Runway, Higgsfield and ElevenLabs are connected by the user in the app's Settings (Connections for new
   videos), never in the chat. A generated shot is credited in the kit as AI-generated.
-- Nothing is uploaded or posted: the video and the kit stay on the user's computer.
-- Never paste or ask for an API key in the chat.
+- Nothing is uploaded or posted, and no API key is ever pasted or asked for in the chat.
 
-## Self-check
-
-```bash
-python3 "$PY" "$L" demo
-```
+Self-check: `python3 "$PY" "$L" demo`.

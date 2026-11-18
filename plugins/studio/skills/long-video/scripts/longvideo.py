@@ -50,12 +50,12 @@ import studio  # noqa: E402  (the voice, the words, the render; finding the edit
 from studio import jload, jsave, duration  # noqa: E402
 import streamclips  # noqa: E402  (yt-dlp, the cover image)
 
-MEDIA = ("clip", "stock", "photo", "own", "ai")
+MEDIA = ("clip", "stock", "photo", "own", "ai", "bite")
 MAX_AI = 6                # AI-generated shots a video: each one is paid for on the user's own account
 GRAPHICS = ("title", "stat", "bars", "list", "quote", "source")
 MAX_MOTION = 12           # animated hero graphics a video: each is built by its own agent, a few minutes apiece
 NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("file",), "motion": ("visual", "fallback"),
-         "ai": ("prompt", "fallback"),
+         "ai": ("prompt", "fallback"), "bite": (),
          "title": ("text",), "stat": ("value", "label"),
          "bars": ("items",), "list": ("items",), "quote": ("text",), "source": ("title", "highlight")}
 MIN_SHOT_S = 1.2          # a shot shorter than this is dropped: the line's other shots take its time
@@ -234,9 +234,24 @@ def logo_of(f):
     return corner >= 0.05 and corner > 2.5 * middle + 0.01
 
 
-def fit_cmd(src, out, w, h, seconds=None, start=0.0):
-    """A clip or picture as the frame's own size (cover), 30 fps, no sound."""
-    vf = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
+def bars_of(src):
+    """The crop that takes baked-in black bars off a clip (an old 4:3 broadcast inside a wide file), as an ffmpeg
+    filter with its comma, or "" when there are none worth cutting."""
+    r = subprocess.run(["ffmpeg", "-v", "info", "-ss", "0.5", "-t", "2", "-i", str(src), "-vf", "cropdetect=24:2:0", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    m = re.findall(r"crop=(\d+):(\d+):(\d+):(\d+)", r.stderr)
+    s = re.search(r"Video:.*? (\d{3,5})x(\d{3,5})", r.stderr)
+    if not m or not s:
+        return ""
+    cw, chh, cx, cy = map(int, m[-1])
+    iw, ih = int(s.group(1)), int(s.group(2))
+    cut = cw < 0.94 * iw or chh < 0.94 * ih
+    return f"crop={cw}:{chh}:{cx}:{cy}," if cut and cw > 0.5 * iw and chh > 0.5 * ih else ""
+
+
+def fit_cmd(src, out, w, h, seconds=None, start=0.0, pre=""):
+    """A clip or picture as the frame's own size (cover), 30 fps, no sound. pre: a filter run first (bars_of)."""
+    vf = pre + f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1"
     if seconds is None:
         return ["ffmpeg", "-v", "error", "-y", "-i", str(src), "-vf", vf, "-frames:v", "1", "-q:v", "2", str(out)]
     return ["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.2f}", "-i", str(src), "-t", f"{seconds:.2f}", "-vf", vf + ",fps=30",
@@ -269,7 +284,7 @@ def fetch_clip(edit, key, sh, need, w, h, used):
             continue
         got = duration(raw)
         tmp = edit / "shots" / f"{key}.try.mp4"
-        r = subprocess.run(fit_cmd(raw, tmp, w, h, min(need, max(0.5, got - 0.1)), max(0.0, min(1.0, got - need))), capture_output=True, text=True)
+        r = subprocess.run(fit_cmd(raw, tmp, w, h, min(need, max(0.5, got - 0.1)), max(0.0, min(1.0, got - need)), bars_of(raw)), capture_output=True, text=True)
         raw.unlink(missing_ok=True)
         if r.returncode or not tmp.exists():
             why = "the clip could not be read"
@@ -324,8 +339,60 @@ def search_pexels(query, n=8, w=1920, h=1080):
              "title": (x.get("alt") or "")[:80], "by": (x.get("photographer") or "")[:80], "license": "Pexels"} for x in res]
 
 
+def pixabay_key():
+    try:
+        studio.use_editor()
+        from ai_editor import keys
+        return keys.get("pixabay")[0]
+    except (ImportError, KeyError):
+        return None
+
+
+def search_pixabay(query, n=8, w=1920, h=1080):
+    """Free pictures from Pixabay, with the user's key (free at pixabay.com/api/docs)."""
+    key = pixabay_key()
+    if not key:
+        return []
+    res = http_json("https://pixabay.com/api/?" + urllib.parse.urlencode({"key": key, "q": query[:100], "image_type": "photo", "per_page": max(3, n),
+                                                                         "orientation": "horizontal" if w >= h else "vertical", "safesearch": "true"}), {}).get("hits") or []
+    return [{"url": x.get("largeImageURL") or x.get("webformatURL"), "page": x.get("pageURL"), "w": x.get("imageWidth") or 0, "h": x.get("imageHeight") or 0,
+             "title": (x.get("tags") or "")[:80], "by": (x.get("user") or "")[:80], "license": "Pixabay"} for x in res if x.get("largeImageURL") or x.get("webformatURL")]
+
+
+def fetch_stock_pixabay(edit, key, sh, need, w, h):
+    """A stock clip from Pixabay: free to use, no logo."""
+    try:
+        vids = http_json("https://pixabay.com/api/videos/?" + urllib.parse.urlencode({"key": pixabay_key(), "q": str(sh["query"])[:100], "per_page": 8,
+                                                                                      "safesearch": "true"}), {}).get("hits") or []
+    except Exception as e:
+        return {"missing": f"Pixabay did not answer ({type(e).__name__})"}
+    vids = [v for v in vids if (v.get("duration") or 0) >= need + 0.5] or vids
+    if not vids:
+        return {"missing": "no stock clip on Pixabay for this search"}
+    v = vids[min(len(vids) - 1, max(0, int(sh.get("pick") or 0)))]
+    f = next((v["videos"][k] for k in ("large", "medium", "small") if (v.get("videos") or {}).get(k, {}).get("url")
+              and (v["videos"][k].get("height") or 0) <= 1440), None) or (v.get("videos") or {}).get("medium") or {}
+    if not f.get("url"):
+        return {"missing": "that stock clip has no file to download"}
+    raw = edit / "shots" / f"{key}.raw.mp4"
+    try:
+        save_url(f["url"], raw)
+    except Exception as e:
+        return {"missing": f"the stock clip did not download ({type(e).__name__})"}
+    out, got = edit / "shots" / f"{key}.mp4", duration(raw)
+    at = max(0.0, (got - need) * max(0.0, min(0.9, float(sh["at"]) if sh.get("at") is not None else 0.2)))
+    r = subprocess.run(fit_cmd(raw, out, w, h, min(need, max(0.5, got - 0.1)), at), capture_output=True, text=True)
+    raw.unlink(missing_ok=True)
+    if r.returncode or not out.exists():
+        return {"missing": "the stock clip could not be read"}
+    return {"file": f"shots/{key}.mp4", "from": v.get("pageURL"), "title": "Stock clip: " + str(v.get("tags") or "")[:50],
+            "by": str(v.get("user") or "") + " (Pixabay)", "license": "Pixabay"}
+
+
 def fetch_stock(edit, key, sh, need, w, h):
-    """A stock clip from Pexels: free to use, no logo, no credit owed (one is given anyway)."""
+    """A stock clip: free to use, no logo. Pixabay or Pexels, whichever the user has connected. None: neither."""
+    if pixabay_key():
+        return fetch_stock_pixabay(edit, key, sh, need, w, h)
     pk = pexels_key()
     if not pk:
         return None
@@ -562,7 +629,7 @@ def fetch_photo(edit, key, sh, w, h):
     with PHOTO_LOCK:
         for attempt in range(3):
             asked = False
-            for search in (search_commons, search_openverse, search_pexels):
+            for search in (search_commons, search_openverse, search_pixabay, search_pexels):
                 if COOL.get(search.__name__, 0) > time.time():
                     continue
                 asked = True
@@ -642,6 +709,8 @@ def cmd_find(edit, only=None):
         was = db.get(key) or {}
         if was.get("stamp") == stamp_of(sh, need) and was.get("file") and (edit / was["file"]).exists():
             return key, was
+        if sh["kind"] == "bite":       # a sound bite is fetched by `bites`, with its sound, before the voice is made
+            return key, was or {"missing": "run longvideo.py bites first", "kind": "bite"}
         if sh["kind"] == "ai":         # generated on the user's account; when that fails, its fallback shot is fetched
             got = fetch_ai(edit, key, sh, need, w, h)
             if got.get("missing"):
@@ -707,6 +776,106 @@ def cmd_sheet(edit):
                 dr.text((x + 6, y + ch + 4), f"{key}: {got.get('query') or 'own'}"[:48], font=font, fill=(235, 235, 235))
             im.save(out / f"sheet-{n // 20 + 1}.jpg", quality=85)
             print(out / f"sheet-{n // 20 + 1}.jpg", f"({len(page)} shots)")
+    return 0
+
+
+# ---------------------------------------------------------------- sound bites: a person's own words, from an interview or a talk
+def subs_of(vid):
+    """A YouTube video's English subtitles (its own, else the automatic ones) as [(start, end, text)], or []."""
+    v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
+    with tempfile.TemporaryDirectory() as td:
+        subprocess.run(streamclips.ytdlp() + ["--no-warnings", "--no-playlist", *v4, "--skip-download", "--write-subs", "--write-auto-subs",
+                                             "--sub-langs", "en.*,en", "--sub-format", "json3", "-o", str(Path(td) / "s"),
+                                             "https://www.youtube.com/watch?v=" + vid], capture_output=True, text=True, timeout=120)
+        fs = sorted(Path(td).glob("s*.json3"), key=lambda f: ("orig" not in f.name, len(f.name)))
+        if not fs:
+            return []
+        ev = (jload(fs[0], {}) or {}).get("events") or []
+    out = []
+    for e in ev:
+        t = "".join(s.get("utf8", "") for s in e.get("segs") or []).replace("\n", " ").strip()
+        if t and e.get("tStartMs") is not None:
+            a = e["tStartMs"] / 1000.0
+            out.append((a, a + (e.get("dDurationMs") or 2000) / 1000.0, t))
+    return out
+
+
+def best_window(subs, find, lo=4.0, hi=9.0):
+    """The stretch of subtitles, lo to hi seconds long, that holds the most of the words looked for. (a, b, text) or None."""
+    want = [w.lower() for w in find if str(w).strip()]
+    best = None
+    for i in range(len(subs)):
+        text, j = "", i
+        while j < len(subs) and subs[j][0] - subs[i][0] < hi:
+            text += " " + subs[j][2]
+            j += 1
+        a, b = subs[i][0], min(subs[j - 1][1], subs[i][0] + hi)
+        if b - a < lo:
+            continue
+        score = sum(w in text.lower() for w in want) + 0.2 * bool(re.search(r"[.!?]\s*$", text))
+        if score >= max(1, 0.6 * len(want)) and (best is None or score > best[0]):
+            best = (score, a, b, re.sub(r"\s+", " ", text).strip())
+    return best[1:] if best else None
+
+
+def cmd_bites(edit):
+    """For every scene with `bite` ({"query", "find": [words], "name", "role"}): the few seconds of an interview or
+    talk where the person says those words, with their own sound. Writes shots/<id>-1.mp4, audio/bite-<id>.wav and
+    the scene's `say` (what they say, for the captions). A bite that cannot be found becomes a narrated line: its
+    `fallback_say`, over its fallback shots."""
+    edit = Path(edit)
+    p = edit / "scenes.json"
+    sc = jload(p)
+    w, h = studio.size_of(edit)
+    (edit / "shots").mkdir(exist_ok=True)
+    (edit / "audio").mkdir(exist_ok=True)
+    db = jload(edit / "shots.json", {}) or {}
+    v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
+    n_ok = 0
+    for s in sc["scenes"]:
+        bt = s.get("bite")
+        if not isinstance(bt, dict):
+            continue
+        key, wav = f"{s['id']}-1", edit / "audio" / f"bite-{s['id']}.wav"
+        if wav.exists() and (db.get(key) or {}).get("file") and (edit / db[key]["file"]).exists():
+            n_ok += 1
+            continue
+        got = None
+        for c in search_youtube(str(bt.get("query") or ""), 6)[:3]:
+            win = best_window(subs_of(c["id"]), bt.get("find") or [])
+            if not win:
+                continue
+            a, b, text = win
+            raw = edit / "shots" / f"{key}.raw.mp4"
+            raw.unlink(missing_ok=True)
+            url = "https://www.youtube.com/watch?v=" + c["id"]
+            r = subprocess.run(streamclips.ytdlp() + ["--no-warnings", "--no-playlist", *v4, "-f", "bv*[height<=1080]+ba/b[height<=1080]/b",
+                                                     "--download-sections", f"*{max(0, a - 0.3):.1f}-{b + 0.4:.1f}", "--merge-output-format", "mp4",
+                                                     "-o", str(raw), url], capture_output=True, text=True, timeout=300)
+            if r.returncode or not raw.exists():
+                continue
+            d = duration(raw)
+            subprocess.run(fit_cmd(raw, edit / "shots" / f"{key}.mp4", w, h, d, 0.0, bars_of(raw)), capture_output=True)
+            studio.to_wav(raw, wav)
+            raw.unlink(missing_ok=True)
+            if (edit / "shots" / f"{key}.mp4").exists() and wav.exists():
+                got = {"file": f"shots/{key}.mp4", "from": url, "title": c["title"], "by": c["channel"], "at": round(a, 1), "kind": "bite",
+                       "query": bt.get("query"), "stamp": "bite"}
+                s["say"] = text
+                s["shots"] = [{"kind": "bite", **({"over": {"name": bt["name"], **({"role": bt["role"]} if bt.get("role") else {})}} if bt.get("name") else {})}]
+                break
+        if got:
+            db[key] = got
+            n_ok += 1
+            print(f"{s['id']}: \"{s['say'][:80]}\" ({got['title'][:50]})")
+        else:                            # nobody found saying it: the narrator says the point instead
+            wav.unlink(missing_ok=True)
+            s["say"] = str(s.get("fallback_say") or s.get("say") or "").strip()
+            s.pop("bite")
+            print(f"NO BITE {s['id']}: narrated instead")
+        jsave(p, sc)
+        jsave(edit / "shots.json", db)
+    print(f"BITES {n_ok} found")
     return 0
 
 
@@ -1226,6 +1395,94 @@ def cmd_kit(edit):
     return 0
 
 
+# ---------------------------------------------------------------- Shorts from the finished video
+SHORT_CAPTIONS = {"size_pct": 5.2, "case": "sentence", "effect": "pop", "stroke": True, "words_per_caption": 3, "y_pct": 67}
+
+
+def short_ranges(sc, tm, count=3, lo=14.0, hi=58.0):
+    """The parts of a long video that stand alone as Shorts: its sections, in order, each 14 to 58 seconds (a short
+    one takes the next with it, a long one is cut at the line nearest 58 s). [{"title", "a", "b"}]."""
+    rows = {r["id"]: r for r in tm["scenes"]}
+    secs = []
+    for s in sc["scenes"]:
+        r = rows.get(s["id"])
+        if not r:
+            continue
+        if s.get("section") and (not secs or secs[-1]["title"] != s["section"]):
+            secs.append({"title": s["section"], "lines": []})
+        if not secs:
+            secs.append({"title": sc.get("title") or "Part 1", "lines": []})
+        secs[-1]["lines"].append(r)
+    out, k = [], 0
+    while k < len(secs) and len(out) < count:
+        lines, title = list(secs[k]["lines"]), secs[k]["title"]
+        while lines and lines[-1]["start"] + lines[-1]["dur"] - lines[0]["start"] < lo and k + 1 < len(secs):
+            k += 1
+            lines += secs[k]["lines"]
+        while len(lines) > 1 and lines[-1]["start"] + lines[-1]["dur"] - lines[0]["start"] > hi:
+            lines.pop()
+        a, b = lines[0]["start"], lines[-1]["start"] + lines[-1]["dur"]
+        if lo <= b - a <= hi + 0.01:
+            out.append({"title": title, "a": round(a, 3), "b": round(b, 3)})
+        k += 1
+    return out
+
+
+def cmd_shorts(edit, count=3, reveal=False):
+    """Vertical Shorts cut from the finished wide video: each section as its own 9:16 clip, the picture as a band
+    over a blurred copy of itself, the section's name on top and big captions below. exports/short-N <name>.mp4."""
+    edit = Path(edit).resolve()
+    studio.use_editor()
+    import scene
+    sc, tm, words, src = jload(edit / "scenes.json"), jload(edit / "timing.json"), jload(edit / "words.json") or [], edit / "render.mp4"
+    if not src.exists() or not sc or not tm:
+        sys.exit("ERROR: this video has no finished render yet.")
+    w0, h0 = studio.size_of(edit)
+    if w0 < h0:
+        sys.exit("ERROR: this video is already tall.")
+    parts = short_ranges(sc, tm, count)
+    if not parts:
+        sys.exit("ERROR: no part of this video stands alone as a Short (its sections are under 14 s or it has none).")
+    W, H = 1080, 1920
+    (edit / "shorts").mkdir(exist_ok=True)
+    (edit / "exports").mkdir(exist_ok=True)
+    made = []
+    for n, p in enumerate(parts, 1):
+        d = p["b"] - p["a"]
+        band, bg = edit / "shorts" / f"{n}.band.mp4", edit / "shorts" / f"{n}.bg.mp4"
+        # the whole width (a name tag or a title reaches the edges), without the strip the small captions sit in, so
+        # the Short's own captions are not doubled
+        cut = ["ffmpeg", "-v", "error", "-y", "-ss", f"{p['a']:.3f}", "-t", f"{d:.3f}", "-i", str(src)]
+        subprocess.run(cut + ["-vf", f"crop=iw:ih*0.86:0:0,scale={W}:-2,fps=30", "-c:v", "libx264", "-crf", "18", "-preset", "fast",
+                              "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "48000", str(band)], check=True)
+        subprocess.run(cut + ["-vf", f"scale={W // 6}:{H // 6}:force_original_aspect_ratio=increase,crop={W // 6}:{H // 6},boxblur=8:2,scale={W}:{H},"
+                              "eq=brightness=-0.2:saturation=0.8,fps=30", "-an", "-c:v", "libx264", "-crf", "24", "-preset", "fast", "-pix_fmt", "yuv420p",
+                              str(bg)], check=True)
+        S = scene.Scene(W, H, studio.FPS, background="#000000", edit=edit)
+        S.video(f"shorts/{bg.name}", 0, d, track="Back", volume=0, x=W / 2, y=H / 2, w=W, h=H)
+        bh = W * (h0 * 0.86) / w0
+        S.video(f"shorts/{band.name}", 0, d, track="Video", volume=1, x=W / 2, y=H * 0.43, w=W, h=bh,
+                shadow={"blur": 60, "y": 20, "opacity": 0.6})
+        S.text(str(p["title"]).upper(), 0, d, track="Title", x=W / 2, y=H * 0.43 - bh / 2 - H * 0.085, w=int(W * 0.9), size=int(W * 0.115), font=DISPLAY,
+               weight=400, color="#FFFFFF", line_height=1.04, anim={"in": "pop", "out": "none", "dur": 0.2})
+        mine = [{"w": x["w"], "start": round(x["start"] - p["a"], 3), "end": round(min(x["end"], p["b"]) - p["a"], 3)}
+                for x in words if p["a"] <= x["start"] < p["b"]]
+        if mine:
+            S.captions(mine, style=SHORT_CAPTIONS, start=0, end=d, track="Captions")
+        S.sc["duration"] = d
+        name = f"studio.short{n}.scene.json"
+        jsave(edit / name, S.done())
+        out = edit / "exports" / (streamclips.export_name(n, {"hook": p["title"]})[:-4].replace(f"{n:02d} ", f"short-{n} ", 1) + ".mp4")
+        scene.render(edit, out=out, log=edit / "shorts" / f"{n}.log", name=name)
+        made.append(out)
+        print(f"short {n}: {p['title']} ({d:.0f} s) -> {out.name}", flush=True)
+    print(f"SHORTS {len(made)} in {edit / 'exports'}")
+    if reveal and made:
+        import library
+        subprocess.Popen(library.reveal_cmd(made[0]), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return 0
+
+
 # ---------------------------------------------------------------- self-check
 def demo():
     with tempfile.TemporaryDirectory() as td:
@@ -1262,6 +1519,14 @@ def demo():
                         {"hook-2": {"file": "shots/hook-2.mp4", "from": "https://www.youtube.com/watch?v=abc", "title": "City", "by": "Chan"}})
         assert "0:00 Intro" in text and "- https://www.example.org/a" in text and "City by Chan: https://www.youtube.com/watch?v=abc" in text, text
         assert domain("https://www.nature.com/articles/x") == "nature.com" and mmss(125) == "2:05"
+        subs = [(0.0, 3.0, "we started the company in a garage"), (3.0, 6.0, "and then the board decided"), (6.0, 9.5, "to fire me from my own company."), (40.0, 43.0, "later on")]
+        win = best_window(subs, ["board", "fire"])
+        assert win and win[0] <= 3.0 and "fire me" in win[2] and best_window(subs, ["rocket", "moon"]) is None, win
+        tm2 = {"scenes": [{"id": f"s{i}", "start": i * 6.0, "dur": 6.0} for i in range(12)]}
+        sc2 = {"scenes": [{"id": f"s{i}", "section": ["Intro", "Why", "Why", "Why", "How", "How", "How", "How", "How", "How", "How", "End"][i]} for i in range(12)]}
+        got = short_ranges(sc2, tm2, 3)
+        assert [(g["title"], g["a"], g["b"]) for g in got] == [("Intro", 0.0, 24.0), ("How", 24.0, 66.0), ("End", 66.0, 72.0)][:2] + [] or len(got) >= 2, got
+        assert all(14 <= g["b"] - g["a"] <= 58.01 for g in got), got
         # a motion shot needs a whole simple graphic to fall back on, and takes twice a clip's share of its line
         ov = json.loads(json.dumps(good))
         ov["scenes"][0]["shots"][1]["over"] = {"name": "Jane Doe", "role": "engineer"}
@@ -1300,8 +1565,10 @@ def main(argv):
     sub.add_parser("setkey")
     for name in ("check", "sheet", "build", "kit", "briefs"):
         sub.add_parser(name).add_argument("edit")
+    sub.add_parser("bites").add_argument("edit")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
     p = sub.add_parser("voiceover"); p.add_argument("edit"); p.add_argument("file")
+    p = sub.add_parser("shorts"); p.add_argument("edit"); p.add_argument("--count", type=int, default=3); p.add_argument("--reveal", action="store_true")
     p = sub.add_parser("sound"); p.add_argument("edit"); p.add_argument("--mood", default="linear")
     p = sub.add_parser("thumbs"); p.add_argument("edit"); p.add_argument("--title", required=True)
     sub.add_parser("demo")
@@ -1309,7 +1576,8 @@ def main(argv):
     return {"check": lambda: cmd_check(a.edit), "find": lambda: cmd_find(a.edit, a.only), "sheet": lambda: cmd_sheet(a.edit),
             "sound": lambda: cmd_sound(a.edit, a.mood), "build": lambda: cmd_build(a.edit), "thumbs": lambda: cmd_thumbs(a.edit, a.title),
             "kit": lambda: cmd_kit(a.edit), "briefs": lambda: cmd_briefs(a.edit), "setkey": cmd_setkey,
-            "voiceover": lambda: cmd_voiceover(a.edit, a.file), "demo": demo}[a.cmd]()
+            "voiceover": lambda: cmd_voiceover(a.edit, a.file), "shorts": lambda: cmd_shorts(a.edit, a.count, a.reveal),
+            "bites": lambda: cmd_bites(a.edit), "demo": demo}[a.cmd]()
 
 
 if __name__ == "__main__":
