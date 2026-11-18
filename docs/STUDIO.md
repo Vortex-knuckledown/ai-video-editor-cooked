@@ -91,11 +91,14 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
    mismatch). The studio mixes its own music round it; the fix belongs in the original. A draft of the report is in
    `docs/upstream-issue-sound-score.md`; posting it is the owner's call.
 
-## It ships as one install
+## Keeping it light
 
-This is to become software that someone installs once and connects to their own AI. So anything the studio uses has
-to be able to arrive with the installer and work on an ordinary laptop. Before adding a library, a model or code from
-another repository, it must pass all four:
+The studio is a Claude Code plugin with the cooked. app page, and stays one for now. Shipping it as software that
+someone installs once (a desktop app carrying Python, the renderer and ffmpeg, with a connection layer that is not
+tied to Claude) was raised and set aside on 2026-11-19: possible, separate work, not started.
+
+Even so, everything it uses has to run on an ordinary laptop. Before adding a library, a model or code from another
+repository, it should pass all four:
 
 1. **A licence that lets us ship it**: MIT, Apache 2.0, BSD or similar. Never GPL or AGPL code (MoneyPrinterV2,
    LosslessCut), and check a model's own licence apart from its code's.
