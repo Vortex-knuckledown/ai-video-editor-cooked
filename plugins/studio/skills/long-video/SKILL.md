@@ -84,8 +84,10 @@ session: say so on the page, write from what you know, use no statistic you are 
   time they are seen), or `{"stat": "$9.6B", "note": "of trade held up a day"}` (a number on a small card beside
   the footage). Use one on about a third of the footage shots. A full-frame `stat`, `title` or `quote` is for the few
   moments that should stop the viewer; it is drawn over the nearest footage, darkened, never on an empty ground.
-  - `clip` (`query`): moving footage of the thing itself. The search is typed into YouTube: 3 to 6 plain words for
-    what is in the frame ("bees on honeycomb macro", "tokyo crossing night timelapse"), never the line's idea.
+  - `clip` (`query`, `see`): moving footage of the thing itself. `query` is typed into YouTube: 3 to 6 plain words
+    that find the right video ("Steve Jobs iPhone 2007 keynote"). `see` is what must be in the frame, as one plain
+    description ("a man on stage holding up a phone"): the video's preview frames are scored against it and the
+    best moment is taken, so two shots can share a `query` and show different moments. Always give `see`.
   - `stock` (`query`): generic footage with no logo and nothing to credit ("city traffic at night", "hands typing
     laptop"): the mood and texture between the specific shots. It comes from Pexels when the user has connected a
     key; with none, the same words are searched on YouTube.
@@ -114,14 +116,8 @@ session: say so on the page, write from what you know, use no statistic you are 
   in a video (the picture sites are slow to a caller with no key): a clip for anything that moves or still exists
   today, a photo only for a named person, document, map or moment in the past. Every number, name and
   quote in a graphic is in research.md. A section opens on footage or a `title`, never on a `list`.
-- **Sound bites**: in a video about people, 2 to 4 scenes are the person's own words instead of the narrator's, the
-  way a documentary cuts to an interview. Such a scene has no narration of its own:
-  `{"id": "jobs-said", "section": "...", "say": "(bite)", "fallback_say": "<one narrated line that makes the same
-  point>", "bite": {"query": "Steve Jobs Stanford commencement speech 2005", "find": ["fired", "Apple", "best"],
-  "name": "Steve Jobs", "role": "Stanford, 2005"}, "shots": [{"kind": "clip", "query": "<footage for the fallback>"}]}`.
-  `query` finds the interview or talk on YouTube; `find` is 2 to 4 words they must say in the few seconds wanted.
-  Only words the person is on record saying (research.md has the source), never a bite for a claim you need them to
-  have made. The line before a bite sets it up; the line after picks up from it.
+- **Sound bites**: in a video about people, 2 to 4 scenes are the person's own words from an interview or talk
+  instead of the narrator's. How to write one: `${CLAUDE_SKILL_DIR}/references/bites.md`.
 - `look`: a dark ground and one accent that fit the topic. `captions`: leave out for the default.
 
 ```bash
@@ -185,8 +181,10 @@ says slow down), so `find` fetches pictures one at a time and waits when told to
 minutes more. Say "Finding N clips and M pictures" on the page. A picture still `MISSING` with "the picture sites":
 run `find` again once (it only fetches what is missing), then make what is left a clip or a graphic.
 
-`find` passes over a search result that carries a channel's logo or watermark (it tries the next two) and prints
-`LOGO <key>` when every one it tried has one: change that shot's words, or make it `stock` or a photo.
+`find` takes each clip's best-matching moment, passes over a result that carries a channel's logo or someone
+else's subtitles (it tries the next two) and prints `LOGO <key>` when every one it tried has one: change that
+shot's words, or make it `stock` or a photo. The first time it prints nothing about matching, run
+`python3 "$PY" "$L" tools` (two small helpers, once) and `find` again.
 
 Look at every sheet (Read the image). A shot is wrong when it does not show what its line says, shows a talking
 presenter or a title card, carries big burned-in text or a watermark across the frame, or is blurry. For each wrong
@@ -211,8 +209,9 @@ python3 "$PY" "$L" build EDIT
 python3 "$PY" "$T" render EDIT                      # EDIT/render.mp4; about 2 minutes of rendering a minute of video
 ```
 
-Look at 6 frames across the render (`ffmpeg -ss <t> -i EDIT/render.mp4 -frames:v 1 -vf scale=640:-2 EDIT/look-N.jpg`),
-one of them on a graphic: the captions are readable and clear of the graphics, no frame is empty.
+Then `python3 "$PY" "$L" qa EDIT`: it checks the render just after every cut, prints `FIX` for a black or empty
+frame, and writes `EDIT/sheets/qa-N.jpg` with every shot's first frame. Look at every qa sheet: each shot shows what
+its line says, captions are readable and clear of the graphics. Fix what is wrong and render again before the editor.
 
 ## 6. The editor, thumbnails, the kit
 

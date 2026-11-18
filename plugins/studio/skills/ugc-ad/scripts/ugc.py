@@ -149,7 +149,8 @@ def cmd_build(edit):
             a, z = float(p.get("in") or 0), float(p.get("out") or c["dur"])
             d = z - a
             # the person talks: their clip with its sound; a small push-in on every other part keeps the frame alive
-            S.video(c["file"], t, t + d, track="Clips", volume=1, x=W / 2, y=H / 2, w=W, h=H, **{"in": a},
+            # 30 ms of fade at both ends of every part: a cut inside speech never clicks
+            S.video(c["file"], t, t + d, track="Clips", volume=1, x=W / 2, y=H / 2, w=W, h=H, fade_in=0.03, fade_out=0.03, **{"in": a},
                     keys={"scale": [[0, 1.0 if k % 2 == 0 else 1.08, "linear"], [d, 1.05 if k % 2 == 0 else 1.12, "linear"]]})
             if p.get("show"):                   # the product over their voice
                 src = Path(str(p["show"])).expanduser()

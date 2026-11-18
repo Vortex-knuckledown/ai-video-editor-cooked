@@ -75,6 +75,10 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 
 ## Next, in order
 
+0. **From other open-source projects** (researched 2026-11-19). Adopted: frame matching with CLIP through fastembed
+   and subtitle reading with RapidOCR (both on onnxruntime, installed by `longvideo.py tools`); the audio fade at
+   cuts and the check of the render at every cut, after browser-use/video-use. Tried and dropped: Chatterbox (it
+   ran a 16 GB Mac out of memory). Not tried: WhisperX for who-is-speaking in sound bites (it needs torch).
 0. **Needs a real key to try** (built from each service's docs, never run): ElevenLabs voices in the picker, Pexels,
    Runway, Higgsfield, Google's video model. Higgsfield's text-only route and Google's response format are the
    least certain.
