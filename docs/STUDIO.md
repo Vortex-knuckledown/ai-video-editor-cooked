@@ -67,8 +67,8 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 
 ## Next, in order
 
-0. **Long video, after the first version.** Stock footage and pictures from Pexels with the user's free key (no
-   rate limits, no logos); your own recorded voiceover instead of the AI voice; a check that drops
+0. **Long video, after the second version** (branch `feature/quality`: the Kokoro voice, animated graphics, logo
+   rejection, fuller sound, Pexels). Left: Pexels tried with a real key; your own recorded voiceover; a check that drops
    found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
    timeline); full 3D is not planned.
 

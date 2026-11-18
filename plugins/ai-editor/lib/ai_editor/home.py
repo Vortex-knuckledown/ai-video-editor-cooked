@@ -3047,7 +3047,8 @@ def make_handler(token):
             brief = {"prompt": prompt, "minutes": max(1, min(10, int(b.get("minutes") or 3))), "aspect": aspect, "voice": True,
                      "text": b.get("text") is not False, "music": b.get("music") is not False,
                      "footage": {"youtube": b.get("youtube") is not False, "photos": b.get("photos") is not False},
-                     "own": os.path.expanduser(own) if own else None}
+                     "own": os.path.expanduser(own) if own else None,
+                     "voice_id": b.get("voice_id") if re.fullmatch(r"[ab][fm]_[a-z]{2,12}", str(b.get("voice_id") or "")) else "am_michael"}
             edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]))
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             self.placeholder(edit, aspect, prompt[:60])

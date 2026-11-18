@@ -23,7 +23,8 @@ Run the scripts with `python3` on Mac and Linux, `py` on Windows.
 
 ```
 brief.json -> research (sources) -> scenes.json (lines and their shots) -> the user approves the script
-  -> studio.py voice, words -> longvideo.py find (footage, pictures) -> sheet (look, replace the wrong ones)
+  -> studio.py voice, words -> at once: longvideo.py briefs + one clip-builder agent per animated graphic,
+     and longvideo.py find (footage, pictures) -> sheet (look, replace the wrong ones)
   -> sound -> build -> studio.py render -> the editor -> thumbs, kit -> notes -> fix the shots named -> again
 ```
 
@@ -69,6 +70,9 @@ session: say so on the page, write from what you know, use no statistic you are 
   viewer would want to see while hearing that line:
   - `clip` (`query`): moving footage of the thing itself. The search is typed into YouTube: 3 to 6 plain words for
     what is in the frame ("bees on honeycomb macro", "tokyo crossing night timelapse"), never the line's idea.
+  - `stock` (`query`): generic footage with no logo and nothing to credit ("city traffic at night", "hands typing
+    laptop"): the mood and texture between the specific shots. It comes from Pexels when the user has connected a
+    key; with none, the same words are searched on YouTube.
   - `photo` (`query`): a named person, place, object, painting or historical moment ("Marie Curie laboratory 1911").
   - `own` (`file`, `in`): a clip from the brief's `own` folder, when the line is about what it shows.
   - `stat` (`value`, `label`): one number that carries the line. `bars` (`title`, `items` [["name", number]],
@@ -76,6 +80,13 @@ session: say so on the page, write from what you know, use no statistic you are 
     words. `quote` (`text`, `by`): someone's own words. `source` (`title`, `by`, `highlight`): the paper or article
     a claim comes from, with the sentence that matters, in its own words. `title` (`text`, `sub`): a section's
     opening, or the close.
+  - `motion` (`visual`, `data`, `fallback`): an animated graphic built for this video by its own agent, with depth,
+    light and a moving camera: a map with a route drawn across it, a 3D bar chart, a timeline, a cutaway of how a
+    thing works, a ranked list of cards, a document with a line lighting up. `visual`: two or three sentences on
+    what is seen and how it moves. `data`: every number, name and label it may show (from research.md). `fallback`:
+    a whole simple graphic (`stat`, `bars`, `list`, `quote`, `title`) shown if the animation does not pass. One for
+    each section's main idea and one in the hook: 1 in every 20 to 30 seconds, 12 at most. It takes twice a
+    clip's share of its line (`"weight"` on any shot changes its share), and wants 4 seconds or more.
   Footage and pictures carry the video; graphics make the points (at most 6 in 10 shots). At most 20 `photo` shots
   in a video (the picture sites are slow to a caller with no key): a clip for anything that moves or still exists
   today, a photo only for a named person, document, map or moment in the past. Every number, name and
@@ -95,9 +106,16 @@ script the user has not approved.
 ## 3. Voice and words
 
 ```bash
-python3 "$PY" "$T" voice EDIT --fit <minutes x 60>     # ElevenLabs with a saved key, else the free macOS voice
+python3 "$PY" "$T" voice EDIT --fit <minutes x 60>     # ElevenLabs with a saved key, else Kokoro, else the macOS voice
 python3 "$PY" "$T" words EDIT
 ```
+
+The voice, best first: ElevenLabs (the user's key, billed to their plan); Kokoro, a free neural voice that runs on
+this computer (brief.json `voice_id` picks which: am_michael, am_fenrir, af_heart, bm_george, bf_emma); the macOS
+voice, which is robotic. The last line says which it used. On the macOS voice: run
+`python3 "$PY" "$T" kokoro-setup` (a 350 MB download, once; say so on the page) and `voice` again.
+Write every `say` line for the ear: numbers as they are spoken ("twenty-one thousand"), no brackets, a comma where
+a breath falls.
 
 `--fit` brings a voice that reads fast up to the length asked: it slows a little (never under 80%) and each line
 gets a short pause. A `FIT` line that says it is still more than a tenth short or long: add or cut that many words
@@ -107,7 +125,19 @@ Say which voice it used. The Mac voice: tell the user once that an ElevenLabs ke
 key") sounds like a person and bills their own ElevenLabs plan. Before the first ElevenLabs voice on a video over
 2 minutes, say that it will use about `words x 6` characters of their plan.
 
-## 4. Footage and pictures
+## 4. Animated graphics, footage and pictures
+
+Start the animated graphics first, since they take the longest, then find the footage while they build:
+
+```bash
+python3 "$PY" "$L" briefs EDIT         # EDIT/motion/<key>/brief.md for every motion shot
+```
+
+Launch one `ai-editor:clip-builder` agent per brief, all in one message, in the background, each given only the
+full path of its brief.md. Each returns `{"clip", "pass", "render", "what", "failing"}`. When they are back, look at
+every passed clip's `renders/sheet.png`: one that shows the wrong idea, reads as a slide, or leaves the frame empty
+gets one note to its agent (SendMessage) before the build. One that does not pass shows its `fallback` graphic;
+say which. No clip-builder agent in this session: say so once and go on, the fallbacks are drawn.
 
 ```bash
 python3 "$PY" "$L" find EDIT           # every clip and photo into EDIT/shots/, 4 at a time; about 10 s a clip
@@ -118,6 +148,9 @@ The free picture sites allow few pictures a minute to a caller with no key (Wiki
 says slow down), so `find` fetches pictures one at a time and waits when told to: about 5 s a picture, sometimes
 minutes more. Say "Finding N clips and M pictures" on the page. A picture still `MISSING` with "the picture sites":
 run `find` again once (it only fetches what is missing), then make what is left a clip or a graphic.
+
+`find` passes over a search result that carries a channel's logo or watermark (it tries the next two) and prints
+`LOGO <key>` when every one it tried has one: change that shot's words, or make it `stock` or a photo.
 
 Look at every sheet (Read the image). A shot is wrong when it does not show what its line says, shows a talking
 presenter or a title card, carries big burned-in text or a watermark across the frame, or is blurry. For each wrong
@@ -137,7 +170,7 @@ would be empty.
 ## 5. Sound, build, render
 
 ```bash
-python3 "$PY" "$L" sound EDIT [--mood linear]      # the voice, music under it, a tick on graphics, a soft whoosh on cuts
+python3 "$PY" "$L" sound EDIT [--mood linear]      # the voice, music under it, a sound on every cut and graphic
 python3 "$PY" "$L" build EDIT
 python3 "$PY" "$T" render EDIT                      # EDIT/render.mp4; about 2 minutes of rendering a minute of video
 ```
@@ -169,7 +202,9 @@ On `APPROVE` the video is done: `EDIT/render.mp4`.
 - Every fact said or shown has a source in research.md; the user's approval of the script is the second check.
 - A found clip is a few seconds, with its own sound off, under the user's narration, and credited in the kit. Never
   a whole video, never a clip as the point of the video.
-- Pictures come only from Wikimedia Commons and Openverse (free to reuse, credited in the kit).
+- Pictures come only from Wikimedia Commons, Openverse and Pexels (free to reuse, credited in the kit).
+- Pexels is connected by the user in their own Terminal, never in the chat:
+  `python3 "$PY" "$L" setkey` asks for the key (free, from pexels.com/api), checks it and saves it.
 - Nothing is uploaded or posted: the video and the kit stay on the user's computer.
 - Never paste or ask for an API key in the chat.
 
