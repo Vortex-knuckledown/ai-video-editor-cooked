@@ -295,6 +295,17 @@ body.dz #dropov{display:none!important}
 .shape{flex:1;display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--line);border-radius:14px;background:var(--panel);text-align:left}
 .shape.on{border:1.5px solid var(--ink)}
 .shape i{display:block;border:2px solid var(--t4);border-radius:4px}.shape.on i{border-color:var(--ink)}
+/* studio: the kinds of video on New video, one card each with a small drawing */
+.kinds{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.kind{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--panel);text-align:left;min-width:0}
+.kind.on{border:1.5px solid var(--ink);padding:11.5px}
+.kind .art{height:92px;border-radius:10px;background:var(--soft);display:flex;align-items:center;justify-content:center;color:var(--t3)}
+.kind.on .art{color:var(--ink)}
+.kind b{font-size:15px;line-height:20px}.kind .sub{font-size:13px;line-height:18px}
+.khow{display:flex;flex-direction:column;gap:10px;max-width:640px}
+.khow>div{display:flex;gap:14px;align-items:flex-start;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.khow i{font-style:normal;width:26px;height:26px;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;flex-shrink:0}
+@media (max-width:1280px){.kinds{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* B-roll (New video): Claude decides + one tile per library folder, ticked ones Claude can pull clips from */
 .bgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .btile{position:relative;min-width:0;display:flex;flex-direction:column;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);text-align:left;color:var(--ink)}
@@ -1266,16 +1277,16 @@ function vNew(){
     <div class="sec stick" style="margin-top:auto;padding:18px 24px 22px"><div class="between"><span class="sub" style="font-size:13px">${n?summary():'No clips picked yet'}</span><span class="muted">Step 1 of 2</span></div>
       <button class="go" id="next" ${n&&!nv.up.some(u=>!u.bad)?'':'disabled'} onclick="rgo('style')">Next: pick a style</button>
       <div class="muted faint" style="line-height:18px">Nothing starts until you pick a style.</div></div></div>`;
+  const kind=nvKind();
   return `<div class="col grow" style="gap:22px;min-width:0;padding:12px 14px 0">
-    <div><h1>New video</h1><p class="lede" style="margin-top:8px;font-size:16px;line-height:22px">Click the clips you want, in the order they play.</p></div>
+    <div><h1>New video</h1><p class="lede" style="margin-top:8px;font-size:16px;line-height:22px">What are you making?</p></div>
+    ${kindCards()}
+    ${kind!=='clips'?kindHow(kind):`<div><b style="font-size:16px">Your clips</b><div class="sub" style="font-size:14px;margin-top:2px">Click the clips you want, in the order they play.</div></div>
     <div class="between" style="align-items:center;flex-wrap:wrap"><div class="row" style="gap:8px;flex-wrap:wrap">${chips}</div><label class="choose">${FOLDER}Choose files...<input type="file" id="pickm" multiple accept="video/*,.mov,.mkv,.mp4" class="hide" onchange="chooseFiles(this.files);this.value=''"></label></div>
     ${reelRow()}
-    ${promptRow()}
-    ${likeRow()}
-    ${streamRow()}
     ${trashRow()}<div class="grid"><div class="droptile" id="droptile" onclick="$('#pickm').click()">${UP}<div style="font-weight:500;font-size:13px;line-height:17px">Drop files here</div><div class="muted" style="font-size:12px">or anywhere on this window</div></div>${ups}${vids.map(clipCard).join('')}</div>
     ${!vids.length&&!nv.up.length&&R?`<div class="muted">No clips here yet. Choose files or drop them in.</div>`:''}
-    <div class="row" style="gap:8px"><b style="font-weight:500;font-size:13px;white-space:nowrap;flex-shrink:0">${n} picked</b><span class="muted">Click a clip again to take it out. The numbers are the order they play.</span></div>
+    <div class="row" style="gap:8px"><b style="font-weight:500;font-size:13px;white-space:nowrap;flex-shrink:0">${n} picked</b><span class="muted">Click a clip again to take it out. The numbers are the order they play.</span></div>`}
   </div>${side}`;
 }
 const summary=()=>{const n=nv.sel.length;return `${n>1?(nv.join?`${n} clips joined`:`${n} separate videos`):'1 clip'}${total()?' · '+fmtT(total()):''} · ${aspectOf()==='9:16'?'Tall':'Wide'} ${aspectOf()}${nv.script?' · Script':''}`};
@@ -1506,13 +1517,30 @@ function reelSide(){
       <button class="go" id="make" ${ok?'':'disabled'} onclick="makeVideo()">Make my video</button>
       <div class="muted faint" style="line-height:18px">It opens in the editor, so you can change anything.</div></div></div>`;
 }
+// ---- studio: the kinds of video, as cards at the top of New video. "Edit my clips" is the original's own flow.
+const KART={
+  clips:'<rect x="22" y="12" width="22" height="40" rx="4"/><rect x="49" y="8" width="24" height="48" rx="4"/><rect x="78" y="12" width="22" height="40" rx="4"/><path d="M57 25v14l10-7z" fill="currentColor"/>',
+  prompt:'<rect x="10" y="14" width="44" height="36" rx="6"/><path d="M18 25h24M18 32h28M18 39h14"/><path d="M60 32h10m-4-4 4 4-4 4"/><rect x="76" y="12" width="34" height="40" rx="5"/><circle cx="93" cy="27" r="6"/><path d="M83 44l7-7 5 5 4-4 6 6"/>',
+  like:'<rect x="12" y="14" width="36" height="36" rx="5"/><path d="M26 25v14l10-7z"/><path d="M54 32h12m-4-4 4 4-4 4"/><rect x="72" y="14" width="36" height="36" rx="5" stroke-dasharray="4 3"/><path d="M90 23l2.4 6.6L99 32l-6.6 2.4L90 41l-2.4-6.6L81 32l6.6-2.4z" fill="currentColor" stroke="none"/>',
+  stream:'<path d="M8 40h64"/><path d="M12 40v-4M17 40v-7M22 40v-3M27 40v-18M32 40v-9M37 40v-4M42 40v-6M47 40v-22M52 40v-10M57 40v-4M62 40v-7M67 40v-3"/><rect x="23" y="18" width="13" height="26" rx="3" stroke-dasharray="3 3"/><rect x="43" y="14" width="13" height="30" rx="3" stroke-dasharray="3 3"/><path d="M76 32h8m-3-3 3 3-3 3"/><rect x="90" y="8" width="22" height="48" rx="4"/><path d="M95 44h12M97 49h8"/>'};
+const KINDS=[['clips','Edit my clips','Your own footage, cut and styled like a creator.'],['prompt','Create from a prompt','No footage needed. A fully animated video from a few sentences.'],
+  ['like','Make one like this','Paste a video you like. Yours comes out built the same way.'],['stream','Clip a stream','The best moments of a long stream or gameplay video, as shorts.']];
+const KHOW={prompt:['Say what the video is about, and pick the shape and length.','Claude writes the script in scenes and shows it to you first.','On your OK it animates every scene, and the video opens in the editor.'],
+  like:['Paste the video you like. Say what yours is about, or let Claude suggest topics.','Claude measures its length, pace, structure and look, then shows you a script.','Yours is animated from nothing: none of the video you pasted is reused.'],
+  stream:['Paste up to 5 streams or gameplay videos.','Claude finds the best moments and plays them for you, numbered. You pick.','Each pick becomes a short clip with captions and a title, one tab each in the editor.']};
+const nvKind=()=>nv.like?'like':nv.stream?'stream':nv.prompt?'prompt':'clips';
+function setKind(k){
+  const keep={prompt:nv.prompt,like:nv.like,stream:nv.stream}[k];nv.prompt=nv.like=nv.stream=null;
+  if(k==='prompt')nv.prompt=keep||{text:'',refs:'',length:30,voice:true,caption:true,music:true,msg:''};
+  if(k==='like')nv.like=keep||{link:'',topic:'',shape:'auto',match:true,voice:true,caption:true,music:true,msg:''};
+  if(k==='stream')nv.stream=keep||{links:'',count:3,length:'short',layout:'auto',captions:true,titles:true,style:'',msg:''};
+  if(k!=='clips')nv.reel=null;
+  render();
+}
+const kindCards=()=>`<div class="kinds" role="radiogroup" aria-label="What kind of video">${KINDS.map(([k,t,d])=>`<button class="kind ${nvKind()===k?'on':''}" role="radio" aria-checked="${nvKind()===k}" onclick="setKind('${k}')"><div class="art"><svg width="150" height="80" viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${KART[k]}</svg></div><div><b>${t}</b><div class="sub">${d}</div></div></button>`).join('')}</div>`;
+const kindHow=k=>`<div class="khow">${KHOW[k].map((t,i)=>`<div><i>${i+1}</i><span style="font-size:14px;line-height:20px;padding-top:3px">${t}</span></div>`).join('')}</div>`;
 // ---- studio: Create from a prompt (plugins/studio, the animated-video skill). A fully animated video, no footage:
 // a prompt, optional reference links for the look, the shape and length, and any of a voiceover, on-screen text and music.
-function promptRow(){
-  return `<div class="row" style="gap:8px;max-width:640px;align-items:center"><span class="muted" style="font-size:13px">No footage?</span>
-    <button class="btn quiet sm" onclick="nv.prompt=nv.prompt||{text:'',refs:'',length:30,voice:true,caption:true,music:true,msg:''};nv.reel=null;nv.stream=null;nv.like=null;render()">Create from a prompt</button>
-    <span class="muted faint" style="font-size:12px">A fully animated video with a voiceover, text and music.</span></div>`;
-}
 function promptSide(){
   const P=nv.prompt,tick=(k,t,s)=>`<button class="opt ${P[k]?'on':''}" onclick="nv.prompt.${k}=!nv.prompt.${k};render()"><div class="radio" style="border-radius:5px"></div><div class="grow"><b style="font-size:14px">${t}</b><div class="sub" style="font-size:13px;line-height:18px">${s}</div></div></button>`;
   const ok=P.text.trim().length>=8&&(P.voice||P.caption||P.music);
@@ -1542,11 +1570,6 @@ async function makeAnimated(){
 }
 // ---- studio: Make one like this (plugins/studio, the animated-video skill's like path). A video the user likes in, a new
 // animated video out with its length, pace, structure and look, on the user's own topic. Nothing of it is reused.
-function likeRow(){
-  return `<div class="row" style="gap:8px;max-width:640px;align-items:center"><span class="muted" style="font-size:13px">Saw one you like?</span>
-    <button class="btn quiet sm" onclick="nv.like=nv.like||{link:'',topic:'',shape:'auto',match:true,voice:true,caption:true,music:true,msg:''};nv.prompt=null;nv.stream=null;nv.reel=null;render()">Make one like this</button>
-    <span class="muted faint" style="font-size:12px">Paste a video. Yours comes out animated, with its pace and look.</span></div>`;
-}
 const likeOk=()=>{const P=nv.like;return !!P&&(/^https?:\/\/\S+/.test(P.link.trim())||/^[~\/].+\.(mp4|mov|mkv|webm)$/i.test(P.link.trim()))&&(P.match||P.voice||P.caption||P.music)};
 function likeSide(){
   const P=nv.like,tick=(k,t,d)=>`<button class="opt ${P[k]?'on':''}" onclick="nv.like.${k}=!nv.like.${k};render()"><div class="radio" style="border-radius:5px"></div><div class="grow"><b style="font-size:14px">${t}</b><div class="sub" style="font-size:13px;line-height:18px">${d}</div></div></button>`;
@@ -1575,11 +1598,6 @@ async function makeLike(){
 }
 // ---- studio: Clip a stream (plugins/studio, the stream-clips skill). Long streams or gameplay videos in, the best
 // moments out as short clips: YouTube's most replayed and the loudest reactions find them, the editor shows them all.
-function streamRow(){
-  return `<div class="row" style="gap:8px;max-width:640px;align-items:center"><span class="muted" style="font-size:13px">A long stream?</span>
-    <button class="btn quiet sm" onclick="nv.stream=nv.stream||{links:'',count:3,length:'short',layout:'auto',captions:true,titles:true,style:'',msg:''};nv.prompt=null;nv.reel=null;nv.like=null;render()">Clip a stream</button>
-    <span class="muted faint" style="font-size:12px">The best moments of a stream or gameplay video as short clips.</span></div>`;
-}
 const streamOk=()=>{const P=nv.stream;return !!P&&P.links.split(/\n+/).some(u=>/^https?:\/\/\S+/.test(u.trim())||/^[~\/].+\.(mp4|mov|mkv|webm)$/i.test(u.trim()))};
 function streamSide(){
   const P=nv.stream,pill=(k,v,t)=>`<button class="pill ${P[k]===v?'on':''}" onclick="nv.stream.${k}=${JSON.stringify(v).replace(/"/g,"'")};render()">${t}</button>`;
@@ -2302,15 +2320,17 @@ function vStat(v){
   return {txt:DOING[ph]||'Being made',frac:null,btn:see};
 }
 function vCard(v){
-  const s=vStat(v),fn=rv==='videos'&&ui.fold.videos?'':(fd('videos').folders.find(f=>f.id===inFold('videos',v.dir))||{}).name,meta=[fn,v.stage==='edit'?'Full edit':'Cut',v.wide?'16:9':v.round?(v.draft||`draft ${v.round}`):'',v.exported?exAgo(v.exported):ago(v.updated)].filter(Boolean).join(' · ');
+  const s=vStat(v),fn=rv==='videos'&&ui.fold.videos?'':(fd('videos').folders.find(f=>f.id===inFold('videos',v.dir))||{}).name,meta=[fn,v.stage==='edit'?'Full edit':'Cut',v.clips?`${v.clips} clip${v.clips>1?'s':''}`:'',v.wide?'16:9':v.round?(v.draft||`draft ${v.round}`):'',v.exported?exAgo(v.exported):ago(v.updated)].filter(Boolean).join(' · ');
   return `<div class="vc" ${goAttrs(v)} ${dragAttrs('videos',v.dir,v.name,v.thumb)}><div class="vi">${picArea(v)}
-    <div class="tx"><div style="min-width:0">${vName(v)}<div class="mt">${meta}</div></div><div class="st"><div class="stt ${s.ok?'ok':''}" title="${esc(s.title||'')}">${s.txt}</div>${s.btn}</div></div>
+    <div class="tx"><div style="min-width:0">${vName(v)}<div class="mt">${meta}</div></div><div class="st"><div class="stt ${s.ok?'ok':''}" title="${esc(s.title||'')}">${s.txt}</div>${s.btn}${v.clips?`<button class="b2" onclick="event.stopPropagation();exportClips(${J(v.dir)})">Export all</button>`:''}</div></div>
     <div class="bar ${s.ok?'ok':s.frac==null?'indet':''}">${s.ok?'':`<i style="width:${s.frac==null?40:Math.round(s.frac*100)}%"></i>`}</div></div></div>`;
 }
 // the picture area every video card and tile shares: one height; wide fills it, tall shows whole over a blurred copy
 const picArea=v=>`<div class="pa ${v.wide?'':'tall'}" style="${v.thumb?`--u:url('${esc(v.thumb)}')`:''}">${vMenu(v)}</div>`;
 // how many cards fit across the page view (the same rule as the grid's auto-fill columns: 260 px each, 12 px apart)
 const perRow=()=>Math.max(1,Math.floor((cw()+12)/272));
+// studio: Export all. Every finished clip of a Clip a stream video into one folder, named by its title, shown in Finder.
+async function exportClips(dir){ui.cmenu=null;const r=await post('/studio/export',{dir});toast(r._ok?`${r.count} clip${r.count>1?'s':''} saved. The folder is open in Finder.`:(r.msg||'The export did not run.'));await load();render()}
 function cardRows(vs){return `<div class="vcs">${vs.map(vCard).join('')}</div>`}
 // a finished video as a tile: the card's picture area, its name and when
 const exAgo=t=>'Exported '+(ago(t)==='today'?new Date(t*1000).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}):ago(t));   // review.py Export
@@ -2660,7 +2680,7 @@ function subMenu(kind,item,name){
   return `<button class="hasub ${ui.sub?'on':''}" onclick="ui.sub=!ui.sub;render()">${ic('folder',16)}<span class="lb">Move to folder</span>${ic('chev',14,2)}</button>${ui.sub?`<div class="cmenu sub">${kind==='styles'?'<div class="mh">Style folders</div>':''}${F.folders.map(f=>`<button onclick="ui.cmenu=null;moveTo('${kind}',${J(item)},${J(f.id)},${J(name)})">${ic(kind==='styles'?'styles':'folder',16)}<span class="lb">${esc(f.name)}</span>${f.id===cur?ic('check',14,2.4):`<span class="n">${n(f.id)}</span>`}</button>`).join('')}${F.folders.length?'<hr>':''}<button onclick="ui.cmenu=null;${nf}">${ic('plus',16)}<span class="lb">New folder</span></button>${cf?`<button onclick="ui.cmenu=null;moveTo('${kind}',${J(item)},null,${J(name)})">${ic('minus',16)}<span class="lb">Take out of ${esc(cf.name)}</span></button>`:''}</div>`:''}`;
 }
 const vMenu=v=>dotsBtn('v:'+v.dir,'More for this video')+cMenu('v:'+v.dir,[['Rename',`renVid(${J(v.dir)},${J(v.name)})`,'pencil'],['Remove from this list',`hideEdit(${J(v.dir)})`,'minus'],ui.cmenu==='v:'+v.dir&&subMenu('videos',v.dir,v.name),
-  v.status==='done'&&v.media&&['Download',`location.href=${J(v.media)}`,'down'],v.exported&&['Show export in Finder',`post('/reveal',{export:${J(v.dir)}})`,'folder'],'hr',['Move to Trash',`askTrash(${J(v.dir)})`,'trash']]);
+  v.status==='done'&&v.media&&['Download',`location.href=${J(v.media)}`,'down'],v.clips&&[`Export all ${v.clips} clip${v.clips>1?'s':''}`,`exportClips(${J(v.dir)})`,'down'],v.exported&&['Show export in Finder',`post('/reveal',{export:${J(v.dir)}})`,'folder'],'hr',['Move to Trash',`askTrash(${J(v.dir)})`,'trash']]);
 // ---- folders (Your videos in the sidebar, My styles on its page): folders.json through /folder/*
 const fd=k=>(L&&L.folders||{})[k]||{folders:[],items:{}};
 const inFold=(k,item)=>{const F=fd(k),f=F.items[item];return F.folders.some(x=>x.id===f)?f:null};

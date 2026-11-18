@@ -60,7 +60,9 @@ login for this download" (recommended) / "Stop", and run again with `--cookies-f
 - **Structure**: the same number of scenes. An animated video morphs more than it cuts, so count the scenes from the
   frames and the sentences (about one a sentence), not from the cuts alone. The same kind of hook (a question, a
   number, a claim) and the same kind of close (a payoff, a call to action), on the new topic.
-- **Pace**: its words a second set each `say` line's length.
+- **Pace and length**: write about as many words as it says (like.md's word count, within 10%), spread over the
+  scenes the way it spreads them. `voice` then fits the result to its length: the voice slows a little (never under
+  80%) and every line gets the same air. A `FIT` line says how many words to add or cut: do it, then `voice` again.
 - **Look**: scenes.json `look` as an object `{"ground", "ink", "accent", "font"}` from the colours and type you see
   in the sheet; `captions` like its captions (position, case, size). The `visual` of each scene in the same manner
   (flat illustration, UI mock-ups, charts, big type), never its own drawings, logos or characters.

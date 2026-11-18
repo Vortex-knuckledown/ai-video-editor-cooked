@@ -290,9 +290,9 @@ def tts_eleven(text, out, voice, key):
     mp3.unlink()
 
 
-def tts_mac(text, out, voice):
+def tts_mac(text, out, voice, rate=None):
     aiff = Path(out).with_suffix(".aiff")
-    subprocess.run(["say", "-v", voice, "-o", str(aiff), text], check=True)
+    subprocess.run(["say", "-v", voice] + (["-r", str(rate)] if rate else []) + ["-o", str(aiff), text], check=True)
     to_wav(aiff, out)
     aiff.unlink()
 
@@ -322,8 +322,22 @@ def engine_for(want):
     sys.exit("No voice engine here: no ElevenLabs key and no macOS `say`. Use --engine none (on-screen words only).")
 
 
-def cmd_voice(edit, engine="auto", voice=None):
-    """Each scene's voice, then timing.json: {"scenes": [{"id", "start", "dur", "vo"?}], "length", "engine"}."""
+MAC_RATE, SLOWEST, MAX_AIR_S = 175, 0.8, 1.5     # say's words a minute; never slower than 80%; air after a line
+
+
+def fit_plan(voiced, n, target, share=0.85):
+    """How to reach `target` seconds from `voiced` seconds of speech in n scenes: (speed, air after each line).
+    The voice slows first (to SLOWEST at most, it sounds drugged below), then every line gets the same air."""
+    if not target or not voiced or not n:
+        return 1.0, 0.0
+    speed = max(SLOWEST, min(1.0, voiced / (target * share)))
+    base = LEAD_S + voiced / speed + n * TAIL_S
+    return round(speed, 3), round(max(0.0, min(MAX_AIR_S, (target - base) / n)), 3)
+
+
+def cmd_voice(edit, engine="auto", voice=None, fit=None):
+    """Each scene's voice, then timing.json: {"scenes": [{"id", "start", "dur", "vo"?}], "length", "engine"}.
+    fit: the length to reach (seconds). Default: the liked video's, when brief.json has `like`."""
     edit = Path(edit)
     errs = check_scenes(edit)
     if errs:
@@ -331,23 +345,48 @@ def cmd_voice(edit, engine="auto", voice=None):
     b, scenes = brief_of(edit), jload(edit / "scenes.json")["scenes"]
     eng, key = engine_for(engine if b["voice"] else "none")
     (edit / "audio").mkdir(exist_ok=True)
+    like = jload(edit / "like" / "like.json", {}) if b.get("like") else {}
+    if fit is None and like:
+        fit = float(b.get("length") or like.get("length") or 0)
+
+    def speak(rate):
+        out_d = []
+        for s in scenes:
+            out = edit / "audio" / f"vo-{s['id']}.wav"
+            text = str(s["say"]).strip()
+            stamp = edit / "audio" / f"vo-{s['id']}.txt"
+            want = f"{eng}|{voice}|{text}" + (f"|r{rate}" if rate else "")
+            if not out.exists() or (stamp.read_text(encoding="utf-8") if stamp.exists() else "") != want:
+                if eng == "eleven":
+                    tts_eleven(text, out, voice or DEFAULT_VOICE, key)
+                else:
+                    tts_mac(text, out, voice or MAC_VOICE, rate)
+                stamp.write_text(want, encoding="utf-8")
+            out_d.append(duration(out))
+        return out_d
+
+    speed, air, vds = 1.0, 0.0, []
+    if eng != "none":
+        vds = speak(None)
+        speed, air = fit_plan(sum(vds), len(scenes), fit, like.get("speech_share") or 0.85)
+        if eng == "mac" and speed < 0.97:      # ElevenLabs is paid by the character: one pass, air only
+            want = sum(vds) / speed
+            rate = round(MAC_RATE * speed)
+            vds = speak(rate)
+            if abs(sum(vds) - want) > 0.05 * want:        # say's own pace differs a voice to a voice: one correction
+                rate = max(round(MAC_RATE * SLOWEST * 0.9), round(rate * sum(vds) / want))
+                vds = speak(rate)
+        elif speed < 0.97:
+            speed = 1.0
+        if fit:
+            air = round(max(0.0, min(MAX_AIR_S, (fit - LEAD_S - sum(vds) - len(scenes) * TAIL_S) / len(scenes))), 3)
     t, rows = 0.0, []
     for i, s in enumerate(scenes):
         row = {"id": s["id"], "start": round(t, 3)}
         if eng != "none":
-            out = edit / "audio" / f"vo-{s['id']}.wav"
-            text = str(s["say"]).strip()
-            stamp = edit / "audio" / f"vo-{s['id']}.txt"
-            if not out.exists() or (stamp.read_text(encoding="utf-8") if stamp.exists() else "") != f"{eng}|{voice}|{text}":
-                if eng == "eleven":
-                    tts_eleven(text, out, voice or DEFAULT_VOICE, key)
-                else:
-                    tts_mac(text, out, voice or MAC_VOICE)
-                stamp.write_text(f"{eng}|{voice}|{text}", encoding="utf-8")
             lead = LEAD_S if i == 0 else 0.0
-            vd = duration(out)
-            row.update(vo=str(out.relative_to(edit)), vo_at=round(t + lead, 3), vo_dur=round(vd, 3))
-            dur = max(MIN_SCENE_S, lead + vd + TAIL_S)
+            row.update(vo=f"audio/vo-{s['id']}.wav", vo_at=round(t + lead, 3), vo_dur=round(vds[i], 3))
+            dur = max(MIN_SCENE_S, lead + vds[i] + TAIL_S + air)
         else:
             dur = estimate(s, b)
         row["dur"] = round(dur, 3)
@@ -355,12 +394,21 @@ def cmd_voice(edit, engine="auto", voice=None):
         t += dur
     tm = {"engine": eng, "voice": voice or (DEFAULT_VOICE if eng == "eleven" else MAC_VOICE if eng == "mac" else None),
           "length": round(t, 3), "scenes": rows}
+    if fit and eng != "none":
+        tm["fit"] = {"target": round(fit, 1), "speed": speed, "air": air}
     jsave(edit / "timing.json", tm)
     if eng != "none":
         join_voice(edit, tm)
     for r in rows:
         print(f"{r['id']:<24} {r['start']:6.2f}s +{r['dur']:.2f}s" + (f"  voice {r['vo_dur']:.2f}s" if r.get("vo") else ""))
     print(f"{len(rows)} scenes, {t:.1f} s, voice: {eng}" + (" (the free Mac voice; an ElevenLabs key sounds more natural)" if eng == "mac" else ""))
+    if fit and eng != "none":
+        print(f"fit   {t:.1f} s for {fit:.0f} s: the voice at {round(100 * speed)}% speed, {air:.2f} s of air after each line")
+        words = sum(len(words_in(s.get("say"))) for s in scenes)
+        if t < 0.9 * fit:
+            print(f"FIT   {fit - t:.0f} s short: add about {round((fit - t) * words / max(1.0, sum(vds)))} words to the say lines, then voice again")
+        elif t > 1.1 * fit:
+            print(f"FIT   {t - fit:.0f} s long: cut about {round((t - fit) * words / max(1.0, sum(vds)))} words from the say lines, then voice again")
     return 0
 
 
@@ -661,6 +709,10 @@ def cmd_stills(edit):
 
 # ---------------------------------------------------------------- self-check
 def demo():
+    # fit: slow the voice first (never under 80%), then the same air after every line, capped
+    assert fit_plan(30.0, 8, 48.0) == (0.8, round((48 - 0.15 - 37.5 - 8 * 0.35) / 8, 3)), fit_plan(30.0, 8, 48.0)
+    assert fit_plan(41.0, 8, 48.0)[0] == 1.0 and fit_plan(10.0, 4, 60.0) == (0.8, MAX_AIR_S)
+    assert fit_plan(30.0, 8, 0) == (1.0, 0.0) and fit_plan(60.0, 8, 48.0) == (1.0, 0.0)
     # make one like this: music under the voice, its hook
     ws = [{"text": "Did", "start": 0.0, "end": 0.3}, {"text": "you", "start": 0.3, "end": 0.5}, {"text": "know?", "start": 0.5, "end": 0.9},
           {"text": "Bees", "start": 3.0, "end": 3.4}]
@@ -715,6 +767,7 @@ def main(argv):
     v.add_argument("edit")
     v.add_argument("--engine", default="auto", choices=("auto", "eleven", "mac", "none"))
     v.add_argument("--voice")
+    v.add_argument("--fit", type=float, help="seconds to reach: the voice slows a little, then each line gets air")
     m = sub.add_parser("music")
     m.add_argument("edit")
     m.add_argument("--mood", default="linear")
@@ -733,7 +786,7 @@ def main(argv):
         return demo()
     if a.cmd == "like":
         return cmd_like(a.edit, a.src, a.cookies_from_browser)
-    return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice),
+    return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice, a.fit),
             "words": lambda: cmd_words(a.edit), "briefs": lambda: cmd_briefs(a.edit),
             "music": lambda: cmd_music(a.edit, a.mood), "build": lambda: cmd_build(a.edit),
             "render": lambda: cmd_render(a.edit, a.draft), "stills": lambda: cmd_stills(a.edit)}[a.cmd]()

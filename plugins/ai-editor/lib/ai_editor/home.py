@@ -103,6 +103,27 @@ UPDATE = Path(__file__).resolve().parents[2] / "skills" / "update" / "scripts" /
 TRANSCRIBE = Path(__file__).resolve().parents[2] / "skills" / "cut" / "scripts" / "transcribe.py"
 EDIT_PY = Path(__file__).resolve().parents[2] / "skills" / "style-edit" / "scripts" / "edit.py"
 BEAT_S = 6
+# studio: Export all. The studio plugin sits beside this one in the repo, or in Claude Code's plugin cache.
+def studio_script(skill, name):
+    here = Path(__file__).resolve()
+    for f in [here.parents[3] / "studio" / "skills" / skill / "scripts" / name,
+              *sorted(here.parents[3].parent.glob(f"studio/*/skills/{skill}/scripts/{name}"), reverse=True),
+              *sorted(here.parents[4].glob(f"studio/*/skills/{skill}/scripts/{name}"), reverse=True)]:
+        if f.is_file():
+            return f
+    return None
+
+
+def stream_clips(edit):
+    """How many of a Clip a stream video's clips are finished (rendered in the gaming look or in a style)."""
+    edit = Path(edit)
+    try:
+        return sum(1 for c in (edit / "clips").glob("clip*")
+                   if (c / "render.mp4").is_file() or (edit / "styled" / c.name / "render.mp4").is_file())
+    except OSError:
+        return 0
+
+
 JOBS = ("teardown", "skill", "video", "modal", "modal-test", "setup", "style-change", "update", "skill-change", "skill-new", "animated", "streamclips")   # studio: "animated" is Create from a prompt, "streamclips" Clip a stream
 TAKE = ("captions", "pace", "graphics", "sound")          # the page's parts; editplan.py --take names
 # The page's "graphics" box is her visuals as a whole: what she shows, how it moves in and where it sits.
@@ -2167,6 +2188,7 @@ def make_handler(token):
                 for v in vids:
                     v["phase"] = phase(v)
                     v["exported"] = max((f.stat().st_mtime for f in (Path(v["dir"]) / "exports").glob("*.mp4")), default=None)   # review.py Export
+                    v["clips"] = stream_clips(v["dir"])   # studio: a Clip a stream video's finished clips, for Export all
                 for v, m in zip(vids, ms):
                     a = (raw.get(v["dir"]) or {}).get("args", {}).get("aspect")
                     v["duration"] = m.get("duration") if v["status"] in ("ready", "done") else None
@@ -2391,6 +2413,17 @@ def make_handler(token):
                     return self.send(400, {})
                 subprocess.Popen(library.reveal_cmd(p), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return self.send(200, {})
+            if path == "/studio/export":   # studio: Export all. Every finished clip of a stream into <edit>/exports/, named by its title
+                d = Path(str(body.get("dir") or "")).resolve()
+                t = studio_script("stream-clips", "streamclips.py")
+                if d not in library.edit_dirs() or not t or not stream_clips(d):
+                    return self.send(400, {"msg": "This video has no finished clips to export yet."})
+                r = subprocess.run([sys.executable, str(t), "export", str(d)], capture_output=True, text=True, timeout=300)
+                m = re.search(r"EXPORTED (\d+) to (.+)", r.stdout or "")
+                if r.returncode or not m:
+                    return self.send(500, {"msg": ((r.stderr or r.stdout or "").strip().splitlines() or ["The export did not run."])[-1][:200]})
+                subprocess.Popen(library.reveal_cmd(Path(m.group(2).strip())), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return self.send(200, {"count": int(m.group(1)), "to": m.group(2).strip()})
             if path == "/clean":   # the page asks first; without yes it only counts
                 fs, n = library.clean(yes=body.get("yes") is True)
                 return self.send(200, {"files": len(fs), "bytes": n, "deleted": body.get("yes") is True})

@@ -67,7 +67,9 @@ python3 "$PY" "$T" moments EDIT --min <min> --max <max> --top <2 x count, at lea
 Every second is scored from what the video has: the most replayed, the chat's surges (messages a second against the
 minutes round it, laughing, "W" and "no way" counting double, moved 4 s earlier because chat reacts late) and how
 much louder it is than the two minutes round it (a shout, a crowd, an explosion). With all three: 45%, 30%, 25%;
-without chat: 60% and 40%; without the most replayed: chat 55%, sound 45%. The first minute is never a moment just because everyone starts there. The peaks
+without chat: 60% and 40%; without the most replayed: chat 55%, sound 45%. The first minute is never a moment just because everyone starts there. With more than one
+video the moments are ranked by how far each stands out in its own video (a score only compares inside one video),
+every video keeps its best moment and none takes over 60% of the places. The peaks
 become moments, with most of the clip before the peak (the build-up) and the rest after (the payoff). Only those parts
 are downloaded (1080p at most) and transcribed. It takes about 1 to 3 minutes; say so on the page.
 
@@ -142,7 +144,9 @@ On notes (`SEND`): the note's tab names the clip (`alt` "Clip 2" is clip2, no al
 - The title: `build ... --title "<new>"`; captions off or on: `build` with or without `--no-captions`; then render.
 - The layout: `layout ... --mode facecam|follow|fit`, then build and render.
 - A different moment: `make EDIT <moment id> --number <N>`, then the rest for that clip.
-Then `round` and `alt` again for every clip, and `wait`. On `APPROVE` the clips are done: `EDIT/clips/clip*/render.mp4`.
+Then `round` and `alt` again for every clip, and `wait`. On `APPROVE` the clips are done: run
+`python3 "$PY" "$T" export EDIT` (every finished clip into `EDIT/exports/`, numbered and named by its hook title) and
+say where they are. The user can do the same any time with Export all on the video's card in Your videos.
 
 ## If a script stops
 
