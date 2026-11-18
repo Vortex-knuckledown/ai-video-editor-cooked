@@ -334,6 +334,22 @@ def tts_kokoro(text, out, voice, speed=1.0):
     raw.unlink()
 
 
+KOKORO_VOICES = ["am_michael", "am_fenrir", "am_adam", "am_echo", "am_eric", "am_liam", "am_onyx", "am_puck",
+                 "af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky", "af_nova", "af_river", "af_jessica", "af_kore", "af_alloy", "af_aoede",
+                 "bm_george", "bm_daniel", "bm_fable", "bm_lewis", "bf_emma", "bf_alice", "bf_isabella", "bf_lily"]
+PREVIEW_LINE = "This is how I sound when I tell your story. One fact at a time, at a pace you can follow."
+
+
+def cmd_preview(engine, voice, out):
+    """A few seconds of one voice as a WAV, for the page's voice picker."""
+    if engine != "kokoro" or voice not in KOKORO_VOICES or not kokoro_ready():
+        sys.exit("ERROR: no such voice here.")
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    tts_kokoro(PREVIEW_LINE, out, voice)
+    print(out)
+    return 0
+
+
 KOKORO_FILES = {"kokoro-v1.0.onnx": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx",
                 "voices-v1.0.bin": "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"}
 
@@ -405,9 +421,19 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
     if errs:
         sys.exit("ERROR: scenes.json: " + "; ".join(errs))
     b, scenes = brief_of(edit), jload(edit / "scenes.json")["scenes"]
-    eng, key = engine_for(engine if b["voice"] else "none")
+    want = str(b.get("voice_engine") or "")       # the page's voice picker: "kokoro" or "eleven" with brief voice_id
+    if engine == "auto" and want in ("kokoro", "eleven"):
+        try:
+            eng, key = engine_for(want if b["voice"] else "none")
+        except SystemExit:                         # that engine is not there any more (a removed key): the best there is
+            eng, key = engine_for("auto" if b["voice"] else "none")
+    else:
+        eng, key = engine_for(engine if b["voice"] else "none")
     (edit / "audio").mkdir(exist_ok=True)
-    voice = voice or (str(b.get("voice_id") or "").strip() or None if eng == "kokoro" else None)
+    if not voice and str(b.get("voice_id") or "").strip():
+        vid = str(b["voice_id"]).strip()
+        if (eng == "kokoro" and vid in KOKORO_VOICES) or (eng == "eleven" and want == "eleven" and re.fullmatch(r"[A-Za-z0-9]{12,40}", vid)):
+            voice = vid
     like = jload(edit / "like" / "like.json", {}) if b.get("like") else {}
     if fit is None and like:
         fit = float(b.get("length") or like.get("length") or 0)
@@ -835,6 +861,10 @@ def main(argv):
     sub.add_parser("root")
     sub.add_parser("demo")
     sub.add_parser("kokoro-setup")
+    pv = sub.add_parser("preview")
+    pv.add_argument("--engine", default="kokoro")
+    pv.add_argument("--voice", required=True)
+    pv.add_argument("--out", required=True)
     for name in ("check-scenes", "words", "briefs", "build", "stills"):
         sub.add_parser(name).add_argument("edit")
     v = sub.add_parser("voice")
@@ -862,6 +892,8 @@ def main(argv):
         return cmd_like(a.edit, a.src, a.cookies_from_browser)
     if a.cmd == "kokoro-setup":
         return cmd_kokoro_setup()
+    if a.cmd == "preview":
+        return cmd_preview(a.engine, a.voice, a.out)
     return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice, a.fit),
             "words": lambda: cmd_words(a.edit), "briefs": lambda: cmd_briefs(a.edit),
             "music": lambda: cmd_music(a.edit, a.mood), "build": lambda: cmd_build(a.edit),

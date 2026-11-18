@@ -24,6 +24,9 @@ shows at a glance which lines are ours:
   Claude is only listening for the next video.
 - `links.py`: a download that times out on a network with broken IPv6 runs once more on IPv4.
 - `askhook.py`: a hidden Claude's question waits for the next page that opens instead of its unseen Terminal.
+- `keys.py`: three more key names (`pexels`, `runway`, `higgsfield`) and their free checks, for the studio's connections.
+- `home.py` and `home.html` also carry the voice picker (`/studio/voices`, `/studio/voice/preview`) and the
+  Connections card in Settings.
 
 ## New video: the five ways in
 
@@ -68,8 +71,10 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 
 ## Next, in order
 
-0. **Long video, after the second version.** Pexels tried with a real key; your own recorded voiceover; found
-   clips with burned-in subtitles; a check that drops
+0. **Needs a real key to try** (built from each service's docs, never run): ElevenLabs voices in the picker, Pexels,
+   Runway, Higgsfield, Google's video model. Higgsfield's text-only route and Google's response format are the
+   least certain.
+0. **Long video, still open.** Found clips with burned-in subtitles are not detected (only logos); a check that drops
    found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
    timeline); full 3D is not planned.
 

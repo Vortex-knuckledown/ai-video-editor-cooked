@@ -2,6 +2,13 @@
 
 What changed for every user, newest first.
 
+## Unreleased (studio)
+- Pick your narrator and hear it first. Long video, Create from a prompt and Make one like this have a Narrator picker: 27 free voices (American and British, men and women), each played with a click. With an ElevenLabs key saved, the voices in your ElevenLabs account are listed too and the one you pick is used.
+- Settings has Connections for new videos: Pexels (free stock footage and pictures), Runway and Higgsfield (AI-generated shots). Each key is checked with the service before it is saved. Google's video model uses the Gemini key already there.
+- AI-generated shots in Long video, off unless you tick them: up to 6 shots a video made on your own Runway, Higgsfield or Google account, for what nobody filmed. Claude tells you how many and about how much, and asks, before any is made. A shot that fails falls back to footage. Not yet run with a real key for any of the three.
+- Your own voiceover in Long video: give it a recording and the video is cut to your words. No script is written and no AI voice is used.
+- The ElevenLabs key instructions in Settings now ask for Text to Speech and Voices as well, so the key can narrate.
+
 ## studio 0.8.0 (this fork, 2026-11-18)
 - A natural voice, free. Videos are narrated by Kokoro, an open neural voice that runs on your computer, instead of the robotic macOS voice. Long video's panel has a Narrator choice of five voices. With an ElevenLabs key saved, ElevenLabs is still used first. `studio.py kokoro-setup` installs it (a 350 MB download, once).
 - Long video has animated graphics. Up to 12 shots a video are built for that video by their own animation agent: a globe with a route drawn across it, a 3D bar chart, a timeline, a map. Each has a simple graphic to fall back on if it does not pass its checks.
