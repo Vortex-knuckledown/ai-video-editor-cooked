@@ -2,6 +2,13 @@
 
 What changed for every user, newest first.
 
+## studio 0.7.0 (this fork, 2026-11-18)
+- A long video comes out the length you asked for: the voice slows a little and each line gets a short pause until it matches.
+- Pictures are fetched one at a time and wait when a picture site says slow down, and a video has at most 20 of them. A shot that cannot be found shows the nearest picture again, never an empty frame.
+- New video has a fifth card, Long video: a 2 to 10 minute video from one prompt. Claude researches the topic and keeps the source of every fact, writes a script for you to approve, records an AI voice, and gives every spoken line a new shot every 2 to 4 seconds: a few seconds of footage found on YouTube, free pictures from Wikimedia Commons and Openverse, your own clips, and graphics made from the script's own numbers (a big stat, a bar chart, a list, a quote, a highlighted source, a title). Captions on every word, music and a quiet sound on the cuts.
+- A long video comes with three thumbnail options and a publishing kit: three titles, a description with chapters, the sources, a credit line for every clip and picture, and tags.
+- Footage from YouTube can be switched off for a video, which then uses only free pictures, your own clips and graphics.
+
 ## studio 0.6.0 (this fork, 2026-11-18)
 - Subtitles in other languages for any finished video. A video's menu in Your videos has "Subtitles in other languages": pick up to 5 languages, Claude translates what is said, and a subtitle file (.srt) for each language is saved beside the exported video, named like it, with one in the language spoken. The video itself does not change.
 - Export all also saves a cover image for each clip: its sharpest, best-lit frame with the hook title on it.

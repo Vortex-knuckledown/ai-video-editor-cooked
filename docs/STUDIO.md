@@ -9,14 +9,14 @@ adds new kinds of video in a plugin of its own, `plugins/studio`. Nothing is pus
 |---|---|---|
 | `plugins/ai-editor` | the original | Edits your own footage: the cut, the styled edit, the editor window, b-roll reels, product videos, talking-head clips |
 | `plugins/creator-teardown` | the original | Measures a creator's style from their videos |
-| `plugins/studio` | this fork | New videos that do not start from your own footage: Create from a prompt, Make one like this, Clip a stream |
+| `plugins/studio` | this fork | New videos that do not start from your own footage: Create from a prompt, Long video, Make one like this, Clip a stream |
 
 The studio calls the editor's code (its renderer, transcriber, music, face finder, downloader) and never changes it.
 The few lines added inside the original are marked `studio:` or `fork:` in the code, so a merge from the original
 shows at a glance which lines are ours:
 
 - `home.py` and `home.html`: the cards for the kinds of video on New video, their side panels and their jobs
-  (`animated`, `streamclips`, `subtitles`); Export all on a stream video's card (`/studio/export`); the subtitles
+  (`animated`, `streamclips`, `subtitles`, `longvideo`); Export all on a stream video's card (`/studio/export`); the subtitles
   dialog in a video's menu.
 - `start/references/home.md`: which skill takes each new job.
 - `launcher.py` and `review.py`: Claude runs hidden in the background (no Terminal windows); Show Claude reveals it.
@@ -25,9 +25,13 @@ shows at a glance which lines are ours:
 - `links.py`: a download that times out on a network with broken IPv6 runs once more on IPv4.
 - `askhook.py`: a hidden Claude's question waits for the next page that opens instead of its unseen Terminal.
 
-## New video: the four ways in
+## New video: the five ways in
 
-New video opens on four cards, one for each, with a small drawing; picking one shows its options on the right.
+New video opens on five cards, one for each, with a small drawing; picking one shows its options on the right.
+The fifth, **Long video** (studio 0.7): a 2 to 10 minute video from one prompt.
+Claude researches it with sources and shows you the script. On your OK it records an AI voice and gives every line a
+new shot every few seconds: seconds of footage found on YouTube, free pictures, your own clips, and graphics built
+from the script's numbers. It ends in the editor with three thumbnails and a publishing kit.
 
 1. **Your clips** (the original): pick or drop your footage, pick a style, Make my video.
 2. **Create from a prompt** (studio 0.1): type what the video is about, optionally paste videos whose look you like.
@@ -54,6 +58,7 @@ New video opens on four cards, one for each, with a small drawing; picking one s
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.7.0 | Long video: a 2 to 10 minute video from one prompt, with thumbnails and a publishing kit (released 2026-11-18, tag `studio-v0.7.0`) |
 | studio 0.6.0 | Subtitles in other languages; a cover image and a post caption with every exported clip; Clip a stream from a channel link (released 2026-11-18, tag `studio-v0.6.0`) |
 | studio 0.5.0 | Make one like this; the four kinds of video as cards on New video; Export all; several streams ranked fairly (released 2026-11-18, tag `studio-v0.5.0`) |
 | studio 0.4.0 | Clip a stream in your style; a hidden Claude's question waits for a page (released 2026-11-18, tag `studio-v0.4.0`) |
@@ -61,6 +66,11 @@ New video opens on four cards, one for each, with a small drawing; picking one s
 | studio 0.2.0 | Clip a stream; the IPv4 retry for downloads; notes on a finished video work with Claude hidden (released 2026-11-18, tag `studio-v0.2.0`) |
 
 ## Next, in order
+
+0. **Long video, after the first version.** Stock footage and pictures from Pexels with the user's free key (no
+   rate limits, no logos); your own recorded voiceover instead of the AI voice; a check that drops
+   found clips with burned-in subtitles or a channel's logo; 4K; more graphic templates (a tier list, a map, a
+   timeline); full 3D is not planned.
 
 1. **Twitch and Kick chat.** Not built: neither site offers a public way to read a past stream's chat (Twitch's needs
    its own site's key, Kick's sits behind a bot check). Those streams are scored on sound.
