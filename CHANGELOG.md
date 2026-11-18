@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.8.0 (this fork, 2026-11-18)
 - A natural voice, free. Videos are narrated by Kokoro, an open neural voice that runs on your computer, instead of the robotic macOS voice. Long video's panel has a Narrator choice of five voices. With an ElevenLabs key saved, ElevenLabs is still used first. `studio.py kokoro-setup` installs it (a 350 MB download, once).
 - Long video has animated graphics. Up to 12 shots a video are built for that video by their own animation agent: a globe with a route drawn across it, a 3D bar chart, a timeline, a map. Each has a simple graphic to fall back on if it does not pass its checks.
 - Long video passes over footage that carries a channel's logo or watermark and takes the next search result, and tries plain footage (4K, drone, b-roll) before a presenter's video.
