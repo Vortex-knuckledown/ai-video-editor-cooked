@@ -48,8 +48,12 @@ creator's permission (many streamers run clipping programs) and go on.
 ## 1. Read the streams
 
 ```bash
-python3 "$PY" "$T" meta EDIT <every link or file in brief.json>
+python3 "$PY" "$T" meta EDIT <every link or file in brief.json> --latest <brief.json latest, 1 when it has none>
 ```
+
+A channel link (`youtube.com/@name`, `twitch.tv/name`) becomes its newest `latest` finished videos: its past streams
+first, its uploads when it has none; one that is live now is left out. The script prints which it took; 5 videos at
+most in all. Say on the page which videos those are ("The newest 3 streams of @name").
 
 Downloads only each link's sound (a 3 hour stream is about 150 MB) and its details: the title, the length, YouTube's
 "most replayed" heatmap and chapters. A YouTube stream replay also gets its live chat (only the times of the
@@ -128,6 +132,14 @@ Then render each styled clip (laptop): `python3 "$PY" "$E/skills/style-edit/scri
 gives `<styled folder>/render.mp4`; step 5 hands those over instead of `clips/clipN/render.mp4`. A note on a styled
 clip is a style-edit note on its styled folder (the style-edit skill's notes), then render it again.
 
+## 4c. A caption for every clip
+
+For every clip, write `EDIT/clips/clipN/post.json`: `{"caption": "...", "hashtags": ["...", ...]}`. The caption is
+what the user pastes when posting the clip: one or two short lines, 150 characters at most, about what happens in
+that clip and true to it, in the streamer's own tone, no "you won't believe". 3 to 5 hashtags: the game or topic,
+the kind of moment, the streamer's name when the stream's title has it; no generic ones (#fyp, #viral). A changed
+clip (a note, another moment) gets a new post.json. Export all saves it beside the clip as a text file.
+
 ## 5. The editor
 
 ```bash
@@ -145,8 +157,8 @@ On notes (`SEND`): the note's tab names the clip (`alt` "Clip 2" is clip2, no al
 - The layout: `layout ... --mode facecam|follow|fit`, then build and render.
 - A different moment: `make EDIT <moment id> --number <N>`, then the rest for that clip.
 Then `round` and `alt` again for every clip, and `wait`. On `APPROVE` the clips are done: run
-`python3 "$PY" "$T" export EDIT` (every finished clip into `EDIT/exports/`, numbered and named by its hook title) and
-say where they are. The user can do the same any time with Export all on the video's card in Your videos.
+`python3 "$PY" "$T" export EDIT` (every finished clip into `EDIT/exports/`, numbered and named by its hook title, each
+with a cover image, its best frame with the title on it, and its caption as a text file) and say where they are. The user can do the same any time with Export all on the video's card in Your videos.
 
 ## If a script stops
 

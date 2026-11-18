@@ -16,7 +16,8 @@ The few lines added inside the original are marked `studio:` or `fork:` in the c
 shows at a glance which lines are ours:
 
 - `home.py` and `home.html`: the cards for the kinds of video on New video, their side panels and their jobs
-  (`animated`, `streamclips`); Export all on a stream video's card (`/studio/export`).
+  (`animated`, `streamclips`, `subtitles`); Export all on a stream video's card (`/studio/export`); the subtitles
+  dialog in a video's menu.
 - `start/references/home.md`: which skill takes each new job.
 - `launcher.py` and `review.py`: Claude runs hidden in the background (no Terminal windows); Show Claude reveals it.
 - `toolhook.py` (branch `fix/idle-banner-while-listening`): no "Claude needs you in the Terminal" banner while a
@@ -41,11 +42,19 @@ New video opens on four cards, one for each, with a small drawing; picking one s
    top and the game below (or the crop following the face, or the whole frame), captions and the title. Export all on
    the video's card saves every finished clip into one folder, named by its title.
 
+## On a finished video
+
+- **Export all** (a Clip a stream video's card): every clip into one folder, named by its title, each with a cover
+  image and a caption to paste when posting.
+- **Subtitles in other languages** (any video's menu): pick languages, Claude translates what is said, the .srt
+  files land beside the exported video.
+
 ## Released
 
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.6.0 | Subtitles in other languages; a cover image and a post caption with every exported clip; Clip a stream from a channel link (released 2026-11-18, tag `studio-v0.6.0`) |
 | studio 0.5.0 | Make one like this; the four kinds of video as cards on New video; Export all; several streams ranked fairly (released 2026-11-18, tag `studio-v0.5.0`) |
 | studio 0.4.0 | Clip a stream in your style; a hidden Claude's question waits for a page (released 2026-11-18, tag `studio-v0.4.0`) |
 | studio 0.3.0 | Clip a stream reads a YouTube stream replay's live chat (released 2026-11-18, tag `studio-v0.3.0`) |
