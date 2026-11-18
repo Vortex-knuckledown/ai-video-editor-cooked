@@ -974,9 +974,26 @@ def cmd_bites(edit):
             continue
         got = None
         for c in search_youtube(str(bt.get("query") or ""), 6)[:3]:
-            win = best_window(subs_of(c["id"]), bt.get("find") or [])
+            subs = subs_of(c["id"])
+            win = best_window(subs, bt.get("find") or [])
             if not win:
                 continue
+            # the same words are often said over a cutaway: among the windows that hold them, the one whose picture
+            # shows a person speaking (the video's preview frames, scored) is taken
+            alts = [win] + [w2 for w2 in (best_window([x for x in subs if not (win[0] - 1 <= x[0] <= win[1] + 1)], bt.get("find") or []),) if w2]
+            try:
+                m = matcher()
+                sb = storyboard(c["id"]) if m else None
+                if sb and len(alts) > 1:
+                    import numpy as np
+                    with MATCH_LOCK:
+                        e = np.array(list(m[0].embed(sb[1])))
+                        q = np.array(list(m[1].embed(["a photo of a person speaking to the camera, close up of a face"])))[0]
+                    sc_ = (e / np.linalg.norm(e, axis=1, keepdims=True)) @ (q / np.linalg.norm(q))
+                    near = lambda w2: max((float(sc_[i]) for i, t in enumerate(sb[0]) if w2[0] - 6 <= t <= w2[1] + 6), default=0.0)   # noqa: E731
+                    win = max(alts, key=near)
+            except Exception:
+                pass
             a, b, text = win
             raw = edit / "shots" / f"{key}.raw.mp4"
             raw.unlink(missing_ok=True)
@@ -1104,7 +1121,8 @@ def cmd_briefs(edit):
         visual = str(sh["visual"]) + (" Use exactly these numbers and names, nothing invented: " + json.dumps(sh["data"]) if sh.get("data") else "") + \
             " This is one shot inside a documentary cut from real footage: it must look designed and deep (layers, light, a moving camera," \
             " easing), not a slide. The captions sit in the bottom fifth: keep that calm."
-        (d / "brief.md").write_text(studio.BRIEF.format(
+        three = studio.THREE_NOTE if studio.three_assets(d) else ""
+        (d / "brief.md").write_text(three.join(studio.BRIEF.split("\n{start}Build:", 1)[:1] + ["\n{start}Build:" + studio.BRIEF.split("\n{start}Build:", 1)[1]]).format(
             id=key, card=root / "skills" / "motion" / "references" / "clip-brief-card.md", dir=d, w=w, h=h, dur=dur,
             title=sc.get("title") or "", prompt=b.get("prompt") or "", look=json.dumps(look), visual=visual,
             say=beat["line"], before=beat["before"], after=beat["after"], words=json.dumps(mine), n=n, total=len(todo), first="", last="",

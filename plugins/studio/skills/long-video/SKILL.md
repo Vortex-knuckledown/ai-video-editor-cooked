@@ -107,7 +107,8 @@ session: say so on the page, write from what you know, use no statistic you are 
     (recommended) and "Use footage instead" (then change them to their fallbacks). Never generate without that yes.
   - `motion` (`visual`, `data`, `fallback`): an animated graphic built for this video by its own agent, with depth,
     light and a moving camera: a map with a route drawn across it, a 3D bar chart, a timeline, a cutaway of how a
-    thing works, a ranked list of cards, a document with a line lighting up. `visual`: two or three sentences on
+    thing works, a ranked list of cards, a document with a line lighting up. Real 3D (three.js) is there for a
+    thing in space: say "in 3D" in `visual` for a globe, an object turning, blocks or bars with depth, a fly-through. `visual`: two or three sentences on
     what is seen and how it moves. `data`: every number, name and label it may show (from research.md). `fallback`:
     a whole simple graphic (`stat`, `bars`, `list`, `quote`, `title`) shown if the animation does not pass. One for
     each section's main idea and one in the hook: 1 in every 20 to 30 seconds, 12 at most. It takes twice a
@@ -142,9 +143,10 @@ python3 "$PY" "$T" voice EDIT --fit <minutes x 60>     # ElevenLabs with a saved
 python3 "$PY" "$T" words EDIT
 ```
 
-The voice, best first: ElevenLabs (the user's key, billed to their plan); Kokoro, a free neural voice that runs on
-this computer (brief.json `voice_id` picks which: am_michael, am_fenrir, af_heart, bm_george, bf_emma); the macOS
-voice, which is robotic. The last line says which it used. On the macOS voice: run
+The voice, best first: ElevenLabs (the user's key, billed to their plan); the Edge voices (Microsoft's neural
+voices, free, no key: the script's words are sent to Microsoft to be spoken, so say so once on the page); Kokoro, a
+free neural voice that runs on this computer, offline; the macOS voice, which is robotic. brief.json
+`voice_engine` and `voice_id` are the user's pick and are used as given. The last line says which it used. On the macOS voice: run
 `python3 "$PY" "$T" kokoro-setup` (a 350 MB download, once; say so on the page) and `voice` again.
 Write every `say` line for the ear: numbers as they are spoken ("twenty-one thousand"), no brackets, a comma where
 a breath falls.

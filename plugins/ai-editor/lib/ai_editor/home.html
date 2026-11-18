@@ -1597,21 +1597,24 @@ let VO=null,VOA=null;
 async function loadVoices(){if(VO)return;VO={loading:1};try{VO=await (await fetch('/studio/voices')).json()}catch(e){VO={kokoro:{ready:false,voices:[]},eleven:{ready:false,voices:[]}}}render()}
 function pickVoice(engine,id,preview){
   nv.voice={engine,id};
-  try{if(VOA)VOA.pause();VOA=new Audio(engine==='kokoro'?'/studio/voice/preview?id='+encodeURIComponent(id):preview);VOA.play().catch(()=>{})}catch(e){}
+  try{if(VOA)VOA.pause();VOA=new Audio(engine==='eleven'?preview:'/studio/voice/preview?engine='+engine+'&id='+encodeURIComponent(id));VOA.play().catch(()=>{})}catch(e){}
   render();
 }
 function voiceSec(){
   if(!VO){loadVoices();return ''}
   if(VO.loading)return `<div class="sec"><div class="h">Narrator</div><div class="muted">Loading the voices...</div></div>`;
-  nv.voice=nv.voice||{engine:'kokoro',id:'am_michael'};nv.vtab=nv.vtab||(VO.eleven.ready&&VO.eleven.voices.length?'eleven':'kokoro');
+  const ed=VO.edge||{ready:false,voices:[]};
+  nv.voice=nv.voice||(VO.eleven.ready&&VO.eleven.voices.length?{engine:'eleven',id:VO.eleven.voices[0].id}:ed.ready&&ed.voices.length?{engine:'edge',id:ed.voices[0].id}:{engine:'kokoro',id:'am_michael'});
+  nv.vtab=nv.vtab||(VO.eleven.ready&&VO.eleven.voices.length?'eleven':ed.ready?'edge':'kokoro');
   const V=nv.voice,el=VO.eleven,ko=VO.kokoro,tab=nv.vtab;
   const pill=(engine,v)=>`<button class="pill ${V.engine===engine&&V.id===v.id?'on':''}" title="${esc(v.desc||'')}" onclick="pickVoice('${engine}',${J(v.id)},${J(v.preview||'')})">${esc(v.name)}</button>`;
-  const groups=['American · man','American · woman','British · man','British · woman'].map(g=>[g,ko.voices.filter(v=>v.desc===g)]).filter(x=>x[1].length);
+  const src=tab==='edge'?ed:ko,eng=tab==='edge'?'edge':'kokoro';
+  const groups=['American · man','American · woman','British · man','British · woman','Indian · man','Indian · woman','Australian · man','Australian · woman'].map(g=>[g,src.voices.filter(v=>v.desc===g)]).filter(x=>x[1].length);
   const body=tab==='eleven'?(el.voices.length?`<div class="row" style="flex-wrap:wrap;gap:8px">${el.voices.map(v=>pill('eleven',v)).join('')}</div>`:`<div class="muted">${esc(el.msg||'No voices in your ElevenLabs account yet.')}</div>`)
-    :groups.map(([g,vs])=>`<div class="muted" style="font-size:12px;margin-top:2px">${g}</div><div class="row" style="flex-wrap:wrap;gap:8px">${vs.map(v=>pill('kokoro',v)).join('')}</div>`).join('');
-  return `<div class="sec"><div class="between"><span class="h">Narrator</span><div class="row" style="gap:6px"><button class="pill ${tab==='kokoro'?'on':''}" onclick="nv.vtab='kokoro';render()">Free voices</button><button class="pill ${tab==='eleven'?'on':''}" onclick="nv.vtab='eleven';render()">ElevenLabs</button></div></div>
+    :groups.map(([g,vs])=>`<div class="muted" style="font-size:12px;margin-top:2px">${g}</div><div class="row" style="flex-wrap:wrap;gap:8px">${vs.map(v=>pill(eng,v)).join('')}</div>`).join('');
+  return `<div class="sec"><div class="between"><span class="h">Narrator</span><div class="row" style="gap:6px">${ed.ready?`<button class="pill ${tab==='edge'?'on':''}" onclick="nv.vtab='edge';render()">Natural</button>`:''}<button class="pill ${tab==='kokoro'?'on':''}" onclick="nv.vtab='kokoro';render()">Offline</button><button class="pill ${tab==='eleven'?'on':''}" onclick="nv.vtab='eleven';render()">ElevenLabs</button></div></div>
     ${tab==='eleven'&&!el.ready?`<div class="sub" style="font-size:13px;line-height:19px">The most natural voices, from your own ElevenLabs account (paid to ElevenLabs). <button class="hlink" style="font-size:13px" onclick="rgo('settings')">Connect it in Settings</button>, then pick a voice here.</div>`:body}
-    <div class="muted faint" style="line-height:18px">${tab==='kokoro'?(ko.ready?'Click a voice to hear it. These run on your computer and cost nothing.':'These install on your first video (a 350 MB download, once).'):el.ready?'Click a voice to hear its sample. Each video uses your ElevenLabs plan.':''}</div></div>`;
+    <div class="muted faint" style="line-height:18px">${tab==='edge'?'Click a voice to hear it. Free Microsoft voices: your script\'s words are sent to Microsoft to be spoken, so they need the internet.':tab==='kokoro'?(ko.ready?'Click a voice to hear it. These run on your computer, offline, and cost nothing.':'These install on your first video (a 350 MB download, once).'):el.ready?'Click a voice to hear its sample. Each video uses your ElevenLabs plan.':''}</div></div>`;
 }
 const voiceBody=()=>nv.voice?{voice_engine:nv.voice.engine,voice_id:nv.voice.id}:{};
 // ---- studio: Long video (plugins/studio, the long-video skill). One prompt in, a 2 to 10 minute video out: researched,

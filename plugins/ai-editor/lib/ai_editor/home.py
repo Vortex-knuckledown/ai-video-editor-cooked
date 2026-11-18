@@ -114,6 +114,8 @@ def voice_of(b):
         return {"voice_engine": "kokoro", "voice_id": vid}
     if eng == "eleven" and re.fullmatch(r"[A-Za-z0-9]{12,40}", vid):
         return {"voice_engine": "eleven", "voice_id": vid}
+    if eng == "edge" and re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]{3,40}Neural", vid):
+        return {"voice_engine": "edge", "voice_id": vid}
     return {}
 
 
@@ -124,7 +126,15 @@ def studio_voices():
     ready = bool(t) and (kd / "kokoro-v1.0.onnx").is_file() and (kd / "voices-v1.0.bin").is_file()
     ids = re.findall(r'"([ab][fm]_[a-z]+)"', t.read_text(encoding="utf-8").split("KOKORO_VOICES = [", 1)[1].split("]", 1)[0]) if t else []
     kind = {"am": "American · man", "af": "American · woman", "bm": "British · man", "bf": "British · woman"}
-    out = {"kokoro": {"ready": ready, "voices": [{"id": v, "name": v[3:].title(), "desc": kind[v[:2]]} for v in ids]},
+    src = t.read_text(encoding="utf-8") if t else ""
+    edge = re.findall(r'\("([a-z]{2}-[A-Z]{2}-\w+Neural)", "(\w+)", "([^"]+)"\)', src.split("EDGE_VOICES = [", 1)[1].split("]\n", 1)[0]) if "EDGE_VOICES = [" in src else []
+    try:
+        import run
+        edge_ok = bool(edge) and subprocess.run([str(run.venv_python()), "-c", "import edge_tts"], capture_output=True, timeout=20).returncode == 0
+    except Exception:   # noqa: BLE001
+        edge_ok = False
+    out = {"edge": {"ready": edge_ok, "voices": [{"id": i, "name": n, "desc": d} for i, n, d in edge]},
+           "kokoro": {"ready": ready, "voices": [{"id": v, "name": v[3:].title(), "desc": kind[v[:2]]} for v in ids]},
            "eleven": {"ready": False, "voices": []}}
     key = keys.get("elevenlabs")[0]
     if key:
@@ -2291,14 +2301,15 @@ def make_handler(token):
             if path == "/studio/voices":   # studio: the voice picker's list
                 return self.send(200, studio_voices())
             if path == "/studio/voice/preview":   # studio: a few seconds of a Kokoro voice, made once and kept
-                vid = q.get("id", [""])[0]
+                vid, eng = q.get("id", [""])[0], q.get("engine", ["kokoro"])[0]
                 t = studio_script("animated-video", "studio.py")
-                if not t or not re.fullmatch(r"[ab][fm]_[a-z]{2,12}", vid):
+                okid = re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]{3,40}Neural", vid) if eng == "edge" else re.fullmatch(r"[ab][fm]_[a-z]{2,12}", vid)
+                if not t or eng not in ("kokoro", "edge") or not okid:
                     return self.send(404, {})
-                f = home() / "voice-previews" / f"kokoro-{vid}.wav"
+                f = home() / "voice-previews" / f"{eng}-{vid}.wav"
                 if not f.is_file():
-                    subprocess.run([sys.executable, str(Path(__file__).with_name("run.py")), str(t), "preview", "--voice", vid, "--out", str(f)],
-                                   capture_output=True, timeout=120)
+                    subprocess.run([sys.executable, str(Path(__file__).with_name("run.py")), str(t), "preview", "--engine", eng, "--voice", vid,
+                                    "--out", str(f)], capture_output=True, timeout=120)
                 if not f.is_file():
                     return self.send(404, {})
                 return self.send(200, f.read_bytes(), ctype="audio/wav", cache="max-age=86400")
