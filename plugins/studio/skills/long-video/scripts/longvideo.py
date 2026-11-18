@@ -58,10 +58,12 @@ NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("
          "ai": ("prompt", "fallback"),
          "title": ("text",), "stat": ("value", "label"),
          "bars": ("items",), "list": ("items",), "quote": ("text",), "source": ("title", "highlight")}
-MIN_SHOT_S = 1.6          # a shot shorter than this is dropped: the line's other shots take its time
-PACE_S = 4.5              # more than this a shot on average reads as slow
+MIN_SHOT_S = 1.2          # a shot shorter than this is dropped: the line's other shots take its time
+PACE_S = 3.4              # more than this a shot on average reads as slow (edited channels change picture every 1.5 to 2.5 s)
+DISPLAY = "Anton"         # the condensed capitals of titles, numbers and labels; everything else is the renderer's sans
 LOOK = {"ground": "#0E0F12", "ink": "#FFFFFF", "accent": "#FFD24A"}
-CAPTIONS = {"y_pct": 86, "size_pct": 4.0, "case": "sentence", "effect": "pop", "stroke": True}
+# small, low, the word being said bright and the rest dim: the footage stays the picture, the captions a guide
+CAPTIONS = {"y_pct": 91, "size_pct": 2.9, "case": "sentence", "effect": "karaoke", "weight": 600, "stroke": True, "inactive_opacity": 0.5}
 UA = "cooked-studio/0.7 (video editor)"
 
 
@@ -76,14 +78,17 @@ def check(edit):
         if not isinstance(s, dict):
             continue
         shots = s.get("shots")
-        if not isinstance(shots, list) or not 1 <= len(shots) <= 4:
-            errs.append(f"scene {s.get('id')}: needs 1 to 4 shots")
+        if not isinstance(shots, list) or not 1 <= len(shots) <= 5:
+            errs.append(f"scene {s.get('id')}: needs 1 to 5 shots")
             continue
         for k, sh in enumerate(shots, 1):
             kind = sh.get("kind") if isinstance(sh, dict) else None
             if kind not in NEEDS:
                 errs.append(f"scene {s.get('id')} shot {k}: kind must be one of {', '.join(NEEDS)}")
                 continue
+            ov = sh.get("over")
+            if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat"))):
+                errs.append(f"scene {s.get('id')} shot {k}: \"over\" goes on footage or a picture and has a label, a name or a stat")
             for f in NEEDS[kind]:
                 if not sh.get(f):
                     errs.append(f"scene {s.get('id')} shot {k} ({kind}): no \"{f}\"")
@@ -135,7 +140,7 @@ def cmd_check(edit):
               f"{abs(want - est) * 2.4:.0f} words")
         return 1
     if est / len(shots) > PACE_S:
-        print(f"FIX  a shot every {est / len(shots):.1f} s is slow: add shots to the long lines (one every 2 to 4 s)")
+        print(f"FIX  a shot every {est / len(shots):.1f} s is slow: add shots to the long lines (a new picture every 1.5 to 3 s)")
         return 1
     if kinds["photo"] > 20:
         print(f"FIX  {kinds['photo']} photo shots: 20 at most (the picture sites are slow). Make the others clips or graphics")
@@ -592,10 +597,20 @@ def fetch_photo(edit, key, sh, w, h):
     out = edit / "shots" / f"{key}.jpg"
     # a third bigger than the frame, so the slow push-in never shows an edge and stays sharp
     r = subprocess.run(fit_cmd(raw, out, int(w * 1.3) // 2 * 2, int(h * 1.3) // 2 * 2), capture_output=True, text=True)
+    card = False
+    if not r.returncode and c.get("w") and c.get("h") and not 0.74 < (c["w"] / c["h"]) / (w / h) < 1.35:
+        # a picture shaped unlike the frame (a portrait in a wide video) would lose its head or feet filling it:
+        # it is shown whole, as a card over a blurred, darkened copy of itself
+        ch = int(h * 0.84) // 2 * 2
+        a = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-vf", f"scale=-2:{ch}", "-frames:v", "1", "-q:v", "2",
+                            str(edit / "shots" / f"{key}.card.jpg")], capture_output=True)
+        b2 = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(out), "-vf", f"scale={w // 8}:{h // 8},boxblur=6:2,scale={w}:{h},eq=brightness=-0.22:saturation=0.7",
+                             "-frames:v", "1", "-q:v", "3", str(edit / "shots" / f"{key}.blur.jpg")], capture_output=True)
+        card = not a.returncode and not b2.returncode
     raw.unlink(missing_ok=True)
     if r.returncode or not out.exists():
         return {"missing": "the picture could not be read"}
-    return {"file": f"shots/{key}.jpg", "from": c["page"], "title": c["title"], "by": c["by"], "license": c["license"],
+    return {"file": f"shots/{key}.jpg", "from": c["page"], "title": c["title"], "by": c["by"], "license": c["license"], **({"card": True} if card else {}),
             "others": [f"{i}: {x['title'][:60]}" for i, x in enumerate(order)][:8]}
 
 
@@ -895,7 +910,7 @@ def graphic(S, sh, a, b, W, H, look):
         wd = min(wrap, tw(text, size, kw.get("weight", 700)))
         return T(text, t0, x=x_right - wd / 2, y=y, w=int(wrap), size=int(size), align="right", **kw)
     def panel(cx, cy, pw, ph, t0=0.0):                      # a soft card behind a chart or a list, so it reads as one object
-        S.shape(a + t0, b, track="Graphics bg", x=cx, y=cy, w=pw, h=ph, radius=s * 0.03, fill="#FFFFFF", opacity=0.055,
+        S.shape(a + t0, b, track="Graphics bg", x=cx, y=cy, w=pw, h=ph, radius=s * 0.03, fill="#0B0C0F", opacity=0.72,
                 anim={"in": "fade", "out": "none", "dur": 0.3}, keys={"scale": [[0, 0.97, "out"], [0.4, 1.0, "out"], [d, 1.015, "linear"]]})
 
     def rule(cx, cy, wd, t0=0.15):                           # an accent line that draws itself under a heading
@@ -919,12 +934,12 @@ def graphic(S, sh, a, b, W, H, look):
         return S.text(str(value), a + steps * 0.07, b, track="Graphics", **{**kw, "anim": None, "keys": keys or {}})
     kind = sh["kind"]
     if kind == "title":
-        T(sh["text"], 0, x=W / 2, y=H * (0.38 if sh.get("sub") else 0.42), w=int(W * 0.84), size=int(s * 0.14), weight=900, color=ink,
-          line_height=1.08, anim=pop, keys={"scale": [[0, 0.94, "out"], [d, 1.03, "linear"]]})
+        T(str(sh["text"]).upper(), 0, x=W / 2, y=H * (0.38 if sh.get("sub") else 0.42), w=int(W * 0.86), size=int(s * 0.19), font=DISPLAY, weight=400,
+          color=ink, line_height=1.04, anim=pop, keys={"scale": [[0, 0.94, "out"], [d, 1.03, "linear"]]})
         if sh.get("sub"):
             T(sh["sub"], min(0.3, d / 3), x=W / 2, y=H * 0.6, w=int(W * 0.7), size=int(s * 0.055), weight=600, color=acc, anim=up)
     elif kind == "stat":
-        count_up(sh["value"], x=W / 2, y=H * 0.34, w=int(W * 0.94), size=int(s * 0.32), weight=900, color=acc, anim=pop,
+        count_up(str(sh["value"]).upper(), x=W / 2, y=H * 0.34, w=int(W * 0.94), size=int(s * 0.36), font=DISPLAY, weight=400, color=acc, anim=pop,
                  keys={"scale": [[0, 1.0, "out"], [max(0.1, d - 0.5), 1.05, "linear"]]})
         rule(W / 2, H * 0.52, W * 0.12, 0.5)
         T(sh["label"], min(0.3, d / 3), x=W / 2, y=H * 0.62, w=int(W * 0.74), size=int(s * 0.066), weight=600, color=ink, anim=up)
@@ -936,8 +951,8 @@ def graphic(S, sh, a, b, W, H, look):
     elif kind == "list":
         items, top = sh["items"][:6], H * (0.3 if sh.get("title") else 0.16)
         if sh.get("title"):
-            T(sh["title"], 0, x=W / 2, y=H * 0.12, w=int(W * 0.84), size=int(s * 0.078), weight=800, color=ink, anim=up)
-            rule(W / 2, H * 0.19, W * 0.1)
+            T(str(sh["title"]).upper(), 0, x=W / 2, y=H * 0.12, w=int(W * 0.84), size=int(s * 0.1), font=DISPLAY, weight=400, color=ink, anim=up)
+            rule(W / 2, H * 0.2, W * 0.1)
         gap = min(H * 0.15, (H * 0.72 - top) / max(1, len(items) - 1)) if len(items) > 1 else 0
         panel(W / 2, top + gap * (len(items) - 1) / 2, W * 0.76, gap * (len(items) - 1) + H * 0.16)
         size = min(s * 0.064, gap * 0.5) if gap else s * 0.064
@@ -952,7 +967,7 @@ def graphic(S, sh, a, b, W, H, look):
         items = sh["items"][:6]
         top_v = max(abs(float(v)) for _, v in items) or 1.0
         if sh.get("title"):
-            T(sh["title"], 0, x=W / 2, y=H * 0.11, w=int(W * 0.86), size=int(s * 0.072), weight=800, color=ink, anim=up)
+            T(str(sh["title"]).upper(), 0, x=W / 2, y=H * 0.11, w=int(W * 0.86), size=int(s * 0.095), font=DISPLAY, weight=400, color=ink, anim=up)
         x0, full, y0 = W * 0.32, W * 0.46, H * 0.27
         gap = min(H * 0.15, (H * 0.44) / max(1, len(items) - 1)) if len(items) > 1 else 0
         bh = min(s * 0.085, gap * 0.6) if gap else s * 0.085
@@ -988,6 +1003,62 @@ def domain(url):
     return re.sub(r"^www\.", "", urllib.parse.urlsplit(str(url)).netloc) or str(url)[:40]
 
 
+def anton_w(text, size):
+    return len(str(text)) * size * 0.47          # about how wide a line of the condensed capitals draws
+
+
+def overlay(S, ov, a, z, W, H, look):
+    """Type on top of footage or a picture, the way an edited channel names what is on screen: a big `label`, a
+    person's `name` (and `role`) lower left, or a `stat` (and `note`) on a small card at the right."""
+    s, d = min(W, H), z - a
+    hold = min(z, a + max(1.6, min(d, 3.2)))
+    sh = {"blur": 18, "y": 4, "opacity": 0.7}
+    if ov.get("label"):
+        S.text(str(ov["label"]).upper(), a + 0.08, hold, track="Graphics", x=W / 2, y=H * 0.44, w=int(W * 0.86), size=int(s * 0.15), font=DISPLAY,
+               weight=400, color="#FFFFFF", line_height=1.02, shadow=sh, anim={"in": "pop", "out": "fade", "dur": 0.18})
+    if ov.get("name"):
+        size = s * 0.07
+        x0, y = W * 0.055, H * 0.72
+        S.shape(a + 0.1, hold, track="Graphics", x=x0 - s * 0.012, y=y + (size * 0.5 if ov.get("role") else 0), w=max(4, s * 0.006), h=size * (2.0 if ov.get("role") else 1.0),
+                fill=look["accent"], anim={"in": "fade", "out": "fade", "dur": 0.2})
+        S.text(str(ov["name"]).upper(), a + 0.1, hold, track="Graphics", x=x0 + anton_w(ov["name"], size) / 2 + s * 0.01, y=y, w=int(W * 0.6), size=int(size),
+               font=DISPLAY, weight=400, color="#FFFFFF", align="left", shadow=sh, anim={"in": "slide-up", "out": "fade", "dur": 0.22})
+        if ov.get("role"):
+            rs = s * 0.026
+            S.text(str(ov["role"]).upper(), a + 0.2, hold, track="Graphics", x=x0 + tw(str(ov["role"]).upper(), rs, 600) / 2 + s * 0.01, y=y + size * 1.0, w=int(W * 0.6),
+                   size=int(rs), weight=600, color=look["accent"], align="left", shadow=sh, anim={"in": "fade", "out": "fade", "dur": 0.2})
+    if ov.get("stat"):
+        cw, chh = W * 0.27, H * (0.27 if ov.get("note") else 0.19)
+        cx, cy = W * 0.81, H * 0.27
+        S.shape(a + 0.1, hold, track="Graphics bg", x=cx, y=cy, w=cw, h=chh, radius=s * 0.022, fill="#0B0C0F", opacity=0.82,
+                shadow={"blur": 40, "y": 14, "opacity": 0.5}, anim={"in": "slide-up", "out": "fade", "dur": 0.25})
+        S.text(str(ov["stat"]).upper(), a + 0.16, hold, track="Graphics", x=cx, y=cy - (chh * 0.12 if ov.get("note") else 0), w=int(cw * 0.9), size=int(s * 0.1),
+               font=DISPLAY, weight=400, color=look["accent"], anim={"in": "pop", "out": "fade", "dur": 0.2})
+        if ov.get("note"):
+            S.text(str(ov["note"]), a + 0.26, hold, track="Graphics", x=cx, y=cy + chh * 0.27, w=int(cw * 0.86), size=int(s * 0.027), weight=600,
+                   color="#FFFFFF", opacity=0.85, anim={"in": "fade", "out": "fade", "dur": 0.2})
+
+
+def backdrop(edit, sp, all_sp, db):
+    """The picture behind a graphic: the nearest shot's footage as a still, so a number or a title lands on the
+    video's own world (dark and without colour) instead of on an empty ground. None: the video has no footage yet."""
+    best = None
+    for o in all_sp:
+        g = db.get(o["key"]) or {}
+        if o["shot"]["kind"] in MEDIA and g.get("file") and (edit / g["file"]).exists():
+            if best is None or abs(o["n"] - sp["n"]) < abs(best[0]["n"] - sp["n"]):
+                best = (o, g)
+    if not best:
+        return None
+    f = edit / best[1]["file"]
+    if f.suffix != ".mp4":
+        return best[1]["file"]
+    still = edit / "shots" / f"{best[0]['key']}.bg.jpg"
+    if not still.exists() or still.stat().st_mtime < f.stat().st_mtime:
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{duration(f) / 2:.2f}", "-i", str(f), "-frames:v", "1", "-q:v", "3", str(still)], capture_output=True)
+    return f"shots/{still.name}" if still.exists() else None
+
+
 # ---------------------------------------------------------------- the scene
 def cmd_build(edit):
     edit = Path(edit).resolve()
@@ -1004,6 +1075,11 @@ def cmd_build(edit):
               and str((db.get(sp["key"]) or {}).get("file") or "").endswith(".jpg") and (edit / db[sp["key"]]["file"]).exists()]
     for sp in all_sp:
         sh, a, z, d = sp["shot"], sp["a"], sp["b"], sp["b"] - sp["a"]
+        if sh["kind"] in GRAPHICS or (sh["kind"] == "motion" and not studio.clip_of(edit, sp["key"])):
+            bg = backdrop(edit, sp, all_sp, db)
+            if bg:
+                S.image(bg, a, z, track="Footage", x=W / 2, y=H / 2, w=W, h=H, fit="cover", grade={"brightness": 0.28, "saturate": 0},
+                        keys={"scale": [[0, 1.08, "linear"], [d, 1.18, "linear"]]})
         if sh["kind"] in GRAPHICS:
             graphic(S, sh, a, z, W, H, look)
             continue
@@ -1024,14 +1100,26 @@ def cmd_build(edit):
             got = {"file": min(stills, key=lambda x: abs(x[0] - sp["n"]))[1]}
             f, sp = edit / got["file"], {**sp, "n": sp["n"] + 1}
         grow = sp["n"] % 2 == 0
-        if f.suffix == ".mp4":
-            S.video(got["file"], a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H,
-                    keys={"scale": [[0, 1.0 if grow else 1.05, "linear"], [d, 1.05 if grow else 1.0, "linear"]]})
+        ov = sh.get("over") if isinstance(sh.get("over"), dict) else None
+        dim = {"grade": {"brightness": 0.62}} if ov and ov.get("label") else {}
+        # a shot long enough gets a punch-in half way: the same footage, a closer frame, read as a new picture
+        punch = [[d / 2, 1.04, "linear"], [d / 2 + 0.034, 1.16, "linear"], [d, 1.2, "linear"]] if d >= 2.8 else [[d, 1.06, "linear"]]
+        if got.get("card") and (edit / f"shots/{sp['key']}.card.jpg").exists() and (edit / f"shots/{sp['key']}.blur.jpg").exists():
+            S.image(f"shots/{sp['key']}.blur.jpg", a, z, track="Footage", x=W / 2, y=H / 2, w=W, h=H, fit="cover",
+                    keys={"scale": [[0, 1.05, "linear"], [d, 1.12, "linear"]]})
+            S.image(f"shots/{sp['key']}.card.jpg", a, z, track="Graphics bg", x=W / 2, y=H * 0.46, radius=min(W, H) * 0.02,
+                    shadow={"blur": 60, "y": 24, "opacity": 0.55}, anim={"in": "fade", "out": "none", "dur": 0.2},
+                    keys={"scale": [[0, 0.98, "out"], [d, 1.04, "linear"]]})
+        elif f.suffix == ".mp4":
+            S.video(got["file"], a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H, **dim,
+                    keys={"scale": [[0, 1.0, "linear"]] + punch})
         else:
             drift = (W * 0.012) * (1 if sp["n"] % 4 < 2 else -1)
-            S.image(got["file"], a, z, track="Footage", x=W / 2, y=H / 2, w=W, h=H, fit="cover",
+            S.image(got["file"], a, z, track="Footage", x=W / 2, y=H / 2, w=W, h=H, fit="cover", **dim,
                     keys={"scale": [[0, 1.02 if grow else 1.12, "linear"], [d, 1.12 if grow else 1.02, "linear"]],
                           "x": [[0, W / 2 - drift, "linear"], [d, W / 2 + drift, "linear"]]})
+        if ov:
+            overlay(S, ov, a, z, W, H, look)
     for s in sc["scenes"]:           # where a line's fact comes from, small, while it is said
         r = next((r for r in tm["scenes"] if r["id"] == s["id"]), None)
         if r and s.get("source") and not any(x["kind"] in ("bars", "source") for x in s["shots"]):
@@ -1175,6 +1263,12 @@ def demo():
         assert "0:00 Intro" in text and "- https://www.example.org/a" in text and "City by Chan: https://www.youtube.com/watch?v=abc" in text, text
         assert domain("https://www.nature.com/articles/x") == "nature.com" and mmss(125) == "2:05"
         # a motion shot needs a whole simple graphic to fall back on, and takes twice a clip's share of its line
+        ov = json.loads(json.dumps(good))
+        ov["scenes"][0]["shots"][1]["over"] = {"name": "Jane Doe", "role": "engineer"}
+        ov["scenes"][0]["shots"][0]["over"] = {"label": "x"}
+        jsave(e / "scenes.json", ov)
+        assert any('"over" goes on footage' in x for x in check(e)) and len(check(e)) == 1, check(e)
+        jsave(e / "scenes.json", good)
         mo = json.loads(json.dumps(good))
         mo["scenes"][0]["shots"] = [{"kind": "motion", "visual": "a globe turning"}, {"kind": "clip", "query": "city"}]
         jsave(e / "scenes.json", mo)
