@@ -35,6 +35,7 @@ KIT_FIGURES = {   # the kit's three figures, with the clips inside each file
               {"idle": "@Idle", "walk": "@Walking", "run": "@Running", "jump": "@Jump", "wave": "@Wave", "dance": "@Dance"})}
 KIT_SCALE = {"robot": 0.35}   # the robot's file is about 4.5 m tall
 POLYHAVEN = "https://api.polyhaven.com/"
+PROP_MAX_MB = 40   # a whole scanned tree is close to 1 GB: nothing that size goes in the library or a browser
 STOP = set("a an the of in on at by for to and or with from near under over into its it is are as that this one two "
            "day night morning evening seen always never where there sky hdr clear far off low high small large wide can person people".split())
 
@@ -222,13 +223,22 @@ def add_prop(pid):
         if not g:
             print(f"{pid}: no such free model")
             return None
-        fetch(g["url"], d / f"{pid}.gltf")
-        for rel, inc in (g.get("include") or {}).items():
-            fetch(inc["url"], d / rel)
+        inc = g.get("include") or {}
+        heavy = (g.get("size", 0) + sum(x.get("size", 0) for x in inc.values())) > PROP_MAX_MB * 1e6
+        if not heavy:
+            fetch(g["url"], d / f"{pid}.gltf")
+        for rel, x in inc.items():
+            if not heavy or rel.startswith("textures/"):   # a model too heavy to load still gives its surfaces (bark, leaves)
+                fetch(x["url"], d / rel)
         v = prop_catalog().get(pid) or {}
-        jsave(d / "prop.json", {"id": pid, "name": v.get("name", pid), "tags": v.get("tags", []), "file": f"{pid}.gltf",
-                                "source": f"polyhaven.com/a/{pid} (CC0)"})
-    print(f"prop \"{pid}\" is in the library: await loadProp({{THREE, id: \"{pid}\"}})")
+        jsave(d / "prop.json", {"id": pid, "name": v.get("name", pid), "tags": v.get("tags", []), "file": None if heavy else f"{pid}.gltf",
+                                "textures": sorted(r for r in inc if r.startswith("textures/")), "source": f"polyhaven.com/a/{pid} (CC0)"})
+    meta = jload(d / "prop.json") or {}
+    if meta.get("file"):
+        print(f"prop \"{pid}\" is in the library: await loadProp({{THREE, id: \"{pid}\"}})")
+    else:
+        print(f"prop \"{pid}\": the model is over {PROP_MAX_MB} MB, too heavy to load. Only its textures were kept, in "
+              f"../lib/props/{pid}/textures/ ({', '.join(x.split('/')[-1] for x in meta.get('textures', [])[:4])} ...): build the shape yourself and use them.")
     return pid
 
 
@@ -270,7 +280,8 @@ def save_world(js, describe, name=None, sheet=None, video=""):
     (d / "world.js").write_text(text, encoding="utf-8")
     if sheet and Path(sheet).is_file():
         shutil.copy(sheet, d / ("thumb" + Path(sheet).suffix.lower()))
-    jsave(d / "world.json", {"id": wid, "describe": describe, "tags": sorted(words_of(describe)), "exposes": head_comment(js),
+    needs = sorted(x["id"] for x in props() if re.search(r"[\"'/`]" + re.escape(x["id"]) + r"[\"'/`]", text))
+    jsave(d / "world.json", {"id": wid, "describe": describe, "tags": sorted(words_of(describe)), "exposes": head_comment(js), "props": needs,
                              "made_for": video, "thumb": ("thumb" + Path(sheet).suffix.lower()) if sheet and Path(sheet).is_file() else ""})
     return wid
 
@@ -282,6 +293,9 @@ def use_world(wid, dest):
         return False
     Path(dest).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(src, dest)
+    for pid in (jload(src.with_name("world.json")) or {}).get("props") or []:   # on another computer the world's props may not be there yet
+        if not (root() / "props" / pid / "prop.json").is_file():
+            add_prop(pid)
     return True
 
 
@@ -328,7 +342,7 @@ def listing():
     out.append("WORLDS (in scenes.json: {\"id\": ..., \"library\": \"<id>\"})")
     out += [f"  {w['id']:<20} {w.get('describe', '')[:150]}" for w in worlds()] or ["  none yet: a video's worlds are saved here once they pass"]
     out.append("PROPS (loadProp({THREE, id})); more with: studio.py lib prop \"<what>\"")
-    out += [f"  {p['id']:<24} {p.get('name', '')}" for p in props()] or ["  none fetched yet"]
+    out += [f"  {p['id']:<24} {p.get('name', '')}" + ("" if p.get("file") else " (textures only)") for p in props()] or ["  none fetched yet"]
     return "\n".join(out)
 
 
