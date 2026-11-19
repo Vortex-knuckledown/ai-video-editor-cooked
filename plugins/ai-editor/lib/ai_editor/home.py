@@ -2298,6 +2298,18 @@ def make_handler(token):
                 except Exception:   # noqa: BLE001
                     ok = False
                 return self.send(200, f.read_bytes(), "image/jpeg", cache="private, max-age=86400") if ok else self.send(404, {})
+            if path in ("/studio/library", "/studio/library/thumb"):   # studio: the shared 3D library (characters, worlds, props), as a page
+                t = studio_script("animated-video", "lib3d.py")
+                if not t:
+                    return self.send(404, {})
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("lib3d", t)
+                lib3d = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(lib3d)
+                if path == "/studio/library":
+                    return self.send(200, lib3d.page(), "text/html; charset=utf-8")
+                f = lib3d.thumb(q.get("kind", [""])[0], q.get("id", [""])[0])
+                return self.send(200, f.read_bytes(), "image/png" if f.suffix == ".png" else "image/jpeg") if f else self.send(404, {})
             if path == "/studio/voices":   # studio: the voice picker's list
                 return self.send(200, studio_voices())
             if path == "/studio/voice/preview":   # studio: a few seconds of a Kokoro voice, made once and kept

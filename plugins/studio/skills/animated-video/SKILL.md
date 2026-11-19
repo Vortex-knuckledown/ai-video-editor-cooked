@@ -131,16 +131,20 @@ takes about 3 minutes a scene: say how long on the page before starting.
 **A 3D video** (the user asked for 3D, or for the look of a rendered world: a city, a planet, a machine, a journey
 through space) is made of a few worlds built once, never of many separate scenes. Read
 `${CLAUDE_SKILL_DIR}/references/worlds.md` before writing its script: scenes.json then carries `"style3d": true`,
-`worlds` (3 to 6), a `world` on every scene, and a `hud`. After the script is approved and the voice and words are
-made, and before `briefs`:
+`worlds` (3 to 6), a `world` on every scene, and a `hud`. Places, people and things come from the shared library and
+are never built twice: run `python3 "$PY" "$T" lib list` before writing the script, and give every world whose place
+the library has (the script says New York, the library has a New York street) `"library": "<its id>"`, plus
+`"extend": "<what this video needs added>"` only when it needs more. Only a place the library lacks is a new world,
+and `briefs` saves each new one to the library for the next video. After the script is approved and the voice and
+words are made, and before `briefs`:
 
 ```bash
-python3 "$PY" "$T" three-setup && python3 "$PY" "$T" kit-setup     # once: three.js and the 22 MB kit of textures, skies, figures
-python3 "$PY" "$T" worlds EDIT                                      # EDIT/worlds/<id>.md, one brief a world
+python3 "$PY" "$T" three-setup && python3 "$PY" "$T" kit-setup     # once: three.js, the kit, the library's characters
+python3 "$PY" "$T" worlds EDIT             # library worlds are copied in; EDIT/worlds/<id>.md is a brief for each new one
 ```
 
-Launch one `ai-editor:clip-builder` agent per world brief (all at once: there are few), each given only the full path
-of its `EDIT/worlds/<id>.md`. Say "Building 4 worlds, about 15 minutes" on the page. Look at each world's
+Launch one `ai-editor:clip-builder` agent per world brief (all at once: there are few; none when every world came
+from the library), each given only the full path of its `EDIT/worlds/<id>.md`. Say "Building 4 worlds, about 15 minutes" on the page. Look at each world's
 `EDIT/worlds/demo-<id>/renders/sheet.png` when it is back: a world that looks like plain shapes, has an empty
 middle distance or a figure that slides gets one note to its agent (what to add, by name) and is checked again. Only
 when every world holds up: `briefs`, then the scene agents as below, 6 at a time. Each scene is then a camera and an

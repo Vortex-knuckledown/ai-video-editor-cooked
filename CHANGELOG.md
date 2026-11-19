@@ -11,9 +11,17 @@ What changed for every user, newest first.
 - **Small captions in 3D videos.** The words sit small at the bottom and light up as they are said, so the picture
   stays the subject.
 - **Dim shots are caught.** `studio.py build` prints `DARK <scene>` for a 3D shot that reads as nearly black.
-- **Your own figure.** A `.glb` or `.fbx` figure with its own walk and run (for example from Mixamo) dropped into the
-  kit's `models/own/` folder is used as the video's person. The built-in figures are a plain grey figure, a soldier
-  and a robot; a realistic clothed person is not included.
+- **A shared 3D library, so nothing is built twice.** Characters, worlds and props now live in one library outside
+  any video (`~/.ai-video-editor/library3d`). A script set in a place the library has uses that world as it is; a
+  new place is built once and saved for every later video. `studio.py lib list | find | prop | prop-get | clip |
+  character | save`, and a **Library** page in the app's sidebar.
+- **Clothed people who walk, run, talk and dance.** A man and a woman with animation made for their own skeletons
+  (idle, walk, run, jog, talk at first; about 130 more movements fetched by name). One loader (`figure.js`) for
+  every character, so no video writes its own.
+- **Props on request.** A world that needs a bench, a tree or a sofa fetches a free CC0 model (Poly Haven, about 520
+  of them) into the library once.
+- **Your own figure.** `studio.py lib character <id> <body> walk=<file> run=<file>` adds a `.glb` or `.fbx` figure
+  with its own clips (for example from Mixamo). Not tested with a Mixamo file yet.
 
 ## studio 0.14.0 (this fork, 2026-11-19)
 - Create from a prompt makes videos up to 10 minutes, with 3 and 5 minute options. It was capped at 3 minutes. A long video's scenes are animated six at a time, so a laptop is not asked to render 40 at once. A 5-minute video in 3D (67 scenes) was made this way.

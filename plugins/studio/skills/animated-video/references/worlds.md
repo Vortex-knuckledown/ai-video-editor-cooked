@@ -20,7 +20,7 @@ data display in the same two corners for ten minutes.
 ```
 
 - **Worlds**: 3 to 6. `describe` is what is there and what never changes in it. One world holds the story's person
-  (`models/person.glb` walks and runs; `models/robot.glb` for a robot) so the viewer has someone to follow.
+  (a library character: `man`, `woman`, `robot`) so the viewer has someone to follow.
 - **Scenes**: every scene names its `world`. `visual` is only the camera and what happens in this shot. Stay in a
   world for 6 to 20 scenes in a row before leaving it; come back to it later for the pay-off.
 - **`hud`**: one or two quantities that run through the whole video. Each scene gives their values at its end
@@ -35,16 +35,32 @@ data display in the same two corners for ten minutes.
 | `textures/earth_day.jpg`, `earth_night.png`, `earth_clouds.png`, `earth_specular.jpg`, `earth_normal.jpg`, `moon.jpg` | photographic planet maps (NASA) |
 | `sky/day.hdr`, `sky/sunset.hdr` | skies to light a world and fill its background |
 | `pbr/<brick|asphalt|concrete|sand|rock>_<diff|nor|rough>.jpg` | tiling surfaces: colour, normal, roughness |
-| `models/person.glb` (clips: idle, walk, run, sneak_pose, sad_pose, agree, headShake), `models/soldier.glb` (Idle, Walk, Run), `models/robot.glb` (Idle, Walking, Running, Jump, Wave, ...) | animated figures |
-| `models/own/*.glb`, `*.fbx` | the user's own figures, when there are any (the world brief lists them) |
 | `jsm/loaders/GLTFLoader.js`, `FBXLoader.js`, `RGBELoader.js`, `jsm/utils/SkeletonUtils.js` | three.js loaders, imported as `three/addons/...` |
 
-**Figures.** The built-in person is a plain grey figure and the soldier is in armour: neither is a realistic civilian.
-A figure moves well only with animation made for its own skeleton (tested: the person's walk put on two other clothed
-models folded them up), so never put one model's clips on another. For a realistic clothed person the user downloads
-one from mixamo.com (free with an Adobe login: pick a character, then the Walking and Running animations, format FBX,
-"with skin") into the kit's `models/own/` folder; the world brief then names those files and the world uses them. Tell
-the user this once when a video has a person and `models/own/` is empty; do not stop the video for it.
+## The shared library (`assets/lib/` in every clip, `../lib/` from a world module)
+
+Characters, worlds and props are kept in one library outside any video (`~/.ai-video-editor/library3d`) and reused.
+`studio.py lib list` prints what is in it. Read it before writing the script.
+
+- **Worlds.** When the script is in a place the library has (it says New York, the library has a New York street),
+  the world in scenes.json is `{"id": "street", "library": "street", "describe": "..."}` and nothing is built: it is
+  copied in. When the place is there but the video needs more of it, add `"extend": "snow on the ground and falling"`:
+  the world's agent starts from the library copy and adds that. A place the library does not have is written as a new
+  world, and once it passes it is saved to the library by `studio.py briefs`, so the next video has it. Write a new
+  world's `describe` as the place itself (what is there, the time of day), not this video's story, so it can be found
+  and reused.
+- **Characters.** `import { loadFigure } from "../lib/figure.js"`; `const f = await loadFigure({THREE, id: "woman",
+  clips: ["idle", "walk", "run"]})`; `scene.add(f.object)` (feet on y = 0, facing +z, in metres); in `update`,
+  `f.pose(seconds, {walk: 0.3, run: 0.7})`. `man` and `woman` are clothed people with idle, walk, run, jog and talk, and
+  any of about 130 more movements on request (`studio.py lib clip woman "dance"`). `mannequin`, `soldier` and `robot`
+  have only the clips in their files. A figure moves well only with clips made for its own skeleton: never load one
+  character's clip onto another (tested: it folds up). A world takes `cast = ["woman"]` and exposes `world.cast.<id>`,
+  so the same place works with anyone in it.
+- **Props.** A thing the world needs (a bench, a tree, a rock, a sofa, a lamp): `studio.py lib prop "<what>"` lists
+  free models, `studio.py lib prop-get <id>` puts the right one in the library for good, and
+  `await loadProp({THREE, id})` (from `figure.js`) returns it in metres. Nothing that matches is built from shapes
+  and the kit's surfaces.
+- **The user's own figure** (a Mixamo download, say): `studio.py lib character <id> <body file> walk=<file> run=<file>`.
 
 The clip's `index.html` already has the import map: `import * as THREE from "three"` and
 `import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"` work.
@@ -56,8 +72,7 @@ The clip's `index.html` already has the import map: `import * as THREE from "thr
    promise round `TextureLoader.load`), then build, then add one tween to the registered timeline:
    `tl.to(state, {t: 1, duration: DURATION, ease: "none", onUpdate: draw}, 0)`, then call `draw()` once.
 3. `draw()` sets every position, the camera and each figure's animation from `state.t` alone and renders. Never
-   `requestAnimationFrame`, never a clock. A figure: `mixer.setTime(seconds)`, with `walk` and `run` both playing and
-   their weights crossfaded.
+   `requestAnimationFrame`, never a clock. A figure: `f.pose(seconds, {walk, run})`.
 4. `new THREE.WebGLRenderer({canvas, antialias: true, preserveDrawingBuffer: true})`, `outputColorSpace` sRGB,
    `ACESFilmicToneMapping`, shadows on (`PCFShadowMap`) with the light's shadow box following the subject.
 5. A custom shader's `#include <tonemapping_fragment>` and `#include <colorspace_fragment>` each go on their own line.
