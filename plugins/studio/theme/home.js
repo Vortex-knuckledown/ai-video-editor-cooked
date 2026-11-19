@@ -19,24 +19,63 @@
     render();
   };
   window.studioKind = function (k) { rgo('new'); setKind(k); render(); };
-  window.studioLen = function (n) { hero.len = n; render(); };
 
-  window.studioHero = function (vids) {
+  // ---- Home: one box. What is in it decides what it does.
+  //   words            -> an animated video (up to 60 s) or a long video, at the length picked
+  //   video files      -> Edit my clips, with the words as a note for the edit
+  //   a link           -> Make one like this, or Clip it into shorts
+  var URLRE = /^https?:\/\/\S+$/i;
+  function mode() { var t = (hero.text || '').trim(); return URLRE.test(t) ? 'link' : 'text'; }
+  function rowHTML() {
+    if (mode() === 'link') {
+      return '<div class="cf-hint">A link. What should happen with it?</div><div class="cf-acts"><button class="b2 cf-go" onclick="studioLink(\'stream\')">Clip it into shorts</button>' +
+        '<button class="b1 cf-go" onclick="studioLink(\'like\')">Make one like this</button></div>';
+    }
+    var lens = LENS.map(function (l) { return '<button class="pill ' + (hero.len === l[0] ? 'on' : '') + '" onclick="studioLen(' + l[0] + ')">' + l[1] + '</button>'; }).join('');
+    return '<div class="cf-lens"><label class="cf-add" title="Add your clips"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5 12.4 19a5 5 0 0 1-7-7l8-8a3.4 3.4 0 0 1 4.8 4.8l-8 8a1.8 1.8 0 0 1-2.5-2.5l7.3-7.3"/></svg>Add clips' +
+      '<input type="file" multiple accept="video/*,.mov,.mkv,.mp4" class="hide" onchange="var f=[].slice.call(this.files);this.value=\'\';studioFiles(f)"></label>' +
+      '<span class="cf-sep"></span><span class="cf-lab">Length</span>' + lens + '</div><button class="b1 cf-go" onclick="studioGo()">Create video</button>';
+  }
+  window.studioTyped = function (el) { var was = mode(); hero.text = el.value; if (mode() !== was) { var r = document.getElementById('cf-row'); if (r) r.innerHTML = rowHTML(); } };
+  window.studioLen = function (n) { hero.len = n; var r = document.getElementById('cf-row'); if (r) r.innerHTML = rowHTML(); };
+  // your own clips: the same path as the old drop zone (New video, Edit my clips), carrying what you typed as the note
+  window.studioFiles = function (files) {
+    files = [].slice.call(files || []).filter(function (f) { return /^video\//.test(f.type) || /\.(mov|mp4|m4v|mkv|webm|avi)$/i.test(f.name); });
+    if (!files.length) { try { toast('Drop video files here. Pictures and links go in on the next screen.'); } catch (e) {} return; }
+    var note = (hero.text || '').trim();
+    rgo('new'); setKind('clips');
+    if (note && !URLRE.test(note)) nv.note = note;
+    hero.text = '';
+    chooseFiles(files);
+  };
+  window.studioLink = function (kind) {
+    var u = (hero.text || '').trim(); hero.text = '';
+    rgo('new'); setKind(kind);
+    if (kind === 'like') nv.like.link = u; else nv.stream.links = u;
+    render();
+  };
+  window.studioDrag = function (e, on) {
+    if (e.dataTransfer && [].indexOf.call(e.dataTransfer.types || [], 'Files') < 0) return;
+    e.preventDefault(); e.stopPropagation();
+    var b = document.getElementById('cf-box'); if (b) b.classList.toggle('over', !!on);
+    if (on === 'drop') { if (b) b.classList.remove('over'); studioFiles(e.dataTransfer.files); }
+  };
+  window.studioHome = function (vids) {
     var kinds = KINDS.map(function (k) {
       return '<button class="cf-kind" onclick="studioKind(\'' + k[0] + '\')"><span class="cf-art"><svg viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
         KART[k[0]] + '</svg></span><b>' + esc(k[1]) + '</b><span class="cf-sub">' + esc(k[2]) + '</span></button>';
     }).join('');
-    var lens = LENS.map(function (l) {
-      return '<button class="pill ' + (hero.len === l[0] ? 'on' : '') + '" onclick="studioLen(' + l[0] + ')">' + l[1] + '</button>';
-    }).join('');
-    return '<div class="cf"><h1>What do you want to make?</h1>' +
-      '<p class="cf-lede">' + (vids && vids.length ? esc(vSum(vids)) : 'Describe it, or pick a kind of video below.') + '</p>' +
-      '<div class="cf-box"><textarea id="cfq" rows="2" placeholder="Describe a video. For example: how a black hole forms, for curious teenagers" ' +
-      'oninput="studioHeroState.text=this.value" onkeydown="if(event.key===\'Enter\'&&(event.metaKey||event.ctrlKey)){event.preventDefault();studioGo()}">' + esc(hero.text) + '</textarea>' +
-      '<div class="cf-row"><div class="cf-lens"><span class="cf-lab">Length</span>' + lens + '</div>' +
-      '<button class="b1 cf-go" onclick="studioGo()">Create video</button></div></div>' +
-      '<div class="cf-kinds">' + kinds + '</div></div>';
+    var waiting = 0; try { waiting = (vids || []).filter(function (v) { return ['cut', 'approve', 'edit', 'ask'].indexOf(vPh(v)) >= 0; }).length; } catch (e) {}
+    return '<div class="pgc cf-home" ondragover="studioDrag(event, true)" ondragleave="studioDrag(event, false)" ondrop="studioDrag(event, \'drop\')"><div class="cf">' +
+      '<h1>What do you want to make?</h1>' +
+      '<p class="cf-lede">Describe a video, drop in your clips, or paste a link.</p>' +
+      '<div class="cf-box" id="cf-box"><textarea id="cfq" rows="2" placeholder="A 60 second explainer on how black holes form…" ' +
+      'oninput="studioTyped(this)" onkeydown="if(event.key===\'Enter\'&&(event.metaKey||event.ctrlKey)){event.preventDefault();if(!/^https?:/i.test(this.value.trim()))studioGo()}">' + esc(hero.text) + '</textarea>' +
+      '<div class="cf-row" id="cf-row">' + rowHTML() + '</div><div class="cf-drop">Drop your clips to edit them</div></div>' +
+      (waiting ? '<button class="cf-wait" onclick="rgo(\'videos\')"><i></i>' + waiting + ' video' + (waiting === 1 ? ' is' : 's are') + ' waiting for you<span>Open Videos</span></button>' : '') +
+      '<div class="cf-kinds">' + kinds + '</div></div></div>';
   };
+  window.studioHero = window.studioHome;
 
   // a redraw of the page must not take the box out from under someone typing in it
   var had = false, sel = 0;

@@ -403,3 +403,23 @@ body.fw-app a, body.fw-app button { cursor: default; }
 #askterm, #askbar { display: none !important; }
 /* the theme lives in Settings, Appearance: one less thing at the foot of the sidebar */
 #side .sb-theme { display: none !important; }
+
+/* ---------- Home is one box: nothing else competes with it */
+.cf-home { min-height: calc(100vh - 120px); display: flex; flex-direction: column; justify-content: center; }
+.cf-home .cf { padding: 0 0 6vh; }
+.cf-box { position: relative; }
+.cf-box.over { border-color: var(--accent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent), 0 24px 60px rgba(0, 0, 0, .4); }
+.cf-drop { position: absolute; inset: 0; border-radius: 20px; display: none; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: var(--ink);
+  background: color-mix(in srgb, var(--panel) 86%, var(--accent) 14%); border: 2px dashed var(--accent); pointer-events: none; }
+.cf-box.over .cf-drop { display: flex; }
+.cf-add { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px 0 10px; border-radius: 99px; background: var(--soft); border: 1px solid var(--line); color: var(--t2); font-size: 13px; }
+.cf-add:hover { background: var(--act); color: var(--ink); border-color: var(--ring); }
+.cf-sep { width: 1px; height: 18px; background: var(--line); margin: 0 6px 0 8px; }
+.cf-lab { margin-left: 0; }
+.cf-hint { color: var(--t3); font-size: 14px; padding-left: 8px; }
+.cf-acts { display: flex; gap: 8px; }
+.cf-wait { margin-top: 18px; display: inline-flex; align-items: center; gap: 10px; height: 36px; padding: 0 6px 0 14px; border-radius: 99px; background: var(--soft); border: 1px solid var(--line); color: var(--t2); font-size: 13.5px; }
+.cf-wait i { width: 8px; height: 8px; border-radius: 4px; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 22%, transparent); }
+.cf-wait span { height: 24px; line-height: 24px; padding: 0 10px; border-radius: 99px; background: var(--act); color: var(--ink); font-weight: 560; }
+.cf-wait:hover { border-color: var(--accent-line); color: var(--ink); }
+.cf-kinds { margin-top: 30px; }
