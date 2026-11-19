@@ -148,3 +148,14 @@ python3 plugins/ai-editor/lib/ai_editor/home.py demo
 ```
 
 `upstream`'s push address is set to `DISABLED-do-not-push-to-original`, so a push can only reach this fork.
+
+## The Mac app (`plugins/studio/app`)
+
+`build.sh` compiles `Cooked.swift` (one window showing the editor's own page, a setup screen, downloads, file
+pickers) into `dist/cooked.app`, copies the three plugins and `runtime.sh` into it, signs it ad hoc and makes a
+`.dmg`. `runtime.sh` is the installer's brain: `check`, `install` (standalone Python, Node, static ffmpeg and
+ffprobe into `~/.ai-video-editor/runtime`), `claude` (Anthropic's installer). The app reuses tools the Mac already
+has. It writes what its window shows to `~/.ai-video-editor/app-window.txt` and the server's output to
+`app-server.log`, for support. Updating is building and installing the app again: it runs its own copy of the code,
+not this folder. Not done: a Developer ID signature and notarisation (needs a paid Apple developer account), a
+Windows build, and updates from inside the app.

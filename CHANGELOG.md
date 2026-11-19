@@ -2,6 +2,15 @@
 
 What changed for every user, newest first.
 
+## Unreleased (studio)
+
+- **cooked. as a Mac app.** `bash plugins/studio/app/build.sh` makes `dist/cooked.app` and a `.dmg` (15 MB, Apple
+  silicon and Intel). Double-click and the editor opens in its own window: no Terminal, no folder to open. The app
+  carries its own copy of the plugins, starts the editor itself, and on a new Mac its first screen installs what is
+  missing (Python, Node, ffmpeg) into `~/.ai-video-editor/runtime` with no Homebrew and no password, then Claude Code
+  with Anthropic's installer. Claude Code still does the editing, signed in with the user's own Claude account. The
+  app is signed ad hoc, not with an Apple Developer ID: on another Mac the first open is right-click, Open.
+
 ## studio 0.15.0 (this fork, 2026-11-19)
 
 - **3D videos are built from a few worlds.** A 3D video now has 2 to 6 worlds (a street, Earth from orbit), each
