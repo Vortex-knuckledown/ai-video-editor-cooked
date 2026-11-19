@@ -1,0 +1,35 @@
+{
+ "id": "desert",
+ "describe": "A rocky desert at midday with a two-lane highway running to the horizon: sand, dunes, red mesas far off, cacti and scrub, heat haze, a clear HDR sky. People can walk on the road shoulder; a car can drive the road.",
+ "tags": [
+  "cacti",
+  "car",
+  "desert",
+  "drive",
+  "dune",
+  "haze",
+  "heat",
+  "highway",
+  "horizon",
+  "lane",
+  "mesa",
+  "midday",
+  "red",
+  "road",
+  "rocky",
+  "running",
+  "sand",
+  "scrub",
+  "shoulder",
+  "walk"
+ ],
+ "exposes": "World \"desert\": a rocky desert at midday with a straight two-lane highway running to the horizon.\n\nAxes (metres): +y up. The highway runs along z; its far end (the horizon, with a red mesa beside it) is at -z.\n+x is the RIGHT of someone travelling towards -z. Road surface top at y = world.ROAD_Y (0.02).\nlanes      3.6 m each: the right lane (centre x = +1.8) drives towards -z, the left lane (x = -1.8) towards +z;\ndashed yellow centre line at x = 0, white edge lines at x = +-3.6\nshoulders  paved, x 3.75..5.5 (right) and -5.5..-3.75 (left); world.SHOULDER_X (4.6) is where people walk\nverges     gravel and sand x 5.5..9, then the desert rises into low dunes and rock; nothing stands within 8 m\nof the road centre except the delineator posts (x = +-6.4) and one speed-limit sign (x = 6.9, z = -32)\npoles      telephone poles every 55 m at x = -14 with three sagging wires; barbed-wire fences at x = +-24\nfar        red mesas and buttes 1.5 to 6 km out on every side, in haze; terrain to 12 km\nThe action is meant to happen around z = -250..250 (dense ground, cacti, scrub, boulders); the road and the\npoles run on for kilometres in both directions so a car can drive any distance.\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"]}) -> world. Per frame: set world.camera (position,\nfov, lookAt), then world.update(state), then world.render().\n\nstate (every field optional):\ntime         seconds of the shot (drives the figures' animation clock by default)\npeople       {<id>: {x, z, heading, time, gait: {walk, run}, show}} for ids in cast. heading radians about +y,\n0 faces +z, PI faces -z (towards the horizon). gait weights 0..1, idle gets the rest. Move a\nwalker by world.gaitSpeed[id].walk * walk (+ .run * run) metres a second so the feet never slide.\nWhen `people` is given, a cast member not in it is hidden. Without it, the first cast member\nstands idle on the right shoulder at (4.6, 0) facing the horizon.\ncar          {z, lane, show} the car (a blue sedan). lane 1 = right lane heading -z (default), -1 = left lane\nheading +z. Wheels turn with z. Default z = -45. car: false hides it.\nfocus        {x, y, z} the shadow box centre (default the first visible person, else the car)\nshadowRadius metres of the shadow box round the focus (default from the camera's distance)\n\nExposes: world.cast.<id> (loadFigure results), world.person (first cast member's object), world.gaitSpeed.<id>\n{walk, run} m/s, world.car (Group, faces +z in its own frame), world.sun (DirectionalLight), world.sunDir,\nworld.height(x, z) (ground height there), world.ROAD_Y, world.SHOULDER_X, world.LANE_X (1.8), world.ROAD_HALF\n(5.5), world.mesas (array of {x, z, r, h}), world.sign (Vector3 of the speed-limit sign), world.poleX (-14).",
+ "props": [
+  "dead_quiver_trunk",
+  "namaqualand_boulder_03",
+  "namaqualand_boulder_05",
+  "namaqualand_boulders_01"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

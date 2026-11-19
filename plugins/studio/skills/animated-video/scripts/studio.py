@@ -39,6 +39,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import lib3d  # noqa: E402  (the shared 3D library, beside this file)
+
 HERE = Path(__file__).resolve().parent
 FPS = 30
 SIZES = {"9:16": (1080, 1920), "16:9": (1920, 1080)}
@@ -93,6 +96,17 @@ def jsave(p, d):
 
 def slug(s, n=24):
     return re.sub(r"[^a-z0-9]+", "-", str(s).lower()).strip("-")[:n] or "scene"
+
+
+DARK_LUMA = 28   # of 255. Measured on a rendered video: a daylight street is about 100, Earth from orbit 35 to 55, a shot that reads as black 23
+
+
+def luma_of(f):
+    """How bright a clip is: the middle value of its frames' mean brightness (0 to 255), two frames a second. None when it cannot be read."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(f), "-vf", "fps=2,scale=160:-2,signalstats,metadata=print:file=-", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    ys = sorted(float(x) for x in re.findall(r"YAVG=([\d.]+)", r.stdout))
+    return ys[len(ys) // 2] if ys else None
 
 
 def duration(f):
@@ -237,6 +251,9 @@ def check_scenes(edit):
     if not isinstance(sc, dict) or not isinstance(sc.get("scenes"), list) or not sc["scenes"]:
         return ["scenes.json needs {\"scenes\": [{\"id\", \"say\", \"text\", \"visual\"}, ...]}"]
     b, errs, ids = brief_of(edit), [], set()
+    wids = {str(w.get("id")) for w in sc.get("worlds") or [] if isinstance(w, dict)}
+    if sc.get("style3d") and not 2 <= len(wids) <= 6:
+        errs.append("a 3D video has 2 to 6 worlds in \"worlds\" (each {\"id\", \"describe\"})")
     for i, s in enumerate(sc["scenes"]):
         if not isinstance(s, dict):
             errs.append(f"scene {i + 1} is not an object")
@@ -247,6 +264,8 @@ def check_scenes(edit):
         elif sid in ids:
             errs.append(f"scene {i + 1}: id {sid} twice")
         ids.add(sid)
+        if sc.get("style3d") and s.get("world") not in wids:
+            errs.append(f"scene {sid}: its \"world\" must be one of {sorted(wids)}")
         if not str(s.get("visual") or "").strip():
             errs.append(f"scene {sid}: no visual (what the animation shows)")
         if b["voice"] and not str(s.get("say") or "").strip():
@@ -714,6 +733,285 @@ def cmd_three_setup():
     return 0 if ok else 1
 
 
+# ---------------------------------------------------------------- the 3D kit: free textures, skies and models for worlds
+THREE_RAW = "https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/"
+KIT_FILES = {   # where it lands in the kit -> where it comes from. NASA imagery is public domain; Poly Haven is CC0.
+    "textures/earth_day.jpg": THREE_RAW + "textures/planets/earth_atmos_2048.jpg",
+    "textures/earth_night.png": THREE_RAW + "textures/planets/earth_lights_2048.png",
+    "textures/earth_clouds.png": THREE_RAW + "textures/planets/earth_clouds_1024.png",
+    "textures/earth_specular.jpg": THREE_RAW + "textures/planets/earth_specular_2048.jpg",
+    "textures/earth_normal.jpg": THREE_RAW + "textures/planets/earth_normal_2048.jpg",
+    "textures/moon.jpg": THREE_RAW + "textures/planets/moon_1024.jpg",
+    "models/person.glb": THREE_RAW + "models/gltf/Xbot.glb",              # a neutral figure: idle, walk, run and more
+    "models/soldier.glb": THREE_RAW + "models/gltf/Soldier.glb",          # idle, walk, run
+    "models/robot.glb": THREE_RAW + "models/gltf/RobotExpressive/RobotExpressive.glb",   # CC0: walk, run, jump, wave, ...
+}
+KIT_SKIES = {"sky/day.hdr": "kloofendal_48d_partly_cloudy_puresky", "sky/sunset.hdr": "belfast_sunset_puresky"}
+KIT_PBR = {"brick": "red_brick_03", "asphalt": "asphalt_02", "concrete": "brushed_concrete", "sand": "coast_sand_01", "rock": "aerial_rocks_02"}
+KIT_JSM = ["loaders/GLTFLoader.js", "loaders/RGBELoader.js", "loaders/HDRLoader.js", "utils/BufferGeometryUtils.js", "utils/SkeletonUtils.js",
+           "loaders/FBXLoader.js", "libs/fflate.module.js", "curves/NURBSCurve.js", "curves/NURBSUtils.js"]   # FBX: what Mixamo exports
+
+def kit_dir():
+    import os
+    home = os.environ.get("AI_EDITOR_HOME", "").strip()
+    return (Path(home) if home else Path.home() / ".ai-video-editor") / "kit3d"
+
+
+def cmd_kit_setup():
+    """The 3D kit, once (about 20 MB): photographic Earth and Moon textures, two skies, five surface materials (colour,
+    normal, roughness), three animated figures and three.js's model loaders. Everything is public domain, CC0 or MIT
+    except the two Mixamo figures (free to use in your own videos, not to pass on as files)."""
+    use_editor()
+    import motion
+    from ai_editor import net
+    k = kit_dir()
+    todo = dict(KIT_FILES)
+    for dest, pid in KIT_SKIES.items():
+        todo[dest] = f"https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/{pid}_1k.hdr"
+    for name, pid in KIT_PBR.items():
+        for part, suf in (("diff", "diff"), ("nor", "nor_gl"), ("rough", "rough")):
+            todo[f"pbr/{name}_{part}.jpg"] = f"https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/{pid}/{pid}_{suf}_1k.jpg"
+    bad = []
+    for dest, url in todo.items():
+        f = k / dest
+        if f.is_file() and f.stat().st_size > 1000:
+            continue
+        f.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            net.retrieve(url, f.with_suffix(f.suffix + ".part"), 180)
+            f.with_suffix(f.suffix + ".part").rename(f)
+        except Exception as e:   # noqa: BLE001
+            bad.append(f"{dest} ({type(e).__name__})")
+    jsm = motion.home() / "motion" / "node_modules" / "three" / "examples" / "jsm"
+    for rel in KIT_JSM:
+        if (jsm / rel).is_file():
+            (k / "jsm" / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(jsm / rel, k / "jsm" / rel)
+        else:
+            bad.append(f"jsm/{rel} (three.js is not installed: studio.py three-setup)")
+    jsave(k / "kit.json", {"files": sorted(str(f.relative_to(k)) for f in k.rglob("*") if f.is_file() and f.name != "kit.json")})
+    print(f"kit3d: {sum(f.stat().st_size for f in k.rglob('*') if f.is_file()) / 1e6:.0f} MB in {k}" + (f"; MISSING {', '.join(bad)}" if bad else ""))
+    return max(1 if bad else 0, lib3d.setup(k))   # the shared library's characters come with the kit
+
+
+def kit_into(d):
+    """The kit linked into a clip's assets as assets/kit (a symlink: 20 MB is not copied per clip). True when it is there."""
+    k = kit_dir()
+    if not (k / "kit.json").is_file():
+        return False
+    link = Path(d) / "assets" / "kit"
+    if not link.exists():
+        try:
+            link.symlink_to(k, target_is_directory=True)
+        except OSError:
+            shutil.copytree(k, link)
+    return True
+
+
+IMPORTMAP = '<script type="importmap">{"imports":{"three":"./assets/three.module.js","three/addons/":"./assets/kit/jsm/"}}</script>'
+
+
+def scaffold3d(d, edit):
+    """A clip folder made ready for a world: three.js and the kit in its assets, the video's worlds linked in as
+    assets/worlds, and the import map in its index.html. True when three.js and the kit are both installed."""
+    d, edit = Path(d), Path(edit)
+    ok = three_assets(d) and kit_into(d)
+    lib3d.link_into(d)
+    (edit / "worlds").mkdir(exist_ok=True)
+    link = d / "assets" / "worlds"
+    if not link.exists():
+        try:
+            link.symlink_to((edit / "worlds").resolve(), target_is_directory=True)
+        except OSError:
+            pass
+    f = d / "index.html"
+    if f.exists():
+        h = f.read_text(encoding="utf-8")
+        if "importmap" not in h and '<script src="assets/gsap.min.js"></script>' in h:
+            f.write_text(h.replace('<script src="assets/gsap.min.js"></script>', IMPORTMAP + '\n    <script src="assets/gsap.min.js"></script>', 1), encoding="utf-8")
+    return ok
+
+
+def hud_note(sc, scene, prev):
+    """The data display a 3D video carries in the same corners throughout, and this scene's values for it."""
+    hud = sc.get("hud") or {}
+    if not hud:
+        return ""
+    out = ["- The video's data display, the same in every scene (HTML over the canvas, updated in draw()): a dark translucent",
+           "  card 56 px from the top and from each side, a small spaced capital label over a heavy 58 px number with its unit small."]
+    for side in ("left", "right"):
+        h = hud.get(side)
+        if h:
+            a, z = (prev.get("hud_values") or {}).get(side), (scene.get("hud_values") or {}).get(side)
+            out.append(f"  {side}: \"{h.get('label', '')}\" in {h.get('unit', '')}" + (f", running from {a} to {z} over this scene" if z is not None and a is not None
+                       else f", ending this scene at {z}" if z is not None else ""))
+    return "\n".join(out) + "\n"
+
+
+WORLD_NOTE = """
+This video is 3D and made of a few worlds. Read `{ref}` first: the kit, how a world must be wired, the module contract.
+- This scene is one shot in the world `{wid}` ({wdesc})
+  The world is already built: `import {{ createWorld }} from "./assets/worlds/{wid}.js"`. Read that file's first
+  comment for what it exposes. Do not rebuild or restyle it: set this shot's camera and action only, then render.
+- Three.js is `import * as THREE from "three"`; loaders are `three/addons/...`; the kit is at `./assets/kit/`.
+{hud}"""
+
+
+WORLD_BRIEF = """# World {wid} (a 3D world for the video "{title}")
+
+Read `{ref}` first (the kit, how a world must be wired, the module contract), then the example nearest to this world
+in `{examples}`.
+
+Build `{js}`: the module that exports `async function createWorld({{THREE, canvas, K, loaders}})`. It is built once and
+used by {n} shots of the video, each with its own camera, so it must hold up from close and from far, and from every
+side a camera may reasonably be.
+
+The world: {wdesc}
+What the video is about: "{prompt}"
+The shots that will use it (their cameras and actions; the world must make each of these possible):
+{shots}
+
+What makes it look produced and not generated, in order: real surfaces from the kit on everything large; a sky that
+lights the scene; shadows; depth (haze or fall-off into the distance); detail in the mid-ground (windows, lamps, cars,
+kerbs, craters, clouds); one figure with a believable gait if the world has a person; nothing floating, nothing
+intersecting. The look is realistic, not a diagram. Light it so the subject reads: a night side or deep space still
+needs a rim light or glow, never a frame that is mostly black.
+{start}
+The shared library is at `./assets/lib/` in every clip (`../lib/` from this module). Use it, do not write your own:
+- A person: `import {{ loadFigure }} from "../lib/figure.js"`, then
+  `const sam = await loadFigure({{THREE, id: "woman", clips: ["idle", "walk", "run"]}})`; `scene.add(sam.object)`; in
+  `update`, `sam.pose(seconds, {{walk: 0.3, run: 0.7}})`. Characters: {chars}.
+  Do not fix who it is: `createWorld({{..., cast = ["woman"]}})` loads the characters named in `cast` and exposes them as
+  `world.cast.<id>` (each a loadFigure result), so another video can walk someone else through the same place.
+  `update(state)` places and poses them from `state.people = {{<id>: {{x, z, heading, time, gait: {{walk, run}}}}}}`.
+  `cast` entries may also be `{{id, outfit: {{shirt: "#2f6fdd", trousers: "#3b4a6b"}}, as: "sam"}}` (man and woman only):
+  pass `outfit` on to loadFigure, so one body gives differently dressed people, and expose that one as `world.cast.<as>`.
+  Another movement (a dance, a crouch, a jump): `{lib} clip <id> "<what>"`, then name it in `clips`.
+- A thing the world needs (a bench, a tree, a rock, a sofa): `{lib} prop "<what>"` lists free models, `{lib} prop-get <id>`
+  puts the right one in the library, then `import {{ loadProp }} from "../lib/figure.js"` and `await loadProp({{THREE, id}})`. In it already: {props}.
+  When nothing matches, build it from shapes and the kit's surfaces.
+
+Then prove it in the demo clip `{demo}`: its `index.html` imports the world and, over {dur} s, moves the camera
+through three framings the shots above need (a wide establishing view, a medium one, a close one on the action).
+Check it: `{env}python3 "{run}" "{motion}" check "{demo}"`. Look at `renders/sheet.png` after every render and fix
+what looks wrong (an empty frame, a figure sliding, a texture stretched, a camera inside a wall). The `motion` gate's
+"frame 0 flash" means the first frame was drawn before the world loaded: make the canvas black until `draw()` has run.
+At most 5 checks. Then report `{{"world": "{wid}", "pass": true|false, "what": "<what is in it and what it exposes>",
+"failing": [...]}}`.
+"""
+
+
+def save_worlds(edit, sc):
+    """Every world this video built (or extended) goes into the shared library, so the next video starts with it."""
+    saved = []
+    for wd in sc.get("worlds") or []:
+        js = Path(edit) / "worlds" / f"{wd.get('id')}.js"
+        if js.is_file() and (not wd.get("library") or wd.get("extend")):
+            sheet = Path(edit) / "worlds" / f"demo-{wd['id']}" / "renders" / "sheet.png"
+            describe = (wd.get("describe") or "") + ((" Also: " + wd["extend"]) if wd.get("extend") else "")
+            saved.append(lib3d.save_world(js, describe, name=wd.get("name") or wd["id"], sheet=sheet, video=sc.get("title") or "",
+                                          replace=wd["library"] if wd.get("library") and wd.get("update") else None))   # "update": the library's own copy is improved
+    if saved:
+        print("library: kept " + ", ".join(saved))
+    return saved
+
+
+def cmd_lib(args):
+    """studio.py lib setup | list | find "<place>" | prop "<thing>" | prop-get <id> | clip <character> "<movement>" | save EDIT | character <id> <body> name=file ..."""
+    use_editor()
+    what, rest = (args[0] if args else "list"), args[1:]
+    if what == "setup":
+        return lib3d.setup(kit_dir())
+    if what == "list":
+        print(lib3d.listing())
+    elif what == "find" and rest:
+        hits = lib3d.find(" ".join(rest))
+        print("\n".join(f"{h[0]:.2f}  {h[1]:<20} {h[2][:140]}" for h in hits) or "nothing in the library is this place: write it as a new world")
+    elif what == "prop" and rest:      # the free models that match, to choose from
+        hits = lib3d.prop_matches(" ".join(rest))
+        print("\n".join(f"{h[1]:<28} {h[2]}" for h in hits) or "no free model matches: build it from shapes and the kit's surfaces")
+        if hits:
+            print("Take the one that is the thing meant: studio.py lib prop-get <id>")
+    elif what == "prop-get" and rest:
+        return 0 if lib3d.add_prop(rest[0]) else 1
+    elif what == "clip" and len(rest) >= 2:
+        lib3d.add_clip(rest[0], " ".join(rest[1:]))
+    elif what == "save" and rest:
+        save_worlds(Path(rest[0]).resolve(), jload(Path(rest[0]).resolve() / "scenes.json") or {})
+    elif what == "character" and len(rest) >= 2:
+        lib3d.add_character(rest[0], rest[1], dict(x.split("=", 1) for x in rest[2:] if "=" in x))
+    else:
+        sys.exit("ERROR: " + cmd_lib.__doc__)
+    return 0
+
+
+def cmd_worlds(edit):
+    """EDIT/worlds/: for each world of a 3D video, its brief (<id>.md) and a demo clip (demo-<id>/) to prove it in.
+    One agent per world builds <id>.js; every scene's clip then imports that module."""
+    edit = Path(edit).resolve()
+    root = use_editor()
+    import motion
+    sc, b = jload(edit / "scenes.json"), brief_of(edit)
+    worlds = sc.get("worlds") or []
+    if not worlds:
+        print("0 worlds: scenes.json has no \"worlds\"")
+        return 0
+    ok, why = motion.ensure_tools()
+    if not ok:
+        sys.exit("ERROR: the motion tools are missing: " + str(why))
+    look, (w, h) = look_of(sc), size_of(edit)
+    gsap = motion.home() / "motion" / "node_modules" / "gsap" / "dist" / "gsap.min.js"
+    ref = Path(__file__).resolve().parents[1] / "references" / "worlds.md"
+    (edit / "worlds").mkdir(exist_ok=True)
+    missing, reused = False, 0
+    for wd in worlds:
+        wid = str(wd.get("id") or "")
+        if not re.fullmatch(r"[a-z0-9-]{1,24}", wid):
+            sys.exit(f"ERROR: a world's id is 1-24 of a-z, 0-9 and -: {wid!r}")
+        lib_from = False
+        if wd.get("library"):          # a world the library already has: copied in, nothing to build
+            lib_from = lib3d.use_world(str(wd["library"]), edit / "worlds" / f"{wid}.js") if not (edit / "worlds" / f"{wid}.js").exists() else True
+            if not lib_from:
+                print(f"{wid:<16} NOTE: the library has no world \"{wd['library']}\": it will be built new")
+            elif not wd.get("extend"):
+                (edit / "worlds" / f"{wid}.md").unlink(missing_ok=True)
+                print(f"{wid:<16} from the library ({wd['library']}): nothing to build")
+                reused += 1
+                continue
+        else:
+            near = lib3d.find(wd.get("describe") or "")
+            if near and not (edit / "worlds" / f"{wid}.js").exists():
+                print(f"{wid:<16} NOTE: the library has a world that may be this place: " + "; ".join(f"{x[1]} ({x[2][:70]})" for x in near[:2]) +
+                      f". To reuse it, add \"library\": \"{near[0][1]}\" to this world in scenes.json and run worlds again.")
+        demo = edit / "worlds" / f"demo-{wid}"
+        (demo / "assets").mkdir(parents=True, exist_ok=True)
+        beat = {"id": f"demo-{wid}", "type": "scene", "props": {}, "start": 0, "dur": 6.0, "clock": "video", "size": [w, h], "words": [],
+                "line": "", "before": "", "after": ""}
+        if not (demo / "index.html").exists():
+            (demo / "index.html").write_text(motion.fill_template(beat, look), encoding="utf-8")
+        shutil.copy(root / "skills" / "motion" / "template" / "hyperframes.json", demo / "hyperframes.json")
+        if gsap.exists():
+            shutil.copy(gsap, demo / "assets" / "gsap.min.js")
+        jsave(demo / "beat.json", beat)
+        missing = not scaffold3d(demo, edit) or missing
+        shots = [f"  - {s['id']}: {s.get('visual', '')}" for s in sc["scenes"] if s.get("world") == wid]
+        (edit / "worlds" / f"{wid}.md").write_text(WORLD_BRIEF.format(
+            wid=wid, title=sc.get("title") or "", ref=ref, examples=ref.parents[1] / "worlds", js=edit / "worlds" / f"{wid}.js", n=len(shots),
+            wdesc=wd.get("describe") or "", prompt=b.get("prompt") or "", shots="\n".join(shots) or "  (none yet)", demo=demo, dur=6,
+            env=f'AI_EDITOR_HOME="{os.environ["AI_EDITOR_HOME"]}" ' if os.environ.get("AI_EDITOR_HOME") else "",
+            run=root / "lib" / "ai_editor" / "run.py", motion=root / "skills" / "motion" / "scripts" / "motion.py",
+            start=(f"It is already in the library and copied to `{edit / 'worlds' / (wid + '.js')}`. Keep everything it does and add: "
+                   f"{wd['extend']}") if lib_from and wd.get("extend") else "",
+            chars="; ".join(f"`{c['id']}` ({c.get('describe', '')} clips: {', '.join(c.get('clips') or [])})" for c in lib3d.characters()) or "none (studio.py kit-setup)",
+            props=", ".join(f"`{x['id']}`" for x in lib3d.props()) or "nothing yet",
+            lib=f'python3 "{Path(__file__).resolve()}" lib'), encoding="utf-8")
+        print(f"{wid:<16} {len(shots):3d} shots  {edit / 'worlds' / (wid + '.md')}")
+    if missing:
+        print("NOTE: three.js or the 3D kit is not installed: studio.py three-setup, then studio.py kit-setup, then worlds again")
+    print(f"{len(worlds) - reused} world brief(s), {reused} world(s) from the library. One ai-editor:clip-builder agent per brief, all in one message; build the scenes only after they pass.")
+    return 0
+
+
 def look_of(sc):
     use_editor()
     import motion
@@ -739,6 +1037,7 @@ def cmd_briefs(edit):
     sc, b = jload(edit / "scenes.json"), brief_of(edit)
     scenes = {s["id"]: s for s in sc["scenes"]}
     look = look_of(sc)
+    save_worlds(edit, sc)
     w, h = size_of(edit)
     gsap = motion.home() / "motion" / "node_modules" / "gsap" / "dist" / "gsap.min.js"
     mroot = edit / "motion"
@@ -762,6 +1061,12 @@ def cmd_briefs(edit):
             shutil.copy(gsap, d / "assets" / "gsap.min.js")
         jsave(d / "beat.json", beat)
         three = THREE_NOTE if three_assets(d) else ""
+        if sc.get("style3d") and s.get("world"):       # a shot in one of the video's worlds
+            scaffold3d(d, edit)
+            wd = next((x for x in sc.get("worlds") or [] if x.get("id") == s["world"]), {})
+            three = WORLD_NOTE.format(ref=Path(__file__).resolve().parents[1] / "references" / "worlds.md", wid=s["world"],
+                                      wdesc=str(wd.get("describe") or "")[:400],
+                                      hud=hud_note(sc, s, scenes[rows[k - 1]["id"]] if k else {})).replace("{", "{{").replace("}", "}}")
         (d / "brief.md").write_text(three.join(BRIEF.split("\n{start}Build:", 1)[:1] + ["\n{start}Build:" + BRIEF.split("\n{start}Build:", 1)[1]]).format(
             id=r["id"], card=root / "skills" / "motion" / "references" / "clip-brief-card.md", dir=d, w=w, h=h, dur=beat["dur"],
             title=sc.get("title") or "", prompt=b.get("prompt") or "", look=json.dumps(look), visual=s.get("visual", ""),
@@ -843,6 +1148,8 @@ def cmd_music(edit, mood="linear"):
 
 # ---------------------------------------------------------------- the scene, render, stills
 CAPTION_STYLE = {"y_pct": 72, "size_pct": 5.6, "case": "sentence", "effect": "pop", "stroke": True}
+# a 3D video: the picture is the subject, so the words sit small at the bottom and light up as they are said
+CAPTION_3D = {"y_pct": 91, "size_pct": 2.9, "case": "sentence", "effect": "karaoke", "weight": 600, "stroke": True, "inactive_opacity": 0.5}
 
 
 def cmd_build(edit):
@@ -855,14 +1162,18 @@ def cmd_build(edit):
     look = look_of(sc)
     w, h = size_of(edit)
     S = scene.Scene(w, h, FPS, background=look.get("ground") or "#000000", edit=edit)
-    fell = []
+    fell, dark = [], []
     for r in tm["scenes"]:
         f = clip_of(edit, r["id"])
         if not f:
             f, _ = fallback_clip(edit, r, look), fell.append(r["id"])
+        elif sc.get("style3d"):
+            y = luma_of(f)
+            if y is not None and y < DARK_LUMA:
+                dark.append(f"{r['id']} ({y:.0f})")
         S.video(str(f.relative_to(edit)), r["start"], r["start"] + r["dur"], track="Scenes", volume=0)
     if b["text"] and words:   # one captions item per scene: a caption page never runs across a cut
-        style = {**CAPTION_STYLE, **(sc.get("captions") or {})}
+        style = {**(CAPTION_3D if sc.get("style3d") else CAPTION_STYLE), **(sc.get("captions") or {})}
         for r in tm["scenes"]:
             mine = [{"w": x["w"], "start": x["start"], "end": x["end"]} for x in words
                     if r["start"] <= x["start"] < r["start"] + r["dur"]]
@@ -876,6 +1187,9 @@ def cmd_build(edit):
           (", sound" if (edit / "audio" / "mix.wav").exists() else ", silent"))
     if fell:
         print("FELL BACK (no passed clip, a plain moving ground instead): " + ", ".join(fell))
+    if dark:
+        print(f"DARK (reads as nearly black; brightness out of 255, under {DARK_LUMA}): " + ", ".join(dark) +
+              ". Send each scene's agent a note to light the subject (a rim light, a brighter key, a closer camera), then build again.")
     return 0
 
 
@@ -972,6 +1286,7 @@ def demo():
         assert estimate({"say": "a " * 100}, {"voice": True}) == MAX_SCENE_S, "a long line is capped (split it)"
         if editor_root():
             assert (editor_root() / "lib" / "ai_editor" / "scene.py").exists()
+    assert lib3d.demo() == 0
     print("studio demo ok")
     return 0
 
@@ -983,11 +1298,13 @@ def main(argv):
     sub.add_parser("demo")
     sub.add_parser("kokoro-setup")
     sub.add_parser("three-setup")
+    sub.add_parser("kit-setup")
+    sub.add_parser("lib").add_argument("args", nargs="*")
     pv = sub.add_parser("preview")
     pv.add_argument("--engine", default="kokoro")
     pv.add_argument("--voice", required=True)
     pv.add_argument("--out", required=True)
-    for name in ("check-scenes", "words", "briefs", "build", "stills"):
+    for name in ("check-scenes", "words", "briefs", "build", "stills", "worlds"):
         sub.add_parser(name).add_argument("edit")
     v = sub.add_parser("voice")
     v.add_argument("edit")
@@ -1016,10 +1333,14 @@ def main(argv):
         return cmd_kokoro_setup()
     if a.cmd == "three-setup":
         return cmd_three_setup()
+    if a.cmd == "kit-setup":
+        return cmd_kit_setup()
+    if a.cmd == "lib":
+        return cmd_lib(a.args)
     if a.cmd == "preview":
         return cmd_preview(a.engine, a.voice, a.out)
     return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice, a.fit),
-            "words": lambda: cmd_words(a.edit), "briefs": lambda: cmd_briefs(a.edit),
+            "words": lambda: cmd_words(a.edit), "briefs": lambda: cmd_briefs(a.edit), "worlds": lambda: cmd_worlds(a.edit),
             "music": lambda: cmd_music(a.edit, a.mood), "build": lambda: cmd_build(a.edit),
             "render": lambda: cmd_render(a.edit, a.draft), "stills": lambda: cmd_stills(a.edit)}[a.cmd]()
 

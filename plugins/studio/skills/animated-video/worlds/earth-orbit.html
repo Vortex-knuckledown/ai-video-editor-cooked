@@ -1,0 +1,68 @@
+<!-- An example world (earth-orbit). The markup goes inside #scene, the module after the clip's main script.
+     It rendered through motion.py check as written, in a clip whose id was "a-1". -->
+<canvas id="gl" width="1920" height="1080" style="position:absolute;left:0;top:0;width:1920px;height:1080px"></canvas>
+<div style="position:absolute;left:56px;top:44px;padding:16px 22px;background:rgba(10,12,16,.55);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-family:Inter,Helvetica,Arial,sans-serif;color:#fff">
+  <div style="font-size:15px;letter-spacing:.14em;opacity:.6">YOUR SPEED</div>
+  <div style="font-size:58px;font-weight:800;line-height:1.05;white-space:nowrap"><span id="spd">0</span><span style="font-size:22px;opacity:.7;white-space:nowrap">&nbsp;km/h</span></div>
+  <div style="font-size:15px;opacity:.6;margin-top:4px">MACH <span id="mach">0</span> · IN SPACE, NOTHING SLOWS YOU</div></div>
+<div style="position:absolute;right:56px;top:44px;padding:16px 22px;background:rgba(10,12,16,.55);border:1px solid rgba(255,255,255,.12);border-radius:10px;font-family:Inter,Helvetica,Arial,sans-serif;color:#fff;text-align:right">
+  <div style="font-size:15px;letter-spacing:.14em;opacity:.6">ONE LAP OF THE EARTH</div>
+  <div style="font-size:58px;font-weight:800;line-height:1.05"><span id="lap">19:28</span></div></div>
+
+<script type="module">
+      import * as THREE from "three";
+      const canvas = document.getElementById("gl");
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+      renderer.setSize(1920, 1080, false); renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.15;
+      const scene = new THREE.Scene(); scene.background = new THREE.Color(0x020308);
+      const cam = new THREE.PerspectiveCamera(32, 1920 / 1080, 0.1, 2000);
+      const L = new THREE.TextureLoader(); const tex = f => { const t = L.load("./assets/kit/textures/" + f, () => draw()); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; return t; };
+      const sunDir = new THREE.Vector3(-1, 0.25, 0.55).normalize();
+      // the Earth: day and night maps blended by where the Sun is, a specular ocean, clouds, a thin atmosphere
+      const earthMat = new THREE.ShaderMaterial({ uniforms: { day: { value: tex("earth_day.jpg") }, night: { value: tex("earth_night.png") },
+          spec: { value: tex("earth_specular.jpg") }, sun: { value: sunDir } },
+        vertexShader: `varying vec2 vUv; varying vec3 vN; varying vec3 vP; void main(){ vUv=uv; vN=normalize(mat3(modelMatrix)*normal); vec4 w=modelMatrix*vec4(position,1.); vP=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`,
+        fragmentShader: `uniform sampler2D day; uniform sampler2D night; uniform sampler2D spec; uniform vec3 sun; varying vec2 vUv; varying vec3 vN; varying vec3 vP;
+          void main(){ vec3 n=normalize(vN); float d=dot(n,sun); float k=smoothstep(-0.18,0.28,d);
+            vec3 dc=texture2D(day,vUv).rgb; vec3 nc=texture2D(night,vUv).rgb*vec3(1.25,1.0,0.7)*1.6;
+            vec3 v=normalize(cameraPosition-vP); vec3 h=normalize(sun+v); float s=pow(max(dot(n,h),0.),60.)*texture2D(spec,vUv).r*0.9;
+            vec3 col=mix(nc, dc*(0.25+0.95*max(d,0.))+s, k);
+            float rim=pow(1.-max(dot(n,v),0.),3.2); col+=vec3(0.25,0.5,1.0)*rim*(0.25+0.9*k);
+            gl_FragColor=vec4(col,1.);
+            #include <tonemapping_fragment>
+            #include <colorspace_fragment>
+          }` });
+      const earth = new THREE.Mesh(new THREE.SphereGeometry(10, 128, 96), earthMat);
+      const clouds = new THREE.Mesh(new THREE.SphereGeometry(10.07, 96, 72), new THREE.MeshLambertMaterial({ map: tex("earth_clouds.png"), transparent: true, opacity: 0.85, depthWrite: false }));
+      const atmo = new THREE.Mesh(new THREE.SphereGeometry(10.9, 96, 72), new THREE.ShaderMaterial({ side: THREE.BackSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+        uniforms: { sun: { value: sunDir } },
+        vertexShader: `varying vec3 vN; varying vec3 vP; void main(){ vN=normalize(mat3(modelMatrix)*normal); vec4 w=modelMatrix*vec4(position,1.); vP=w.xyz; gl_Position=projectionMatrix*viewMatrix*w; }`,
+        fragmentShader: `uniform vec3 sun; varying vec3 vN; varying vec3 vP; void main(){ vec3 v=normalize(cameraPosition-vP); float f=pow(max(0.,0.78+dot(normalize(vN),v)),4.5);
+          float lit=smoothstep(-0.35,0.5,dot(normalize(vP),sun)); gl_FragColor=vec4(vec3(0.3,0.6,1.0)*f*(0.15+lit),f); }` }));
+      const g = new THREE.Group(); g.add(earth); g.add(clouds); g.rotation.z = 0.41; scene.add(g); scene.add(atmo);
+      const sun = new THREE.DirectionalLight(0xfff1e0, 2.6); sun.position.copy(sunDir.clone().multiplyScalar(100)); scene.add(sun); scene.add(new THREE.AmbientLight(0x223355, 0.12));
+      // stars: 6000 points with varied size and warmth
+      const N = 6000, pos = new Float32Array(N * 3), col = new Float32Array(N * 3); let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      for (let i = 0; i < N; i++) { const u = rnd() * 2 - 1, th = rnd() * 6.283, r = 900, q = Math.sqrt(1 - u * u); pos.set([r * q * Math.cos(th), r * u, r * q * Math.sin(th)], i * 3);
+        const b = 0.35 + 0.65 * Math.pow(rnd(), 3), w = rnd(); col.set([b, b * (0.85 + 0.15 * w), b * (0.7 + 0.3 * w)], i * 3); }
+      const sg = new THREE.BufferGeometry(); sg.setAttribute("position", new THREE.BufferAttribute(pos, 3)); sg.setAttribute("color", new THREE.BufferAttribute(col, 3));
+      scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true })));
+      // the traveller: a bright point with a trail, one lap round the planet
+      const trailN = 90, tp = new Float32Array(trailN * 3), tg = new THREE.BufferGeometry(); tg.setAttribute("position", new THREE.BufferAttribute(tp, 3));
+      const trail = new THREE.Line(tg, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9 })); scene.add(trail);
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffffff })); scene.add(dot);
+      const orbit = a => new THREE.Vector3(Math.cos(a) * 10.6, Math.sin(a) * 2.4, Math.sin(a) * 10.6 * 0.96);
+      const st = { t: 0 };
+      const draw = () => { const t = st.t, e = t * t * (3 - 2 * t);
+        g.rotation.y = 2.2 + t * 0.35; clouds.rotation.y = t * 0.12;
+        cam.position.set(-14 + 10 * e, 7 - 3 * e, 44 - 8 * e); cam.lookAt(-3 + 3 * e, 0, 0);
+        const a = -0.6 + e * 5.6; dot.position.copy(orbit(a));
+        for (let i = 0; i < trailN; i++) { const p = orbit(a - i * 0.022); tp.set([p.x, p.y, p.z], i * 3); } tg.attributes.position.needsUpdate = true;
+        document.getElementById("spd").textContent = Math.round(1235 + (123480 - 1235) * Math.min(1, t * 2.2)).toLocaleString("en-US");
+        document.getElementById("mach").textContent = Math.round(1 + 99 * Math.min(1, t * 2.2));
+        renderer.render(scene, cam); };
+      const tl = window.__timelines["a-1"];
+      tl.to(st, { t: 1, duration: DURATION, ease: "none", onUpdate: draw }, 0);
+      draw();
+    </script>

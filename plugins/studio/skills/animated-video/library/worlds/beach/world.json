@@ -1,0 +1,37 @@
+{
+ "id": "beach",
+ "describe": "A sandy tropical beach in late afternoon: gentle waves rolling in with foam, wet sand, palm trees, a few rocks, a wooden lifeguard tower, the sea to the horizon, a warm HDR sky. People walk the shoreline.",
+ "tags": [
+  "afternoon",
+  "beach",
+  "few",
+  "foam",
+  "gentle",
+  "horizon",
+  "late",
+  "lifeguard",
+  "palm",
+  "rock",
+  "rolling",
+  "sand",
+  "sandy",
+  "sea",
+  "shoreline",
+  "tower",
+  "tree",
+  "tropical",
+  "walk",
+  "warm",
+  "wave",
+  "wet",
+  "wooden"
+ ],
+ "exposes": "World \"beach\": a sandy tropical beach in late afternoon.\n\nAxes (metres): +x runs ALONG the shore, +y up, -z is OUT TO SEA (the horizon), +z inland. In the middle of the\nbeach (|x| < 260) the waterline sits at z = 0; beyond that the shore curves seaward into a bay that ends in two\nrocky, green headlands (|x| > 650). world.shoreZ(x) gives the waterline's z, world.groundY(x, z) the sand height.\nSand slopes up gently from the water (wet, dark and glossy for the first ~5 m, a tide line at ~7 m), dry sand to the\ndunes (z ~35..75, dune grass and a slatted sand fence at z ~ 36), a palm grove behind, then hazy green hills.\nWaves roll in with real height, break about 15..25 m out, run up the sand as a foamy sheet and slide back.\nA wooden lifeguard tower stands at world.towerSpot (x 12, z 17), rocks lie at the shore at x ~ -95 and in the surf\nat x ~ 95, umbrellas and towels at x -34..-24 and 30. The Sun is low over the sea to +x (warm sunset sky).\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"], extras = true}) -> world.\nPer frame: set world.camera (position, fov, lookAt), then world.update(state), then world.render().\n\nstate (every field optional):\ntime        seconds of the shot: waves, swash, palm sway, the flag, gulls and the background walkers all run on it\npeople      {<cast id>: {x, z, heading, time, gait: {walk, run}, show}}: heading radians about +y, 0 faces +z\n(inland), PI/2 faces +x (along the shore), -PI/2 faces -x, PI faces the sea. y is put on the sand.\ntime = that figure's animation clock (default state.time). Move x by world.gaitSpeed[id].walk * walk\n(+ .run * run) metres a second so the feet never slide. Default for cast[0]: walking +x along the wet\nsand at z = 3.2 from x = -14.\nextras      false hides the three background walkers far along the shoreline (default shown)\nfocus       {x, y, z} the shadow box centre (default cast[0]); shadowRadius metres (default from camera distance)\n\nExposes: world.cast.<id> (loadFigure result: object, pose, height), world.person / world.subject (cast[0]'s object),\nworld.gaitSpeed.<id> {walk, run} m/s, world.spot (Vector3, cast[0]'s default start on the wet sand),\nworld.shoreZ(x), world.groundY(x, z), world.walkZ (3.2, the firm wet sand line), world.sun (DirectionalLight),\nworld.sunDir (unit vector to the Sun), world.tower (Group), world.towerSpot (Vector3, its foot),\nworld.palms (array of {group, top: Vector3}), world.rocks (array of Object3D), world.umbrellas, world.extras.",
+ "props": [
+  "boulder_01",
+  "coast_rocks_03",
+  "grass_medium_01"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

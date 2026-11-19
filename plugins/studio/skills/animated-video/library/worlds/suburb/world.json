@@ -1,0 +1,41 @@
+{
+ "id": "suburb",
+ "describe": "A quiet suburban residential street on a sunny morning: detached houses with pitched roofs, driveways, garages and front lawns, mailboxes, hedges and garden trees, a pavement, parked family cars, a gently curving road. People walk the pavement; a car can drive past.",
+ "tags": [
+  "car",
+  "curving",
+  "detached",
+  "drive",
+  "driveway",
+  "family",
+  "front",
+  "garage",
+  "garden",
+  "gently",
+  "hedge",
+  "house",
+  "lawn",
+  "mailboxe",
+  "parked",
+  "past",
+  "pavement",
+  "pitched",
+  "quiet",
+  "residential",
+  "road",
+  "roof",
+  "street",
+  "suburban",
+  "sunny",
+  "tree",
+  "walk"
+ ],
+ "exposes": "World \"suburb\": a quiet suburban residential street on a sunny morning.\n\nAxes (metres): +x is EAST, +y up, +z SOUTH. The main street runs roughly along x and curves gently:\nits centreline is z = 9 * sin(x / 55). Everything is laid out across that curve by \"d\", the signed offset from\nthe centreline along its normal (+d = the NEAR / south side, -d = the FAR / north side):\nroad |d| < 4 (two lanes: eastbound at d = +2, westbound at d = -2, kerb 0.15 high),\ngrass verge 4.25..5.6 (street trees, lamps), pavement 5.6..7.4 (top y = 0.17), front lawns from 7.4 (y = 0.15),\nhouse fronts at |d| = 18 facing the street, back gardens with wooden fences to |d| = 48, a second row of houses\nbacking onto them, a parallel street at |d| 77.9..85.9 and a third row facing it. Lots every 26 m along the street.\n\"s\" is metres along the main street's centreline, s = 0 at x = 0 (the middle of the place).\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"], extras = true}) -> world.\ncast: library characters (\"woman\", \"man\", \"robot\", \"soldier\", \"mannequin\") or {id, outfit:{shirt, trousers}, as}\n(man and woman only take an outfit); each is world.cast.<as || id>; the first is the main person.\nextras: three background passers-by (two men, one woman) in coloured outfits (green/khaki, red/denim,\nmustard/charcoal), never white-and-black, so they do not read as the main person. false = not loaded.\nPer frame: set world.camera (position, fov), then world.update(state), then world.render().\n\nstate (every field optional):\ntime        seconds of the shot (drives the extras and the default animation clocks)\npeople      {<id>: {s, d, dir, x, z, heading, time, gait: {walk, run}, show}} one entry per cast member.\nEither s (metres along the street) and d (offset, default +6.2 = the near pavement) with\ndir +1 (walk east, default) or -1 (west): heading follows the curve; or x, z, heading (radians\nabout +y, 0 faces +z, PI/2 faces east). The feet are put on the ground (road 0, pavement 0.17,\nlawn 0.15). Move s by world.gaitSpeed.<id>.walk * walk * dt so the feet never slide.\nDefault: the first at world.spot (s 0, near pavement, facing east), others 1.4 m behind.\nextras      false hides the passers-by; or [{s, d, dir, gait, show}, ...] overrides one by index.\nBy default they walk the pavements from state.time (one comes towards the main person on the\nnear pavement, passing on her outside about 17 s in; the others are on the far pavement).\ncar         {s, lane: +1 eastbound (near lane, default) | -1 westbound, show} the moving car. Hidden unless given.\nfocus       {x, y, z} the centre of the sun's shadow box (default the main person)\nshadowRadius metres of the shadow box (default from the camera's distance to the focus, 22..160)\n\nExposes: world.cast.<id> (loadFigure results), world.person (the main person's Object3D), world.figure,\nworld.gaitSpeed.<id> {walk, run} m/s (from the feet), world.extras ([{f, outfit}]), world.spot (Vector3),\nworld.along(s, d) -> {x, z, heading, tx, tz} (a point on the street and its direction, east),\nworld.roadZ(x) (centreline z), world.heightAt(x, z), world.houses ([{x, z, yaw, s, d, door: Vector3}]),\nworld.car (the moving car Group), world.parked (parked car Groups), world.sun, world.sunDir,\nworld.D {ROAD: 4, VERGE: 5.6, PAVE_IN: 5.6, PAVE_OUT: 7.4, FRONT: 18, BACK_FENCE: 48, LOT: 26}.",
+ "props": [
+  "island_tree_01",
+  "pine_tree_01",
+  "potted_plant_01"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

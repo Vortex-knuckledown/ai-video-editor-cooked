@@ -1,0 +1,40 @@
+{
+ "id": "mountain",
+ "describe": "A high mountain trail above the tree line: a rocky path along a ridge, snow-capped peaks and deep valleys with haze layers, scattered boulders, alpine grass, a wooden trail sign, a summit cairn. People hike the path.",
+ "tags": [
+  "above",
+  "along",
+  "alpine",
+  "boulder",
+  "cairn",
+  "capped",
+  "deep",
+  "gras",
+  "haze",
+  "hike",
+  "layer",
+  "line",
+  "mountain",
+  "path",
+  "peak",
+  "ridge",
+  "rocky",
+  "scattered",
+  "sign",
+  "snow",
+  "summit",
+  "trail",
+  "tree",
+  "valley",
+  "wooden"
+ ],
+ "exposes": "World \"mountain\": a high mountain trail above the tree line on a clear day.\n\nAxes (metres): +y up. A narrow rocky ridge runs along z; a hiking trail follows its crest, wandering a few metres\nleft and right (world.trailX(z)). Walking the trail towards -z climbs gently to a summit knoll with a stone cairn.\ntrail      about 1.4 m of packed gravel; the ground is flat across it for 1.7 m each side of its centre line.\nThe trail's own coordinate is s, metres along it: s = 0 at z = 0, s grows towards the summit (-z).\nworld.trailAt(s) -> {x, y, z, heading} (heading faces up the trail, towards the summit).\nTrail elevation y = 0 at s = 0, about +1 at the sign, +17 on the summit (s = world.SUMMIT_S, ~240).\nalong it   wooden marker stakes with red-and-white tops every 40 m, alternating sides 1.3 m out; a wooden\nsignpost (two arrow boards: SUMMIT / VALLEY) 1.9 m right of the trail at s = 20 (world.sign);\nthe cairn 2.6 m left of the trail on the summit (world.cairn). Alpine grass and stones line the edges.\nflanks     the ridge falls away on both sides, steepening into rocky spurs and gullies, past boulders and\nlingering snow patches, to valley floors about 1150 m below (y ~ -1150) at |x| ~ 2000 to 3000,\nwith dark conifer forest down there and layers of haze from y = -900 to -560.\nfar        snow-capped peaks 2.5 to 13 km out on every side, rising to y ~ +1700; the ridge itself climbs into the\nbiggest one beyond the summit, about 3.8 km out towards -z. Terrain runs to 16 km in every direction.\nThe action is meant to happen on the trail between s = -150 and s = 260 (dense ground, grass, stones, props);\na camera can stand anywhere within ~80 m of the trail at any height, or fly high over the ridge.\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"]}) -> world. Per frame: set world.camera (position,\nfov, lookAt), then world.update(state), then world.render().\n\nstate (every field optional):\ntime         seconds of the shot (drives the figures' animation clock by default)\npeople       {<id>: {s, offset, back, x, z, heading, time, gait: {walk, run}, show}} for ids in cast.\nEither s (metres along the trail; offset = metres to the right of the walking direction, default 0;\nback: true walks down, towards the valley end) or x, z, heading (radians about +y, 0 faces +z,\nPI faces -z). Feet are put on the ground at world.height(x, z). gait weights 0..1, idle gets the\nrest. Move a walker by world.gaitSpeed[id].walk * walk (+ .run * run) metres a second so the feet\nnever slide. When `people` is given, a cast member not in it is hidden. Without it, the first\ncast member stands idle on the trail at s = 0 facing the summit.\nfocus        {x, y, z} the shadow box centre (default the first visible person, else the trail at s = 0)\nshadowRadius metres of the shadow box round the focus (default from the camera's distance)\n\nExposes: world.cast.<id> (loadFigure results), world.person (first cast member's object), world.gaitSpeed.<id>\n{walk, run} m/s, world.sun (DirectionalLight), world.sunDir, world.height(x, z) (ground height there),\nworld.trailX(z), world.trailAt(s), world.SUMMIT_S, world.summit (Vector3, the trail's high point),\nworld.cairn (Vector3, its base), world.sign (Vector3, the signpost's base), world.peaks (array of {x, z, y} summits).",
+ "props": [
+  "boulder_01",
+  "grass_medium_01",
+  "namaqualand_boulder_03",
+  "rock_moss_set_01"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

@@ -2,6 +2,32 @@
 
 What changed for every user, newest first.
 
+## studio 0.15.0 (this fork, 2026-11-19)
+
+- **3D videos are built from a few worlds.** A 3D video now has 2 to 6 worlds (a street, Earth from orbit), each
+  built once in detail and reused by every shot with a new camera, in place of dozens of small scenes built from
+  scratch. A kit of photographic textures, skies, surfaces and animated figures (`studio.py kit-setup`, about 23 MB), a
+  data display that stays in the same corners, and `studio.py worlds EDIT` for the world briefs.
+- **Small captions in 3D videos.** The words sit small at the bottom and light up as they are said, so the picture
+  stays the subject.
+- **Dim shots are caught.** `studio.py build` prints `DARK <scene>` for a 3D shot that reads as nearly black.
+- **A shared 3D library, so nothing is built twice.** Characters, worlds and props now live in one library outside
+  any video (`~/.ai-video-editor/library3d`). A script set in a place the library has uses that world as it is; a
+  new place is built once and saved for every later video. `studio.py lib list | find | prop | prop-get | clip |
+  character | save`, and a **Library** page in the app's sidebar.
+- **Clothed people who walk, run, talk and dance.** A man and a woman with animation made for their own skeletons
+  (idle, walk, run, jog, talk at first; about 130 more movements fetched by name). One loader (`figure.js`) for
+  every character, so no video writes its own.
+- **20 worlds come with it.** New York street, city avenue at night, suburb, park, desert highway, forest trail,
+  mountain trail, beach, open ocean, office, living room, kitchen, classroom, laboratory, cafe, warehouse, Earth from
+  orbit, the solar system, the Moon and deep space. `kit-setup` puts them in the library on a new computer.
+- **Outfits.** The man's and woman's shirt and trousers take any colour (`outfit: {shirt, trousers}`), so two bodies
+  give a whole cast; the avatar maker's logo is painted out.
+- **Props on request.** A world that needs a bench, a tree or a sofa fetches a free CC0 model (Poly Haven, about 520
+  of them) into the library once.
+- **Your own figure.** `studio.py lib character <id> <body> walk=<file> run=<file>` adds a `.glb` or `.fbx` figure
+  with its own clips (for example from Mixamo). Not tested with a Mixamo file yet.
+
 ## studio 0.14.0 (this fork, 2026-11-19)
 - Create from a prompt makes videos up to 10 minutes, with 3 and 5 minute options. It was capped at 3 minutes. A long video's scenes are animated six at a time, so a laptop is not asked to render 40 at once. A 5-minute video in 3D (67 scenes) was made this way.
 - Captions no longer split a number or a hyphenated word in two ("384. ,000", "light -years", "3 %").
