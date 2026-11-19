@@ -792,8 +792,8 @@ def cmd_charts(edit):
         sh, key, dur = sp["shot"], sp["key"], round(sp["b"] - sp["a"], 2)
         d = edit / "motion" / key
         (d / "assets").mkdir(parents=True, exist_ok=True)
-        if not studio.three_assets(d):
-            print(f"{key}: three.js is not installed (studio.py three-setup): flat bars will be used")
+        if not (studio.three_assets(d) and studio.kit_into(d)):
+            print(f"{key}: three.js or the 3D kit is not installed (studio.py three-setup, kit-setup): flat bars will be used")
             bad += 1
             continue
         data = {"items": [[str(n), float(v)] for n, v in sh["items"][:7]], "title": str(sh.get("title") or ""), "unit": str(sh.get("unit") or ""),

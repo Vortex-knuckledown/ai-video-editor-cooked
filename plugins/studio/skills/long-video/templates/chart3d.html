@@ -8,38 +8,45 @@
 ==MODULE==
 <script type="module">
       import * as THREE from "three";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+      import { EffectComposer, RenderPass, EffectPass, BloomEffect, DepthOfFieldEffect, VignetteEffect, NoiseEffect, SMAAEffect, BlendFunction, ToneMappingEffect, ToneMappingMode } from "postprocessing";
       const W = __W__, H = __H__, S = Math.min(W, H), DATA = __DATA__;
       const canvas = document.getElementById("gl");
-      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, preserveDrawingBuffer: true, powerPreference: "high-performance" });
       renderer.setSize(W, H, false); renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
+      renderer.toneMapping = THREE.NoToneMapping;      // the composer tone-maps at its end
       renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
       const scene = new THREE.Scene(); scene.background = new THREE.Color(DATA.ground); scene.fog = new THREE.Fog(DATA.ground, 26, 60);
       const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 200);
+      // a studio's soft boxes to reflect in the bars, so they read as polished metal, not paint
+      const pm = new THREE.PMREMGenerator(renderer); scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.3;
 
       const items = DATA.items, n = items.length, top = Math.max(...items.map(i => Math.abs(i[1]))) || 1;
       const best = items.reduce((b, it, i) => it[1] > items[b][1] ? i : b, 0);
       const gap = 2.6, bw = 1.5, maxH = 4.7, x0 = -gap * (n - 1) / 2;   // the tallest bar and its number stay under the title
 
       // the floor: a dark stage with a faint grid, so the bars stand on something
-      const floor = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: new THREE.Color(DATA.ground).multiplyScalar(2.2), roughness: 0.42, metalness: 0.35 }));
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: new THREE.Color(DATA.ground).multiplyScalar(1.15), roughness: 0.32, metalness: 0.2,
+        transparent: true, opacity: 0.86, envMapIntensity: 0.25 }));
       floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
-      const grid = new THREE.GridHelper(60, 60, 0xffffff, 0xffffff); grid.material.transparent = true; grid.material.opacity = 0.06; grid.position.y = 0.01; scene.add(grid);
-      const plinth = new THREE.Mesh(new THREE.BoxGeometry(gap * n + 1.2, 0.18, 3.4), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.1, transparent: true, opacity: 0.1 }));
+      const grid = new THREE.GridHelper(60, 60, 0xffffff, 0xffffff); grid.material.transparent = true; grid.material.opacity = 0.03; grid.position.y = 0.01; scene.add(grid);
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(gap * n + 1.2, 0.18, 3.4), new THREE.MeshStandardMaterial({ color: new THREE.Color(DATA.ground).multiplyScalar(2.6), roughness: 0.35, metalness: 0.3, envMapIntensity: 0.4 }));
       plinth.position.y = 0.09; plinth.receiveShadow = true; scene.add(plinth);
 
-      scene.add(new THREE.HemisphereLight(0xffffff, 0x202028, 0.75));
-      const glow = new THREE.PointLight(new THREE.Color(DATA.accent), 22, 18); glow.position.set(x0 + best * gap, 3.2, 3.2); scene.add(glow);   // the tallest bar lights the stage
-      const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(-7, 14, 9); key.castShadow = true;
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x101018, 0.35));
+      // (no coloured point light: its highlight read as a stray dot on the lead bar)
+      const key = new THREE.DirectionalLight(0xffffff, 2.0); key.position.set(-7, 14, 9); key.castShadow = true;
       key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -14, right: 14, top: 14, bottom: -6, near: 1, far: 50 }); key.shadow.bias = -0.0004; scene.add(key);
       const rim = new THREE.DirectionalLight(new THREE.Color(DATA.accent), 1.1); rim.position.set(9, 5, -8); scene.add(rim);
 
       const bars = items.map((it, i) => {
         const on = i === best;
-        const mat = new THREE.MeshStandardMaterial({ color: on ? new THREE.Color(DATA.accent) : new THREE.Color(0xdfe3ea), roughness: on ? 0.32 : 0.5, metalness: 0.1,
-          emissive: on ? new THREE.Color(DATA.accent) : new THREE.Color(0x000000), emissiveIntensity: on ? 0.22 : 0 });
+        const mat = new THREE.MeshStandardMaterial({ color: on ? new THREE.Color(DATA.accent) : new THREE.Color(0xeef1f6), roughness: on ? 0.3 : 0.22, metalness: on ? 0.2 : 0.7,
+          emissive: on ? new THREE.Color(DATA.accent) : new THREE.Color(0x000000), emissiveIntensity: on ? 0.42 : 0 });
         const m = new THREE.Mesh(new THREE.BoxGeometry(bw, 1, bw), mat);
         m.castShadow = true; m.receiveShadow = true; m.position.set(x0 + i * gap, 0.18, 0); scene.add(m);
+        const twin = new THREE.Mesh(m.geometry, mat.clone());        // its reflection in the polished floor: the same bar, below it
+        twin.material.transparent = true; twin.material.opacity = 0.22; twin.position.set(m.position.x, -0.2, 0); scene.add(twin); m.userData.twin = twin;
         return m;
       });
 
@@ -71,13 +78,24 @@
         bars.forEach((m, i) => {
           const k = ease((T - 0.25 - i * 0.12) / grow), h = Math.max(0.02, maxH * Math.abs(items[i][1]) / top * k);
           m.scale.y = h; m.position.y = 0.18 + h / 2;
+          m.userData.twin.scale.y = h; m.userData.twin.position.y = -0.02 - h / 2;
           put(lab[i].name, m.position.x, -0.15, 1.9, ease((T - 0.15 - i * 0.1) / 0.3));
           put(lab[i].val, m.position.x, 0.18 + h + 0.62, 0, k > 0.05 ? 1 : 0);
           lab[i].val.textContent = fmt(items[i][1] * k);
         });
         title.style.opacity = ease(T / 0.4); src.style.opacity = 0.6 * ease((T - 0.6) / 0.4);
-        renderer.render(scene, cam);
+        dof.target.set(0, maxH * 0.45, 0);
+        composer.render(1 / 30);
       }
+      // the finish: a soft bloom on what glows, the stage falling out of focus behind the bars, a vignette, a little grain
+      const composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
+      composer.setSize(W, H, false);
+      composer.addPass(new RenderPass(scene, cam));
+      const dof = new DepthOfFieldEffect(cam, { worldFocusDistance: 22, worldFocusRange: 16, bokehScale: 2.6, resolutionScale: 0.5 }); dof.target = new THREE.Vector3(0, maxH * 0.45, 0);   // the bars sharp, the far stage soft
+      const bloom = new BloomEffect({ intensity: 0.55, luminanceThreshold: 0.8, luminanceSmoothing: 0.2, mipmapBlur: true });
+      const grain = new NoiseEffect({ blendFunction: BlendFunction.SOFT_LIGHT, premultiply: false }); grain.blendMode.opacity.value = 0.1;
+      composer.addPass(new EffectPass(cam, dof, bloom, new VignetteEffect({ offset: 0.28, darkness: 0.62 })));
+      composer.addPass(new EffectPass(cam, new SMAAEffect(), new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }), grain));
       const tl = window.__timelines["__ID__"];
       tl.to(st, { t: 1, duration: DURATION, ease: "none", onUpdate: draw }, 0);
       draw();

@@ -84,6 +84,16 @@ The clip's `index.html` already has the import map: `import * as THREE from "thr
    `ACESFilmicToneMapping`, shadows on (`PCFShadowMap`) with the light's shadow box following the subject.
 5. A custom shader's `#include <tonemapping_fragment>` and `#include <colorspace_fragment>` each go on their own line.
 6. Numbers and labels are HTML over the canvas, updated in `draw()`.
+8. **The finish.** A world renders through `postprocessing` (`import { EffectComposer, RenderPass, EffectPass,
+   BloomEffect, DepthOfFieldEffect, VignetteEffect, NoiseEffect, SMAAEffect, ToneMappingEffect, ToneMappingMode }
+   from "postprocessing"`): renderer with `antialias: false` and `NoToneMapping`, a composer with
+   `frameBufferType: THREE.HalfFloatType`, one `EffectPass` of depth of field (`worldFocusDistance`,
+   `worldFocusRange`, the subject sharp and the far distance soft), a restrained bloom (threshold about 0.8) and a
+   vignette, then one of SMAA, ACES tone mapping and a little grain. `world.render()` calls `composer.render(1/30)`.
+   `n8ao` (`import { N8AOPostPass } from "n8ao"`) adds contact shadows where things meet the ground. Sharp 3D type:
+   `import { Text } from "troika-three-text"` and `await` its `sync()` before the first draw. A worked example is
+   `plugins/studio/skills/long-video/templates/chart3d.html`. Read `plugins/studio/craft/threejs-postprocessing/SKILL.md`
+   and `threejs-lighting/SKILL.md` first. Without this finish a world reads as a game engine preview.
 7. No shot may read as black. Space and night still need the subject lit (a rim light, city lights, a glow);
    `studio.py build` prints `DARK <scene>` for a shot whose brightness is under 28 of 255, and that scene gets a note.
 

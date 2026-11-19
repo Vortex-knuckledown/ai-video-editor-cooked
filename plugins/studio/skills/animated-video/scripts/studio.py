@@ -690,6 +690,36 @@ the mechanism (a number counting, a typed command, a label inside a real-looking
 `renders/sheet.png` (1 fps) and `renders/strip.png` (10 fps, first 1.2 s). Look at both sheets after every
 render. At most {rounds} checks; then stop and report.
 """
+BRIEF = BRIEF.replace("\n{start}Build:", "\n" + "@@CRAFT@@" + "{start}Build:")   # the craft note is filled in once CRAFT_NOTE exists (below)
+
+
+# What a clip is built FROM, so it is not written from memory: the block library of the tool that renders it, and craft
+# rules written by the people who make these tools (plugins/studio/craft, each with its own licence). No braces in it:
+# it is placed in BRIEF before str.format runs.
+CRAFT = Path(__file__).resolve().parents[3] / "craft"
+HF = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor") / "motion" / "node_modules" / ".bin" / "hyperframes"
+CRAFT_NOTE = f"""Start from proven work, not from a blank page:
+- **A ready-made block first.** The renderer ships about 450 professional blocks as editable source. Search before
+  authoring: `"{HF}" catalog "<what you need>" --json` (try: glass, liquid glass, exploded, chart, map,
+  counter, lower third, highlight, light leak, caption). Install the nearest into a scratch folder with
+  `"{HF}" add <name> --dir <scratch> --no-clipboard --json`, read its `compositions/<name>.html`, and take
+  its structure, easing and layering into your `index.html` in this video's look. Never include a block unchanged:
+  its colours and type become the video's.
+- **The rules of the craft.** Read the ones this clip needs, then follow them:
+  `{CRAFT / "animation-principles" / "SKILL.md"}` (easing, overlap, anticipation: read for every clip),
+  `{CRAFT / "motion-art-direction" / "SKILL.md"}` and `{CRAFT / "shot-composition" / "SKILL.md"}` (what leads the eye),
+  `{CRAFT / "gsap-timeline" / "SKILL.md"}` and `{CRAFT / "gsap-plugins" / "SKILL.md"}` (SplitText, DrawSVG, MorphSVG are free),
+  `{CRAFT / "chart-animation" / "SKILL.md"}` and `{CRAFT / "animated-infographic" / "SKILL.md"}` (a chart or a diagram),
+  `{CRAFT / "threejs-lighting" / "SKILL.md"}`, `{CRAFT / "threejs-materials" / "SKILL.md"}` and
+  `{CRAFT / "threejs-postprocessing" / "SKILL.md"}` (anything in 3D).
+- **One look.** Near-black ground, white type, ONE accent colour, glass panels with a thin light edge, soft depth of
+  field and a little motion blur on fast moves. No second accent, no gradient text, no drop-shadowed clip art.
+- **Every element lands on its word.** Use `WORDS`: a number appears on the syllable that says it.
+
+""".replace("{", "{{").replace("}", "}}")
+
+
+BRIEF = BRIEF.replace("@@CRAFT@@", CRAFT_NOTE)
 
 
 # braces are doubled: the note goes through str.format with the brief
@@ -749,7 +779,14 @@ KIT_FILES = {   # where it lands in the kit -> where it comes from. NASA imagery
 KIT_SKIES = {"sky/day.hdr": "kloofendal_48d_partly_cloudy_puresky", "sky/sunset.hdr": "belfast_sunset_puresky"}
 KIT_PBR = {"brick": "red_brick_03", "asphalt": "asphalt_02", "concrete": "brushed_concrete", "sand": "coast_sand_01", "rock": "aerial_rocks_02"}
 KIT_JSM = ["loaders/GLTFLoader.js", "loaders/RGBELoader.js", "loaders/HDRLoader.js", "utils/BufferGeometryUtils.js", "utils/SkeletonUtils.js",
-           "loaders/FBXLoader.js", "libs/fflate.module.js", "curves/NURBSCurve.js", "curves/NURBSUtils.js"]   # FBX: what Mixamo exports
+           "loaders/FBXLoader.js", "libs/fflate.module.js", "curves/NURBSCurve.js", "curves/NURBSUtils.js",   # FBX: what Mixamo exports
+           "postprocessing/Pass.js", "objects/Reflector.js", "environments/RoomEnvironment.js"]   # for the finish: a pass base, a mirror floor, a studio light
+# the finish that makes 3D read as produced, from npm in the motion folder: bloom, depth of field, vignette and grain in one
+# pass (pmndrs/postprocessing, Zlib), contact shadows (n8ao, ISC), sharp 3D type (troika-three-text and what it needs, MIT)
+KIT_VENDOR = {"postprocessing.js": "postprocessing/build/index.js", "n8ao.js": "n8ao/dist/N8AO.js",
+              "troika-three-text.js": "troika-three-text/dist/troika-three-text.esm.js", "troika-three-utils.js": "troika-three-utils/dist/troika-three-utils.esm.js",
+              "troika-worker-utils.js": "troika-worker-utils/dist/troika-worker-utils.esm.js", "webgl-sdf-generator.js": "webgl-sdf-generator/dist/webgl-sdf-generator.mjs",
+              "bidi-js.js": "bidi-js/dist/bidi.mjs"}
 
 def kit_dir():
     import os
@@ -789,6 +826,15 @@ def cmd_kit_setup():
             shutil.copy(jsm / rel, k / "jsm" / rel)
         else:
             bad.append(f"jsm/{rel} (three.js is not installed: studio.py three-setup)")
+    nm = motion.home() / "motion" / "node_modules"
+    if not (nm / "postprocessing").is_dir():        # the finishing libraries, once (about 5 MB)
+        subprocess.run(["npm", "install", "--no-audit", "--no-fund", "postprocessing", "n8ao", "troika-three-text"], cwd=nm.parent, capture_output=True)
+    for name, rel in KIT_VENDOR.items():
+        if (nm / rel).is_file():
+            (k / "vendor").mkdir(exist_ok=True)
+            shutil.copy(nm / rel, k / "vendor" / name)
+        else:
+            bad.append(f"vendor/{name} (npm install postprocessing n8ao troika-three-text in {nm.parent})")
     jsave(k / "kit.json", {"files": sorted(str(f.relative_to(k)) for f in k.rglob("*") if f.is_file() and f.name != "kit.json")})
     print(f"kit3d: {sum(f.stat().st_size for f in k.rglob('*') if f.is_file()) / 1e6:.0f} MB in {k}" + (f"; MISSING {', '.join(bad)}" if bad else ""))
     return max(1 if bad else 0, lib3d.setup(k))   # the shared library's characters come with the kit
@@ -808,7 +854,11 @@ def kit_into(d):
     return True
 
 
-IMPORTMAP = '<script type="importmap">{"imports":{"three":"./assets/three.module.js","three/addons/":"./assets/kit/jsm/"}}</script>'
+IMPORTMAP = ('<script type="importmap">{"imports":{"three":"./assets/three.module.js","three/addons/":"./assets/kit/jsm/",'
+             '"three/examples/jsm/":"./assets/kit/jsm/","postprocessing":"./assets/kit/vendor/postprocessing.js","n8ao":"./assets/kit/vendor/n8ao.js",'
+             '"troika-three-text":"./assets/kit/vendor/troika-three-text.js","troika-three-utils":"./assets/kit/vendor/troika-three-utils.js",'
+             '"troika-worker-utils":"./assets/kit/vendor/troika-worker-utils.js","webgl-sdf-generator":"./assets/kit/vendor/webgl-sdf-generator.js",'
+             '"bidi-js":"./assets/kit/vendor/bidi-js.js"}}</script>')
 
 
 def scaffold3d(d, edit):
