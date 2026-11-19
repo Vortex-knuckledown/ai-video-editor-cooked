@@ -2,6 +2,18 @@
 
 What changed for every user, newest first.
 
+## Unreleased (studio)
+
+- **Sound that leaves room for the voice.** Measured against two published documentaries: their quiet moments sit
+  11 to 12 dB below the loud ones, ours sat 4.4 dB below, a wall of sound. The music is now a quiet bed that rests
+  (out under a sound bite, before a new section and for the first words), a sound marks a section, a number or a
+  graphic and nothing else, and `sound` prints `FLAT MIX` under 9 dB. The same test video now measures 11.5 dB.
+  Animated videos with a voice get the quiet bed too.
+- **Research, beats, script, storyboard, preview.** `references/story.md` is the method: 5 to 8 pages from at least
+  3 sites, the one question the video answers, a beat sheet before any script, a storyboard decided from the beats,
+  and a draft preview in the editor before the final render. `check` refuses a script with fewer than 5 sources or no
+  beats.
+
 ## studio 0.18.0 (this fork, 2026-11-19)
 
 - **Graphics that sit on the footage, the way edited channels do it.** New `over` kinds for long videos: a glass

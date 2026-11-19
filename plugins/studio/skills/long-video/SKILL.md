@@ -52,12 +52,12 @@ depends on how they are used). Off: no `clip` shots at all, only pictures, the u
 The recording is the script: nothing is written or approved, no AI voice is made, and `voice` and `words` are never
 run. Read `${CLAUDE_SKILL_DIR}/references/voiceover.md` and follow it, then go on at step 4.
 
-## 1. Research
+## 1. Research, then the story (read `${CLAUDE_SKILL_DIR}/references/story.md` first: it is the method)
 
-Search the web (WebSearch, then WebFetch the best 3 to 6 pages: a study, an official number, a reputable outlet;
-never a content farm). Write `EDIT/research.md`: the angle in one line, then every fact you may use as
-`- <the fact, with its number> (<url>)`. A number with no source does not go in the script. No web tool in this
-session: say so on the page, write from what you know, use no statistic you are not sure of, and leave `source` out.
+WebSearch, then WebFetch 5 to 8 pages from at least 3 sites (a study, an official number, a reputable outlet).
+`EDIT/research.md`: the angle, the one question the video answers, every usable fact as `- <fact> (<url>)`, and who
+said something on camera. Then `EDIT/beats.md`: the story in 6 to 10 beats, before any script. `check` refuses fewer
+than 5 sources or no beats. No web tool: say so on the page and state no statistic you cannot source.
 
 ## 2. The script: `EDIT/scenes.json`
 
@@ -207,15 +207,15 @@ would be empty.
 ## 5. Sound, build, render
 
 ```bash
-python3 "$PY" "$L" sound EDIT [--mood linear]      # the voice, music under it, a sound on every cut and graphic
+python3 "$PY" "$L" sound EDIT [--mood linear]      # the voice, a quiet bed that rests, a sound where something lands
 python3 "$PY" "$L" build EDIT
 python3 "$PY" "$L" charts EDIT && python3 "$PY" "$L" build EDIT   # only with chart3d shots: render them, then build again
 python3 "$PY" "$T" render EDIT   # EDIT/render.mp4, about 2 min a minute of video; 4K (brief "quality") four times that
 ```
 
-Then `python3 "$PY" "$L" qa EDIT`: it checks the render just after every cut, prints `FIX` for a black or empty
-frame, and writes `EDIT/sheets/qa-N.jpg` with every shot's first frame. Look at every qa sheet: each shot shows what
-its line says, captions are readable and clear of the graphics. Fix what is wrong and render again before the editor.
+Render a preview first (`render EDIT --draft`, a third of the time) and show it in the editor with the note "Preview:
+check the pictures and the sound, then approve for the final render" (story.md, step 5). Then `python3 "$PY" "$L" qa
+EDIT`: `FIX` for a black or empty frame, `EDIT/sheets/qa-N.jpg` with every shot's first frame. Look at every sheet.
 
 ## 6. The editor, thumbnails, the kit
 

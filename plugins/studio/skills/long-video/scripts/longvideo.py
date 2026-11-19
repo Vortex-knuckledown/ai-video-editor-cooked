@@ -113,8 +113,30 @@ def check(edit):
     return errs
 
 
+def story_gaps(edit):
+    """What the research and the beats still lack, before a script is worth checking (references/story.md)."""
+    edit, out = Path(edit), []
+    try:
+        r = (edit / "research.md").read_text(encoding="utf-8")
+    except OSError:
+        r = ""
+    urls = set(re.findall(r"https?://[^\s)>\]]+", r))
+    sites = {re.sub(r"^www\.", "", urllib.parse.urlsplit(u).netloc) for u in urls}
+    if r and (len(urls) < 5 or len(sites) < 3):
+        out.append(f"research.md rests on {len(urls)} page(s) from {len(sites)} site(s): 5 or more pages from at least 3 sites")
+    try:
+        beats = [x for x in (edit / "beats.md").read_text(encoding="utf-8").splitlines() if re.match(r"\s*(\d+[.)]|[-*])\s+\S", x)]
+    except OSError:
+        beats = None
+    if r and beats is None:
+        out.append("no beats.md: write the story in 6 to 10 beats before the script (references/story.md)")
+    elif beats is not None and not 5 <= len(beats) <= 12:
+        out.append(f"beats.md has {len(beats)} beat(s): 6 to 10")
+    return out
+
+
 def cmd_check(edit):
-    errs = check(edit)
+    errs = story_gaps(edit) + check(edit)
     if errs:
         print("\n".join("FIX  " + e for e in errs))
         return 1
@@ -1275,9 +1297,28 @@ def cmd_briefs(edit):
 
 
 # ---------------------------------------------------------------- sound
+# Measured on two published documentaries of this kind against our own first mix (0.4 s windows, November 2026): theirs
+# run 11 to 12 dB between the loud and the quiet moments and fall to near silence at times; ours ran 4.4 dB, a wall of
+# sound. So the music is a quiet bed that rests, the voice owns the mix, and a sound marks a change that matters, not
+# every cut.
+MUSIC_GAIN = 0.085         # the bed under the voice (it was 0.42): at this the quiet moments measure as theirs do
+MIX_RANGE_DB = 9.0        # loud to quiet (90th to 10th percentile of 0.4 s windows): under this the mix has no air
+
+
+def mix_range(x, sr):
+    """How far the quiet moments sit below the loud ones, in dB (90th minus 10th percentile of 0.4 s windows)."""
+    import numpy as np
+    m = x.mean(axis=0) if getattr(x, "ndim", 1) > 1 else x
+    w = int(0.4 * sr)
+    if len(m) < w * 5:
+        return 99.0
+    db = 20 * np.log10(np.sqrt((m[:len(m) // w * w].reshape(-1, w) ** 2).mean(axis=1)) + 1e-9)
+    return float(np.percentile(db, 90) - np.percentile(db, 10))
+
+
 def cmd_sound(edit, mood="linear"):
-    """audio/mix.wav: the voice, the music ducked under it, and a quiet sound on the cuts (a tick when a graphic
-    lands, a soft whoosh on every third change of footage)."""
+    """audio/mix.wav: the voice, a quiet bed of music that rests (out under a sound bite, out before a new section,
+    out for the close's last line), and a sound only where something lands: a section, a number, a graphic."""
     edit = Path(edit)
     studio.use_editor()
     import sound
@@ -1286,43 +1327,56 @@ def cmd_sound(edit, mood="linear"):
     if not tm:
         sys.exit("ERROR: no timing.json. Run studio.py voice first.")
     mood = mood if mood in sound.MOODS else "linear"
-    n = int((tm["length"] + 0.05) * sound.SR)
+    sr = sound.SR
+    n = int((tm["length"] + 0.05) * sr)
     sp = spans(edit)
-    bed = np.zeros((2, n))
-    if b["music"]:
-        sections = [(r["start"], "hook" if k == 0 else "payoff" if k == len(tm["scenes"]) - 1 else "action")
-                    for k, r in enumerate(tm["scenes"])]
-        got, _ = sound.compose(mood, tm["length"], None, [s["a"] for s in sp[1:]], 0, sections)
-        bed = np.pad(got, ((0, 0), (0, max(0, n - got.shape[1]))))[:, :n] * 0.42
-    fx = np.zeros((2, n))
-    root = sound.MOODS[mood]["root"]
     sect, seen = {}, None
     for sc_ in scenes_of(edit):
         if sc_.get("section") and sc_["section"] != seen:
             seen = sc_["section"]
             sect[sc_["id"]] = True
-    for k, s in enumerate(sp[1:], 1):                    # a sound on every change of picture, quiet under the voice
-        kind, first = s["shot"]["kind"], s["key"].endswith("-1") and sect.get(s["sid"])
-        if first and s["a"] > 3:                          # a new section: a swell into it
-            sound.place(fx, sound.sfx_swell(1.4, root, k), s["a"] - 1.4, 0.13)
-        if kind in ("stat", "title", "motion"):
-            sound.place(fx, sound.sfx_hit(root, k), s["a"], 0.24)
+    starts = [s["a"] for s in sp[1:] if s["key"].endswith("-1") and sect.get(s["sid"]) and s["a"] > 3]
+    bed = np.zeros((2, n))
+    if b["music"]:
+        sections = [(r["start"], "hook" if k == 0 else "payoff" if k == len(tm["scenes"]) - 1 else "action")
+                    for k, r in enumerate(tm["scenes"])]
+        got, _ = sound.compose(mood, tm["length"], None, starts, 0, sections)
+        bed = np.pad(got, ((0, 0), (0, max(0, n - got.shape[1]))))[:, :n] * MUSIC_GAIN
+        env = np.ones(n)
+        rest = lambda a, z, level=0.0: env.__setitem__(slice(max(0, int(a * sr)), min(n, int(z * sr))), level)   # noqa: E731
+        for s in sp:                                   # someone speaking on camera is heard alone
+            if s["shot"]["kind"] == "bite":
+                rest(s["a"] - 0.2, s["b"] + 0.15)
+        for t in starts:                               # a breath before a new section, then the music comes back in
+            rest(t - 0.9, t + 0.1)
+        rest(0, min(0.6, tm["length"]))                # the first words land in silence
+        k = max(1, int(0.35 * sr))
+        env = np.convolve(env, np.ones(k) / k, mode="same")   # every rest fades, none cuts
+        bed = bed * env
+    fx = np.zeros((2, n))
+    root = sound.MOODS[mood]["root"]
+    for k, s in enumerate(sp[1:], 1):                    # a sound where something lands; a plain change of footage is silent
+        kind = s["shot"]["kind"]
+        if s["a"] in starts:                              # a new section: a soft swell into it
+            sound.place(fx, sound.sfx_swell(1.2, root, k), s["a"] - 1.2, 0.07)
+        if kind in ("stat", "title", "motion", "chart3d", "tier", "paper"):
+            sound.place(fx, sound.sfx_hit(root, k), s["a"], 0.11)
         elif kind in GRAPHICS:
-            sound.place(fx, sound.sfx_tick(k), s["a"], 0.3)
-            if kind in ("list", "bars"):                  # each row lands with its own tick
-                for j in range(1, min(6, len(s["shot"].get("items") or []))):
-                    sound.place(fx, sound.sfx_tick(k + j), s["a"] + 0.25 + j * 0.3, 0.16)
-        elif k % 2 == 0:
-            sound.place(fx, sound.sfx_whoosh(0.55, True, k % 3), s["a"] - 0.45, 0.085, pan=(-0.4 if k % 4 == 0 else 0.4))
-        else:
-            sound.place(fx, sound.sfx_click(k % 5), s["a"], 0.14)
+            sound.place(fx, sound.sfx_tick(k), s["a"], 0.1)
+        elif isinstance(s["shot"].get("over"), dict) and any(s["shot"]["over"].get(x) for x in ("stat", "ring", "clip", "label")):
+            sound.place(fx, sound.sfx_tick(k), s["a"] + 0.12, 0.07)      # a number or a mark arriving on the footage
     vo = edit / "audio" / "vo.wav"
     mix = bed + fx
     if tm["engine"] != "none" and vo.exists():
         v = sound.read_audio(vo, tm["length"] + 0.05)[:, :n]
         mix = sound.duck(mix, v) + v
     lufs, tp = sound.master(mix, edit / "audio" / "mix.wav")
-    print(json.dumps({"file": str(edit / "audio" / "mix.wav"), "lufs": lufs, "true_peak": tp, "music": b["music"], "cuts": len(sp) - 1}))
+    rng = mix_range(sound.read_audio(edit / "audio" / "mix.wav", tm["length"] + 0.05), sr)
+    print(json.dumps({"file": str(edit / "audio" / "mix.wav"), "lufs": lufs, "true_peak": tp, "music": b["music"], "cuts": len(sp) - 1,
+                      "range_db": round(rng, 1)}))
+    if rng < MIX_RANGE_DB and tm["engine"] != "none":
+        print(f"FLAT MIX: only {rng:.1f} dB between the loud and the quiet moments ({MIX_RANGE_DB:.0f} or more reads as produced). "
+              "The voice has no air round it: check it was recorded with pauses between lines, or turn the music off.")
     return 0
 
 

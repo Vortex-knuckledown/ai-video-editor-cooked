@@ -1135,7 +1135,7 @@ def cmd_music(edit, mood="linear"):
     bed = np.zeros((2, n))
     if b["music"]:
         bed, _ = sound.compose(mood, tm["length"], None, cuts, 0, sections)
-        bed = np.pad(bed, ((0, 0), (0, max(0, n - bed.shape[1]))))[:, :n] * 0.5
+        bed = np.pad(bed, ((0, 0), (0, max(0, n - bed.shape[1]))))[:, :n] * (0.11 if tm["engine"] != "none" else 0.5)   # a quiet bed under a voice (measured: 0.5 buried it); full when the music is all there is
     mix = bed
     if vo:
         v = sound.read_audio(vo, tm["length"] + 0.05)[:, :n]
