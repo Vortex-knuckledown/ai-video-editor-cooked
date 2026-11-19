@@ -333,6 +333,10 @@ def setup(kit=None):
     for sub in ("characters", "worlds", "props"):
         (root() / sub).mkdir(exist_ok=True)
     shutil.copy(Path(__file__).with_name("figure.js"), root() / "figure.js")
+    seed = Path(__file__).resolve().parents[1] / "library" / "worlds"   # the worlds that come with the plugin: a new computer starts with them
+    for w in sorted(seed.glob("*/world.json")) if seed.is_dir() else []:
+        if not (root() / "worlds" / w.parent.name / "world.js").is_file():
+            shutil.copytree(w.parent, root() / "worlds" / w.parent.name, dirs_exist_ok=True)
     bad = setup_characters(kit)
     size = sum(f.stat().st_size for f in root().rglob("*") if f.is_file()) / 1e6
     print(f"library3d: {len(characters())} characters, {len(worlds())} worlds, {len(props())} props, {size:.0f} MB in {root()}" +

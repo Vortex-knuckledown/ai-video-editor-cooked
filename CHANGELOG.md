@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.15.0 (this fork, 2026-11-19)
 
 - **3D videos are built from a few worlds.** A 3D video now has 2 to 6 worlds (a street, Earth from orbit), each
   built once in detail and reused by every shot with a new camera, in place of dozens of small scenes built from
@@ -18,6 +18,11 @@ What changed for every user, newest first.
 - **Clothed people who walk, run, talk and dance.** A man and a woman with animation made for their own skeletons
   (idle, walk, run, jog, talk at first; about 130 more movements fetched by name). One loader (`figure.js`) for
   every character, so no video writes its own.
+- **20 worlds come with it.** New York street, city avenue at night, suburb, park, desert highway, forest trail,
+  mountain trail, beach, open ocean, office, living room, kitchen, classroom, laboratory, cafe, warehouse, Earth from
+  orbit, the solar system, the Moon and deep space. `kit-setup` puts them in the library on a new computer.
+- **Outfits.** The man's and woman's shirt and trousers take any colour (`outfit: {shirt, trousers}`), so two bodies
+  give a whole cast; the avatar maker's logo is painted out.
 - **Props on request.** A world that needs a bench, a tree or a sofa fetches a free CC0 model (Poly Haven, about 520
   of them) into the library once.
 - **Your own figure.** `studio.py lib character <id> <body> walk=<file> run=<file>` adds a `.glb` or `.fbx` figure

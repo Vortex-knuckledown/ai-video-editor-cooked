@@ -1,0 +1,36 @@
+{
+ "id": "forest",
+ "describe": "A pine forest trail in the morning: tall trunks, ferns and undergrowth, a dirt path, a small stream with stones, shafts of light through haze, a clearing ahead. People walk the path.",
+ "tags": [
+  "ahead",
+  "clearing",
+  "dirt",
+  "fern",
+  "forest",
+  "haze",
+  "light",
+  "path",
+  "pine",
+  "shaft",
+  "stone",
+  "stream",
+  "tall",
+  "through",
+  "trail",
+  "trunk",
+  "undergrowth",
+  "walk"
+ ],
+ "exposes": "World \"forest\": a pine forest trail on a hazy morning. Tall pine trunks with high crowns, young firs, ferns,\ngrass and logs in the undergrowth, a dirt path winding east into a sunlit grassy clearing, a small stream with\nmossy stones running beside the path on its north side, shafts of low sunlight slanting through the haze.\n\nAxes (metres): +x is EAST (the way the path leads, towards the clearing), +y up, +z SOUTH, -z NORTH.\nThe path runs along x from x = -170 to the clearing; its centre line is z = pathZ(x) (within +-3 m of z = 0),\n2.2 m of packed dirt. The stream runs west-east north of the path at z = streamZ(x) (about z = -7 to -12),\nwater 2.4 m wide at y = -0.22. The clearing is a grassy circle, centre CLEARING {x: 52, z: ~1.9}, radius 15 m;\nthe path ends in it and the stream passes along its north edge. Pines stand at least 3.6 m from the path centre;\non the path's south side (+z) nothing taller than a fern stands within 6 m, so a camera can track a walker\nside on from the south at 3 to 6 m. The place is finest for x in [-90, 70], z in [-45, 45]; haze beyond.\nThe Sun is low in the east (about 26 degrees up, from +x and a little south): looking east down the path\nis looking into the light shafts; looking north from the south side lights the walker's face side.\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"]}) -> world. Per frame: set world.camera (position,\nlookAt, fov), call world.update(state), then world.render(opts) (or world.renderer.render(world.scene, world.camera)).\n\nstate (every field optional):\ntime          seconds of the shot: drives the water ripple and, by default, each person's animation clock\npeople        {<cast id>: {x, z, heading, time, gait: {walk, run}, show}}. x along the path; z defaults to\nthe path centre at x (pathZ(x)); y is always the ground there. heading radians about +y,\n0 faces +z (south), PI/2 faces east; default = facing east along the path (pathAt(x).heading).\ngait weights 0..1 (idle gets the rest); move x by world.gaitSpeed[id].walk * walk (m/s) so feet\nnever slide. time = that person's animation clock (default state.time). show false hides.\nCast members not named are hidden. With no people at all the first cast member idles at SPOT.\nfocus         {x, y, z} centre of the sun's shadow box (default: the first visible person, else the camera target)\nshadowRadius  metres of that box (default from the camera's distance, 18..80)\nhaze          multiplier of the haze density (default 1; 0.5 clears the air for a high view, 1.5 thickens it)\nshafts        multiplier of the light shafts' strength (default 1; they fade by themselves as the camera looks down)\n\nrender(opts): opts.blur 0..1 is a shallow depth of field (0 = none, 1 = strong), opts.focusDistance metres from\nthe camera to keep sharp (default: distance to the focus point). Use it for the close shot: the subject sharp,\nthe forest soft behind.\n\nExposes: world.cast.<id> (each a loadFigure result: object, pose, height), world.person (the first cast member's\nobject), world.gaitSpeed[id] {walk, run} m/s, world.pathZ(x), world.pathAt(x) -> {x, y, z, heading} (heading faces\neast along the path), world.streamZ(x), world.groundY(x, z), world.CLEARING {x, z, r}, world.SPOT (Vector3, a\ndefault place on the path at x = -10), world.sun (DirectionalLight), world.sunDir (unit Vector3 towards the Sun),\nworld.trees (array of {x, z, h} pine positions), world.water (Mesh), world.PATH_HALF (1.1), world.STREAM_Y (-0.22).",
+ "props": [
+  "boulder_01",
+  "dead_tree_trunk",
+  "fern_02",
+  "grass_medium_01",
+  "pine_tree_01",
+  "rock_moss_set_01",
+  "tree_stump_01"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

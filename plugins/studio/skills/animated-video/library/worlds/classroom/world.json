@@ -1,0 +1,39 @@
+{
+ "id": "classroom",
+ "describe": "A school classroom by day: rows of desks and chairs, a teacher's desk, a large whiteboard and a wall screen, posters, shelves with books, a clock, big windows with daylight on one side. People stand at the board and walk the aisle.",
+ "tags": [
+  "aisle",
+  "big",
+  "board",
+  "book",
+  "chair",
+  "classroom",
+  "clock",
+  "daylight",
+  "desk",
+  "poster",
+  "row",
+  "school",
+  "screen",
+  "shelve",
+  "side",
+  "stand",
+  "teacher",
+  "walk",
+  "wall",
+  "whiteboard",
+  "window"
+ ],
+ "exposes": "World \"classroom\": a school classroom by day, sun coming in through big windows on the west side.\n\nAxes (metres): +x EAST, +y up, +z SOUTH. Floor at y = 0, ceiling at y = 3.1 (world.H).\nThe room is x -5..5, z -4.5..4.5 (world.bounds). The FRONT of the class is the NORTH wall (z = -4.5): a 4 m\nwhiteboard (world.board, centre x = -0.8, y = 1.5) with a clock above it, and a wall screen to its right\n(world.screen, x = 3.15). The WEST wall (x = -5) has three big windows (sill 0.85, head 2.75) looking out on a lawn,\na playground, trees and the school's other brick wing; the morning-to-midday sun comes through them and lays\nwindow patches across the desks. The EAST wall (x = 5) has the door (z -3.9..-2.9) and a pin board with posters.\nThe SOUTH (back) wall has three bookcases full of books, a low cabinet and posters (a world map among them).\n16 student desks with chairs face the board in 4 rows (desk centres x = -3.3, -1.5, 1.5, 3.3; z = -1.4, 0, 1.4, 2.8).\nThe teacher's desk is at x = 2.7, z = -3.0 with its chair behind it.\nWalkable: the centre AISLE x = 0 (clear for |x| < 1.0, z -3.3..4.0), the FRONT strip z = -3.9..-2.0 (x -4.4..1.6,\nthe board is behind it) and the BACK strip z = 3.6..4.1. People \"at the board\" stand about z = -3.8 facing +z.\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"]}) -> world.\ncast: library characters to load (woman, man, robot, soldier, mannequin); each is world.cast.<id>.\nPer frame: set world.camera (position, fov, lookAt), then world.update(state), then world.render().\n\nstate (every field optional):\ntime         seconds of the shot (animation clock by default)\npeople       {<cast id>: {x, z, heading, time, gait: {walk, run, jog, talk, ...}, clip, show}}\nheading radians about +y: 0 faces +z (south, towards the back, i.e. a teacher facing the class),\nPI faces the board, PI/2 faces east, -PI/2 faces the windows. Gait weights 0..1, idle gets the rest.\nMove a walker by world.gaitSpeed.<id>.walk * walk * dt so the feet never slide.\nDefault: cast[0] stands at the board (world.spot) facing the class, others beside it.\nceiling      true/false forces the ceiling and its lights on or off (default: off when the camera is above y = 3.1)\nneighbours   true/false forces the next-door classrooms and the corridor on or off (default: off from above)\ncutaway      true/false: hide the walls between the camera and the room when the camera is outside it\n(default true; hidden walls still cast their shadows, so the window light stays)\nfocus        {x, y, z} the centre of the sun's shadow box (default: the room centre)\nboard        a function (ctx, w, h) drawing on the whiteboard (2048 x 614 px, 1 px = 2 mm); called only when it changes\nscreen       a function (ctx, w, h) drawing the wall screen (1280 x 720), or null for its default blue desktop\n\nExposes: world.cast.<id> (loadFigure results), world.person (cast[0].object), world.gaitSpeed.<id> {walk, run, jog}\nm/s measured from the feet, world.spot (Vector3 at the board), world.board {x, y, z, w, h, mesh, draw(fn)},\nworld.screen {x, y, z, w, h, mesh, draw(fn)}, world.aisle {x, z0, z1, halfWidth}, world.front {z, x0, x1},\nworld.desks [{x, z, seat: Vector3}], world.teacherDesk (Vector3), world.door {x, z}, world.windows [{x, z, w}],\nworld.clock (Object3D), world.sun (DirectionalLight), world.sunDir, world.H (3.1),\nworld.bounds {x0, x1, z0, z1}, world.ceilingGroup, world.walls {north, south, east, west} (Groups).",
+ "props": [
+  "SchoolChair_01",
+  "SchoolDesk_01",
+  "WoodenTable_01",
+  "island_tree_01",
+  "potted_plant_01",
+  "potted_plant_02",
+  "wall_clock"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

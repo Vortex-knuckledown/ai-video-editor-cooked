@@ -1,0 +1,43 @@
+{
+ "id": "kitchen",
+ "describe": "A modern home kitchen in the morning: an island with stools, counters with a hob, sink, kettle and coffee machine, wall cabinets, a fridge, a fruit bowl, pendant lights, a window over the sink with daylight. A person stands at the island and walks through.",
+ "tags": [
+  "bowl",
+  "cabinet",
+  "coffee",
+  "counter",
+  "daylight",
+  "fridge",
+  "fruit",
+  "hob",
+  "home",
+  "island",
+  "kettle",
+  "kitchen",
+  "light",
+  "machine",
+  "modern",
+  "pendant",
+  "sink",
+  "stand",
+  "stool",
+  "through",
+  "walk",
+  "wall",
+  "window"
+ ],
+ "exposes": "World \"kitchen\": a modern home kitchen on a bright morning, daylight through a window over the sink.\n\nAxes (metres): +x EAST, +y up, +z SOUTH. The room's inside faces: x -4..4, z -3..3.2, floor y = 0, ceiling y = 2.7.\nNorth wall (z = -3): the main run of base units x -4..2.5 (front at z -2.38, worktop y 0.92), white subway-tile\nsplashback, a window over the sink (x -1.7..0.5, sill y 1.05, head y 2.25) with the garden,\na fence and the neighbours' houses outside. Sink centred at x -0.6, hob at x 1.2 with an\noven below and a steel hood above, a kettle at x -2.3, a coffee machine at x -3.35,\nwall cabinets x -4..-1.85 and 1.6..2.5 (y 1.45..2.25). A steel fridge x 2.55..3.43 and a\ntall larder cupboard x 3.45..4 in the north-east corner.\nWest wall (x = -4):  two oak floating shelves with plates, bowls and jars, a framed print, a plant on the floor.\nEast wall (x = 4):   a framed print, a radiator.\nSouth wall (z = 3.2): a door at x 2.9, a framed print, a tall plant in the corner.\nMiddle: an island x -1.2..1.4 (body z -0.95..-0.05, worktop z -1..0.35, top y 0.92) with a fruit bowl, a\nchopping board, a vase; three bar stools on its south side (z 0.62); three pendant lights over it\n(bottoms at y 1.7). Oak plank floor.\nThe free walkway is the strip z 1.3..2.6 from x -3.4 to 3.4 (spots.walkFrom -> walkTo, z 1.85).\nBetween the island and the north counters is a 1.38 m aisle (spots.atIsland: north side, facing the island).\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"], clips}) -> world. Per frame: set world.camera (position,\nfov, lookAt), then world.update(state), then world.render(). update() cuts away whichever walls / ceiling stand\nbetween the camera and the room, so a camera may be outside the room (a side-on track from z = 5.5, an aerial\nview from y = 9) and still see in. Wall shadows stay.\n\nstate (every field optional):\ntime        seconds of the shot (default clock for the people's animation)\npeople      {<cast id>: {x, z, heading, time, gait: {walk, run, <other clip>: w}, show}}\nheading radians about +y: 0 faces +z (south), PI/2 faces east (+x), PI faces north (the window),\n-PI/2 faces west. gait weights 0..1, idle takes the rest. Move a walker by world.gaitSpeed[id].walk *\nwalk metres per second so the feet do not slide. time = animation clock (default state.time).\nshow false hides. A person missing from state.people stands at world.spots.atIsland.\npendants    0..1 the pendant lights over the island (default 1)\nsun         0..1 how much morning sun comes through the window (default 1)\nsteam       0..1 a wisp of steam from the kettle spout (default 0)\ncutaway     false keeps every wall and the ceiling drawn (default: cut away what blocks the camera)\n\nExposes: world.cast.<id> (loadFigure result: object, pose, height), world.person (the first cast member's object),\nworld.gaitSpeed.<id> {walk, run} m/s (also .walk / .run for the first), world.spots {atIsland, atSink, atHob,\nbyFridge, onStool, walkFrom, walkTo: {x, z, heading}}, world.room {x0:-4, x1:4, z0:-3, z1:3.2, h:2.7},\nworld.island {x0, x1, z0, z1, top} , world.islandCentre (Vector3 on the worktop), world.stools [3],\nworld.kettle, world.coffeeMachine, world.fridge, world.fruitBowl, world.hob, world.sink (Vector3s / Groups),\nworld.pendants [3 PointLight], world.sun (DirectionalLight), world.windowCentre (Vector3),\nworld.bones.<id> {head, hips, leftFoot, rightFoot}.",
+ "props": [
+  "ceramic_vase_01",
+  "food_apple_01",
+  "metal_stool_02",
+  "modern_ceiling_lamp_01",
+  "pot_enamel_01",
+  "potted_plant_01",
+  "potted_plant_02",
+  "wooden_bowl_01",
+  "wooden_cutting_board"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

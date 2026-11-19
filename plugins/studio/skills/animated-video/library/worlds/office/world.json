@@ -1,0 +1,40 @@
+{
+ "id": "office",
+ "describe": "A modern open-plan office interior by day: rows of desks with monitors and chairs, a glass-walled meeting room with a table, plants, ceiling lights, floor-to-ceiling windows with a city skyline outside. People walk the aisle and stand talking.",
+ "tags": [
+  "aisle",
+  "ceiling",
+  "chair",
+  "city",
+  "desk",
+  "floor",
+  "glas",
+  "interior",
+  "light",
+  "meeting",
+  "modern",
+  "monitor",
+  "office",
+  "open",
+  "outside",
+  "plan",
+  "plant",
+  "room",
+  "row",
+  "skyline",
+  "stand",
+  "table",
+  "talking",
+  "walk",
+  "walled",
+  "window"
+ ],
+ "exposes": "World \"office\": a modern open-plan office interior high in a city tower, by day.\n\nAxes (metres): +x EAST, +y up, +z SOUTH. Floor at y = 0, ceiling at y = 3.2 (world.H).\nThe room is x -22..22, z -12..12. Floor-to-ceiling windows on the NORTH wall (z = -12) and the EAST wall\n(x = 22) look out over a city skyline (the street is 60 m below, y = -60). The SOUTH wall (z = 12) is\nexposed brick, the WEST wall (x = -22) is painted plaster with a kitchen counter, shelves and a fridge.\nThe main AISLE runs the whole length along x at z = 0 (clear for |z| < 2.4, x -20..20): people walk it.\nDesk banks run north-south off the aisle: north side at x = -18,-13,-8,-3,2,7,12,17 (z -3.2..-9.6), south side\nat x = -18,-13,-8,-3,2,7 (z 3.2..9.6). Each bank seats 8 (monitors, keyboards, office chairs), with a felt\ndivider and a low storage bench with plants at the aisle end. Concrete columns at x = -10.5,-0.5,9.5, z = +-6.4.\nThe glass-walled MEETING ROOM is x 11..22, z 3.5..12 (door in its north glass at x 12..13, z 3.5) with a\n4.4 m table, 8 chairs, a wall screen and a pendant. Linear pendant lights and ducts hang from the ceiling;\nthey hide themselves when the camera rises above the ceiling (the ceiling is one-sided, so a camera above\ny = 3.2 looking down sees the whole floor as a cutaway).\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"], crowd}) -> world.\ncast:  library characters to load (man, woman, robot, soldier, mannequin); each is world.cast.<id>.\ncrowd: background people standing talking, [{id, x, z, heading, clip}] (default: one \"man\", or \"woman\" when\nthe cast already has a man, talking at the south edge of the aisle at x = -12, z = 2.2, facing north).\nPer frame: set world.camera, then world.update(state), then world.render().\n\nstate (every field optional):\ntime         seconds of the shot (animation clock by default)\npeople       {<cast id>: {x, z, heading, time, gait: {walk, run, jog, talk}, show}}\nheading radians about +y: 0 faces +z (south), PI/2 faces east (+x, along the aisle), -PI/2 west.\ngait weights 0..1, idle takes the rest. Move a walker by world.gaitSpeed.<id>.walk * walk * dt\nso the feet never slide. Default: cast[0] stands in the aisle at x = -12, z = 0.9 facing the\ncrowd talker; later cast members stand beside it.\ncrowd        {<index or id>: {x, z, heading, time, clip, show}} overrides for the crowd; crowd: false hides it\nceiling      true/false forces the ceiling fixtures on or off (default: on unless the camera is above y = 3.1)\nfocus        {x, y, z} the centre of the sun's shadow box (default: cast[0])\nshadowRadius metres of the shadow box (default from the camera's distance to the focus)\n\nExposes: world.cast.<id> (loadFigure results), world.person (cast[0].object), world.crowd (array),\nworld.gaitSpeed.<id> {walk, run, jog} m/s measured from the feet, world.aisle {z, x0, x1, halfWidth},\nworld.spot (Vector3, cast[0]'s default place), world.meetingRoom {x0, x1, z0, z1, door: {x, z}, table: Vector3},\nworld.banks [{x, z0, z1, side}], world.kitchen (Vector3), world.windows {north: -12, east: 22},\nworld.sun (DirectionalLight), world.sunDir, world.H (3.2), world.bounds {x0, x1, z0, z1}, world.ceilingGroup.",
+ "props": [
+  "dining_chair_02",
+  "potted_plant_01",
+  "potted_plant_02"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

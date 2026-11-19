@@ -1,0 +1,39 @@
+{
+ "id": "living-room",
+ "describe": "A home living room in the evening: a sofa and armchair, a coffee table, a TV on a low unit, bookshelves, a rug on a wooden floor, a floor lamp, a window with dusk light. A person can sit-stand near the sofa and walk across.",
+ "tags": [
+  "acros",
+  "armchair",
+  "bookshelve",
+  "coffee",
+  "dusk",
+  "floor",
+  "home",
+  "lamp",
+  "light",
+  "living",
+  "room",
+  "rug",
+  "sit",
+  "sofa",
+  "stand",
+  "table",
+  "tv",
+  "unit",
+  "walk",
+  "window",
+  "wooden"
+ ],
+ "exposes": "World \"living-room\": a home living room in the evening, dusk light through a big window.\n\nAxes (metres): +x EAST, +y up, +z SOUTH. The room's inside faces: x -3.5..3.5, z -3..3, floor y = 0, ceiling y = 2.7.\nNorth wall (z = -3): a wide window (x -1.3..1.3, sill y 0.75, head y 2.35) with curtains, dusk sky and a garden\nwith neighbours' houses outside. Two framed prints either side.\nWest wall (x = -3.5): exposed brick, two tall bookcases full of books (z -2.35..-0.25 and 0.25..1.3), a plant.\nEast wall (x = 3.5):  a low wooden TV unit (z -0.95..0.95) with a flat TV (screen faces west), a plant in the corner.\nSouth wall (z = 3):   a door at x -2.7, a framed print.\nMiddle: a rug (x -1.4..1.8, z -1.3..1.3) on an oak plank floor; a sofa at x -1.27 facing EAST (towards the TV,\nz -0.9..0.9, seat front at x -0.86); a coffee table at x 0.45; an armchair at (1.6, -1.75) turned to the sofa;\na side table with a vase at the sofa's north end; a floor lamp at (-1.55, 1.3) by the sofa's south end.\nThe free walkway is the strip z 1.65..2.4 from the door (x -2.6) to x 2.6.\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"], clips}) -> world. Per frame: set world.camera (position,\nfov, lookAt), then world.update(state), then world.render(). update() also cuts away whichever walls / ceiling stand\nbetween the camera and the room, so a camera may be outside the room (a side-on track from z = 5, an aerial view\nfrom y = 8) and still see in. Wall shadows stay.\n\nstate (every field optional):\ntime        seconds of the shot (default clock for the people's animation)\npeople      {<cast id>: {x, z, heading, time, gait: {walk, run, <other clip>: w}, show}}\nheading radians about +y: 0 faces +z (south), PI/2 faces east (+x), PI faces north (the window),\n-PI/2 faces west. gait weights 0..1, idle takes the rest. Move a walker by world.gaitSpeed[id].walk * walk\nmetres per second so the feet do not slide. time = animation clock (default state.time). show false hides.\nA person missing from state.people stands at world.spots.bySofa.\nlamp        0..1 the floor lamp (default 1)\ntv          0..1 the TV picture (default 0.85)\ndusk        0..1 how much warm low sun comes through the window (default 1)\ncutaway     false keeps every wall and the ceiling drawn (default: cut away what blocks the camera)\n\nExposes: world.cast.<id> (loadFigure result: object, pose, height), world.person (the first cast member's object),\nworld.gaitSpeed.<id> {walk, run} m/s (also world.gaitSpeed.walk / .run for the first), world.spots {bySofa, window,\ndoor, byTv, walkFrom, walkTo: {x, z, heading}}, world.room {x0:-3.5, x1:3.5, z0:-3, z1:3, h:2.7},\nworld.sofa, world.armchair, world.coffeeTable, world.tv (the screen mesh), world.lamp (PointLight),\nworld.sun (DirectionalLight), world.windowCentre (Vector3), world.bones.<id> {head, hips, leftFoot, rightFoot}.",
+ "props": [
+  "ArmChair_01",
+  "book_encyclopedia_set_01",
+  "ceramic_vase_01",
+  "modern_coffee_table_01",
+  "potted_plant_01",
+  "side_table_01",
+  "sofa_02"
+ ],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}

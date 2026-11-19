@@ -1,0 +1,29 @@
+{
+ "id": "moon",
+ "describe": "The surface of the Moon: grey regolith with craters large and small, rocks, long hard shadows, a landing module with a flag, the Earth small and blue in a black starry sky. An astronaut-paced person can walk the surface.",
+ "tags": [
+  "astronaut",
+  "black",
+  "blue",
+  "crater",
+  "earth",
+  "flag",
+  "grey",
+  "hard",
+  "landing",
+  "long",
+  "module",
+  "moon",
+  "paced",
+  "regolith",
+  "rock",
+  "shadow",
+  "starry",
+  "surface",
+  "walk"
+ ],
+ "exposes": "World \"moon\": the surface of the Moon with the Sun low.\n\nGrey regolith (the kit's sand surface, turned grey, at two scales so it never tiles), craters from 0.3 m to 200 m\nacross with raised rims, a field of rocks and boulders, long hard shadows from a Sun 11 degrees up in the east,\na ring of far highlands on the horizon. A landing module (gold-foil descent stage on four legs with a ladder,\na silver ascent stage with windows, hatch, dish and thrusters), a flag beside it, a parked rover with its wheel\ntracks, a small science station with cables, boot prints along a trodden path. The Earth hangs small and blue,\nhalf lit, in a black sky full of stars. One or more people from the library walk the path.\n\nAxes (metres): +x is EAST (towards the Sun), +y up, +z SOUTH. A camera south of the path looking north (-z) sees\nthe path side on, the lander behind it, the Earth up and to the left, shadows falling to the left.\nthe path      z = 3, flat and trodden, good for walking from x = -120 to 120 (world.path)\nthe lander    centred (0, -8), legs reach 4.5 m out, top of the ascent stage at about 6 m (world.lander)\nthe flag      (6.5, -3.5), 2.3 m tall, flying east (world.flag)\nthe rover     (-11, -4), facing east (world.rover); the station (17, -15) (world.station)\nthe Earth     8.5 degrees up, a little west of north (world.earthDir), the Sun (world.sunDir)\nthe ground    world.heightAt(x, z) is the surface height; everything stands on it\n\ncreateWorld({THREE, canvas, K, loaders, cast = [\"woman\"]}) -> world. Per frame: set world.camera (position, fov,\nlookAt), then world.update(state), then world.render().\n\nstate (every field optional):\ntime          seconds of the shot (drives the people's clocks and the Earth's slow turn)\npeople        {<id>: {x, z, heading, time, gait: {walk, run, ...any loaded clip}, show}} one entry per cast id.\nheading is radians about +y, 0 faces +z (south), PI/2 faces east (along the path). Idle takes\nwhatever weight walk and run leave. Move x by world.gaitSpeed[id].walk * walk * dt so feet never\nslide (measured from the clip at load). Defaults: cast[0] at (-6, 3) facing east, the rest\nstanding behind it. y is always the ground.\nperson        the same fields, for cast[0] (shorthand)\nfocus         {x, y, z} where the shadow box is centred (default cast[0])\nshadowRadius  metres the hard shadows cover round the focus (default from the camera's distance, 18..320)\n\nExposes: world.cast.<id> (loadFigure results), world.person (cast[0].object), world.gaitSpeed.<id> {walk, run},\nworld.heightAt(x, z), world.path {z, x0, x1}, world.lander, world.flag, world.rover, world.station (Groups),\nworld.spots {lander, flag, rover, station, start} (Vector3 on the ground), world.earth (Mesh), world.earthDir,\nworld.sun (DirectionalLight), world.sunDir (unit vectors), world.scene, world.camera, world.renderer, world.render().",
+ "props": [],
+ "made_for": "",
+ "thumb": "thumb.jpg"
+}
