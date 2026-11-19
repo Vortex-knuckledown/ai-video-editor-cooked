@@ -1668,7 +1668,7 @@ function promptSide(){
     <div class="sec"><div class="h">A video to copy the look of <span class="muted">(optional)</span></div>
       <textarea class="input" style="min-height:54px;padding:10px;font-family:inherit;resize:vertical" placeholder="Paste links, one a line. Only their style is measured, never their footage." oninput="nv.prompt.refs=this.value">${esc(P.refs)}</textarea></div>
     <div class="sec"><div class="h">Shape</div><div class="row">${[['9:16','Tall · 9:16'],['16:9','Wide · 16:9']].map(([a,t])=>`<button class="pill ${aspectOf()===a?'on':''}" onclick="nv.aspect='${a}';nv.aspectSet=1;render()">${t}</button>`).join('')}</div></div>
-    <div class="sec"><div class="h">Length</div><div class="row">${[15,30,60,90].map(n=>`<button class="pill ${P.length===n?'on':''}" onclick="nv.prompt.length=${n};render()">${n} s</button>`).join('')}</div></div>
+    <div class="sec"><div class="h">Length</div><div class="row">${[15,30,60,90,180,300].map(n=>`<button class="pill ${P.length===n?'on':''}" onclick="nv.prompt.length=${n};render()">${n} s</button>`).join('')}</div></div>
     <div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
       ${tick('voice','AI voiceover','The narrator you pick below.')}
       ${tick('caption','On-screen text','Word-timed captions of what is said.')}

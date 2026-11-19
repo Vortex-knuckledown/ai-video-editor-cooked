@@ -616,9 +616,27 @@ def cmd_words(edit):
             step = span / len(ws)
             for k, w in enumerate(ws):
                 words.append({"w": w, "start": round(r["start"] + 0.3 + k * step, 3), "end": round(r["start"] + 0.3 + (k + 1) * step, 3)})
+    words = join_split(words)
     jsave(edit / "words.json", words)
     print(f"{len(words)} words in words.json" + ("" if b["text"] else " (text is off: used for the clips' timing only)"))
     return 0
+
+
+def join_split(words):
+    """The transcriber now and then hands a number or a hyphenated word over in pieces ("384", ",000"; "light",
+    "-years"; "4", ".2"; "3", "%"): a piece that starts with such a mark goes back onto the word before it."""
+    out = []
+    for w in words:
+        t = w["w"]
+        piece = t == "%" or (len(t) > 1 and t[0] in "-'\u2019") or re.match(r"^[,.]\d", t)
+        if out and piece and w["start"] - out[-1]["end"] < 0.6:
+            prev = out[-1]["w"]
+            if t[0] == "," and prev.endswith("."):          # "384." then ",000"
+                prev = prev[:-1]
+            out[-1] = {**out[-1], "w": prev + t, "end": w["end"]}
+        else:
+            out.append(dict(w))
+    return out
 
 
 def scene_words(words, row):
@@ -906,6 +924,11 @@ def cmd_stills(edit):
 
 # ---------------------------------------------------------------- self-check
 def demo():
+    jw = join_split([{"w": "384", "start": 0, "end": .3}, {"w": ",000", "start": .3, "end": .6}, {"w": "light", "start": 1, "end": 1.2},
+                     {"w": "-years", "start": 1.2, "end": 1.5}, {"w": "3", "start": 2, "end": 2.1}, {"w": "%", "start": 2.1, "end": 2.2},
+                     {"w": "-", "start": 5, "end": 5.1}, {"w": ".", "start": 9, "end": 9.1}, {"w": "12.", "start": 10, "end": 10.2},
+                     {"w": ",700", "start": 10.2, "end": 10.5}])
+    assert [x["w"] for x in jw] == ["384,000", "light-years", "3%", "-", ".", "12,700"] and jw[0]["end"] == .6, jw
     # fit: slow the voice first (never under 80%), then the same air after every line, capped
     assert fit_plan(30.0, 8, 48.0) == (0.8, round((48 - 0.15 - 37.5 - 8 * 0.35) / 8, 3)), fit_plan(30.0, 8, 48.0)
     assert fit_plan(41.0, 8, 48.0)[0] == 1.0 and fit_plan(10.0, 4, 60.0) == (0.8, MAX_AIR_S)

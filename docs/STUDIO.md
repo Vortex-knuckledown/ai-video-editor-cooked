@@ -62,6 +62,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | Version | What |
 |---|---|
 | studio 0.1.0 | Create from a prompt; Claude hidden in the background |
+| studio 0.14.0 | Animated videos up to 10 minutes, scenes built six at a time; captions keep numbers whole (released 2026-11-19, tag `studio-v0.14.0`) |
 | studio 0.13.0 | Natural free voices (edge-tts); real 3D in animated shots (three.js); sound bites that show the speaker (released 2026-11-19, tag `studio-v0.13.0`) |
 | studio 0.12.0 | Long video picks the matching moment of each clip, passes over subtitled clips, and checks the render at every cut (released 2026-11-19, tag `studio-v0.12.0`) |
 | studio 0.11.0 | UGC ad; Make Shorts from a Long video; sound bites; black bars cropped; Pixabay (released 2026-11-19, tag `studio-v0.11.0`) |
