@@ -9,6 +9,12 @@ What changed for every user, newest first.
   a `clip` (a cutting from the article being quoted, its key words marked). A scene's `hud` is a readout that stays
   in the top left through a section. The script is told to prefer these to full-frame graphic cards.
 - **Shorts captions.** Three or four words in capitals a little below the middle, the said word lit.
+- **A finished video always opens.** An editor page left running from an older copy of the app could not load
+  after an update, so its video did not open. The app now checks that the page itself loads, replaces a dead one,
+  and clears leftovers when it starts.
+- **The editor is the same app.** The video editor carries the Framewise mark, sidebar and blue, and leaves room
+  for the window buttons.
+
 
 ## studio 0.17.0 (this fork, 2026-11-19)
 

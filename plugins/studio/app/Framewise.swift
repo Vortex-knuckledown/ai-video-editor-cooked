@@ -321,6 +321,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
                 return
             }
             var url = self.runningURL()
+            // editor pages served from a copy of the app that is no longer here cannot load: end them, they start again on demand
+            sh(["-c", "for p in $(pgrep -f 'ai_editor/review.py .* serve'); do f=$(ps -o command= -p $p | grep -o '/[^ ]*ai_editor/review.py'); [ -n \"$f\" ] && [ ! -f \"$f\" ] && kill $p; done; true"])
             if url == nil {
                 let home = resource("plugins/ai-editor/lib/ai_editor/home.py")
                 let (_, lib) = sh(["-c", "\"$0\" -c 'import sys; sys.path.insert(0, sys.argv[1]); import library; print(library.path())' \"$1\"",
