@@ -2,6 +2,24 @@
 
 What changed for every user, newest first.
 
+## studio 0.16.0 (this fork, 2026-11-19)
+
+- **cooked. as a Mac app.** `bash plugins/studio/app/build.sh` makes `dist/cooked.app` and a `.dmg` (15 MB, Apple
+  silicon and Intel). Double-click and the editor opens in its own window: no Terminal, no folder to open. The app
+  carries its own copy of the plugins, starts the editor itself, and on a new Mac its first screen installs what is
+  missing (Python, Node, ffmpeg) into `~/.ai-video-editor/runtime` with no Homebrew and no password, then Claude Code
+  with Anthropic's installer. Claude Code still does the editing, signed in with the user's own Claude account. The
+  app is signed ad hoc, not with an Apple Developer ID: on another Mac the first open is right-click, Open.
+
+- **A new look: dark studio, electric blue.** Every screen (Home, New video, Your videos, Styles, Brand, Skills,
+  Claude, Settings, the Library, the video editor and the app's setup screen) is restyled as one dark studio with a
+  single blue for the thing to press and the thing selected. It is a theme layer (`plugins/studio/theme/home.css`,
+  `review.css`) over the pages' own styles: how things look changed, nothing they do. Light stays in Settings, Theme.
+- **A create-first Home.** Home opens on "What do you want to make?": a box to describe the video, a length
+  (30 s, 60 s, 3 min, 5 min), and the six kinds of video as tiles. Create opens New video already filled in (an
+  animated video up to 60 s, a long video above); nothing starts until its own button is pressed. The sidebar is the
+  slim icon one by default, and pages sit in one centred column (`plugins/studio/theme/home.js`).
+
 ## studio 0.15.0 (this fork, 2026-11-19)
 
 - **3D videos are built from a few worlds.** A 3D video now has 2 to 6 worlds (a street, Earth from orbit), each

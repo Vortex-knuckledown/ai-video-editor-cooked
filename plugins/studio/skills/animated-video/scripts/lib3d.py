@@ -359,7 +359,7 @@ def thumb(kind, iid):
     """A library item's picture, or None. Only names the library itself made are looked up."""
     if kind not in ("worlds", "characters", "props") or not re.fullmatch(r"[A-Za-z0-9_-]{1,60}", iid or ""):
         return None
-    for name in ("thumb.png", "thumb.jpg"):
+    for name in ("thumb.jpg", "thumb.png"):
         f = root() / kind / iid / name
         if f.is_file():
             return f
@@ -384,15 +384,21 @@ def page():
     ps = [card("props", p["id"], p.get("name", p["id"]), ", ".join(p.get("tags", [])[:6]), p.get("source", "")) for p in props()]
     return """<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Library</title><style>
-:root{color-scheme:dark}body{margin:0;background:#101012;color:#eee;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-main{max-width:1180px;margin:0 auto;padding:36px 20px 80px}h1{font-size:28px;margin:0 0 6px}h2{font-size:19px;margin:38px 0 2px}
-h2 span{color:#888;font-weight:400;font-size:15px;margin-left:6px}.n{color:#9a9aa2;margin:0 0 14px;max-width:760px}
-.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
-.c{background:#1a1a1e;border:1px solid #2a2a30;border-radius:12px;overflow:hidden;padding-bottom:12px}
-.c img,.ph{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#232329}
-.ph{display:flex;align-items:center;justify-content:center;font-size:44px;color:#555;font-weight:700}
-.t{font-weight:650;padding:10px 14px 2px;text-transform:capitalize}.d{padding:0 14px;color:#b9b9c0;font-size:13.5px;
-display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.f{padding:6px 14px 0;color:#7d7d86;font-size:12.5px}
+:root{color-scheme:dark;--a:#3D7BFF}body{margin:0;color:#F2F4F8;font:14px/21px -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",sans-serif;
+background:radial-gradient(1100px 520px at 62% -180px,rgba(61,123,255,.14),transparent 70%),#0A0B0E;background-attachment:fixed}
+main{max-width:1200px;margin:0 auto;padding:44px 28px 90px}h1{font-size:34px;line-height:40px;font-weight:650;letter-spacing:-.028em;margin:0 0 8px}
+h2{font-size:17px;font-weight:620;letter-spacing:-.012em;margin:44px 0 2px}
+h2 span{color:rgba(232,236,245,.56);font-weight:500;font-size:13px;margin-left:8px;background:rgba(255,255,255,.06);border-radius:99px;padding:2px 9px}
+.n{color:rgba(232,236,245,.56);margin:0 0 16px;max-width:760px;font-size:14.5px}
+.g{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.c{background:#13151A;border:1px solid rgba(255,255,255,.075);border-radius:18px;overflow:hidden;padding-bottom:14px;
+box-shadow:0 1px 0 rgba(255,255,255,.04) inset,0 10px 30px rgba(0,0,0,.35);transition:transform .22s cubic-bezier(.2,.7,.2,1),border-color .18s}
+.c:hover{transform:translateY(-3px);border-color:rgba(61,123,255,.55)}
+.c img,.ph{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#111318}
+.ph{display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:700;color:var(--a);
+background:linear-gradient(135deg,rgba(61,123,255,.16),transparent),#111318}
+.t{font-weight:620;letter-spacing:-.012em;font-size:15.5px;padding:12px 16px 3px;text-transform:capitalize}.d{padding:0 16px;color:rgba(232,236,245,.74);font-size:13.5px;line-height:19px;
+display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}.f{padding:8px 16px 0;color:rgba(232,236,245,.42);font-size:12.5px}
 </style></head><body><main><h1>Library</h1>
 <p class="n">Everything a 3D video can reuse. A new video takes the places, people and things it needs from here, and any new place
 it builds is saved here for the next one. Nothing here has to be made twice.</p>""" + \

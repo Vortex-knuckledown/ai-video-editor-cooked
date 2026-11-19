@@ -1,0 +1,45 @@
+/* studio theme for the editor page (review.html): the same dark studio and electric blue as the home page.
+   Colours and the buttons to press only: the editor's layout and tools are untouched. */
+:root, :root[data-theme=dark] {
+  --accent: #3D7BFF; --accent-hi: #5C92FF; --accent-lo: #2A62E8; --accent-soft: rgba(61, 123, 255, .14); --accent-line: rgba(61, 123, 255, .55);
+  --page: #0A0B0E; --panel: #0A0B0E; --raise: #1A1D24; --rail: #0D0F13; --railon: rgba(61, 123, 255, .16); --tile: #000000; --tileink: #FFFFFF;
+  --line: rgba(255, 255, 255, .08); --line2: rgba(255, 255, 255, .16); --chip: rgba(255, 255, 255, .055); --track: rgba(255, 255, 255, .11); --hover: rgba(255, 255, 255, .08);
+  --ink: #F2F4F8; --ink-hover: #FFFFFF; --onink: #0A0B0E; --strong: #F2F4F8; --ink2: rgba(232, 236, 245, .84); --body: rgba(232, 236, 245, .74);
+  --muted: rgba(232, 236, 245, .58); --quiet: rgba(232, 236, 245, .40);
+  --film: #000000; --range: rgba(61, 123, 255, .30); --dim: rgba(0, 0, 0, .5);
+  --sh: 0 1px 2px rgba(0, 0, 0, .6); --pop: 0 14px 40px rgba(0, 0, 0, .6); --ok: #34D399; --ok-text: #34D399; --onok: #04261B; --okbg: rgba(52, 211, 153, .10);
+  --pill: #1A1D24; --pilltx: #F2F4F8; --pillline: rgba(255, 255, 255, .14);
+  color-scheme: dark;
+}
+:root[data-theme=light] {
+  --accent: #2563EB; --accent-hi: #3B76F0; --accent-lo: #1D4FD0; --accent-soft: rgba(37, 99, 235, .09); --accent-line: rgba(37, 99, 235, .55);
+  --page: #F6F7F9; --panel: #FFFFFF; --rail: #EEF0F3; --railon: rgba(37, 99, 235, .12); --line: #E3E6EB; --line2: #C9CED8;
+  --range: rgba(37, 99, 235, .22); color-scheme: light;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif; letter-spacing: -.003em; }
+::selection { background: var(--accent); color: #fff; }
+* { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+button { transition: background-color .16s ease, border-color .16s ease, color .16s ease, filter .16s ease; }
+
+/* the buttons that move the video on are blue */
+#mapprove.primary, #msend, #exbox .exb button.go, #mexport, #savebtn, .actions a#dl, .actions button.primary, .erow button.go,
+.learn .erow button.go, .clc button.go, .learn .lact .go, .pbtn.go, .rgo, .trbtns button.go, .trfoot .go, .tnew #tadd, .splay {
+  background: linear-gradient(180deg, var(--accent-hi), var(--accent-lo)) !important; color: #fff !important; border-color: transparent !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .2) inset, 0 6px 20px rgba(61, 123, 255, .28);
+}
+#mapprove.primary:hover, #msend:hover, #mexport:hover, #savebtn:hover, .actions button.primary:hover, .actions a#dl:hover, .rgo:hover { filter: brightness(1.08); }
+.pbtn.on, #stages > button.on .n, .titem.on, .sk.now, .sopts button.on, .cgroup button.on, .sdrop.on, .trmenu .on i {
+  border-color: var(--accent) !important;
+}
+.pbtn.on, #stages > button.on .n { background: var(--accent) !important; color: #fff !important; }
+.titem.on, .sopts button.on, .cgroup button.on, .sdrop.on { background: var(--accent-soft) !important; }
+.addin input:focus, #addsay:focus, .cline input:focus, .cword:focus, .edta:focus, .lname:focus, .rsel:focus, .tnew input:focus, .tnew textarea:focus, #ta:focus {
+  border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-soft); outline: none;
+}
+.lrule input:checked, input[type=checkbox], input[type=radio], input[type=range] { accent-color: var(--accent); }
+.rail { border-right: 1px solid var(--line); }
+.pmenu, .rpop, #vmenu {
+  background: color-mix(in srgb, var(--raise) 90%, transparent); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px);
+  border-color: var(--line2) !important; box-shadow: var(--pop);
+}

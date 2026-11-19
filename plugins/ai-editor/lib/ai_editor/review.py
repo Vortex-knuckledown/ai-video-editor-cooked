@@ -2260,7 +2260,25 @@ def intro(folder, d):
 def themed(html):
     """The page with the saved theme already on <html>, so it paints in it from the first frame."""
     t = theme()
+    html = studio_theme(html)   # fork: the studio plugin's look, a layer over the page's own styles
     return html if t == "system" else html.replace(b"<html", f'<html data-theme="{t}"'.encode(), 1)
+
+
+def studio_theme(html):
+    """fork: the studio theme (plugins/studio/theme/home.css or review.css) added last in <head>, when it is there."""
+    name = "review.css" if b"<title>Review" in html[:600] else "home.css"
+    here = Path(__file__).resolve()
+    for f in [here.parents[3] / "studio" / "theme" / name, *sorted(here.parents[3].parent.glob(f"studio/*/theme/{name}"), reverse=True),
+              *sorted(here.parents[4].glob(f"studio/*/theme/{name}"), reverse=True)]:
+        try:
+            add = b'<style id="studio-theme">\n' + f.read_bytes() + b"\n</style>"
+            js = f.with_suffix(".js")   # the layout that goes with the look (the create-first Home)
+            if js.is_file():
+                add += b'<script id="studio-layout">\n' + js.read_bytes() + b"\n</script>"
+            return html.replace(b"</head>", add + b"</head>", 1)
+        except OSError:
+            continue
+    return html
 
 
 def just_for_me(just):
