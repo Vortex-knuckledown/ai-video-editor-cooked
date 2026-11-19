@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.16.0 (this fork, 2026-11-19)
 
 - **cooked. as a Mac app.** `bash plugins/studio/app/build.sh` makes `dist/cooked.app` and a `.dmg` (15 MB, Apple
   silicon and Intel). Double-click and the editor opens in its own window: no Terminal, no folder to open. The app
