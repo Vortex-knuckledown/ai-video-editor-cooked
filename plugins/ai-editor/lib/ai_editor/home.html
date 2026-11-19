@@ -2764,7 +2764,7 @@ function sideHTML(){
       ${it('home','Home',cur==='home','goHome()')}${it('videos','Videos',cur==='videos',vgo,dropAttrs('videos',null))}${it('styles','Styles',onS,"rgo('mystyle')")}${it('brand','Brand',cur==='brand',"rgo('brand')")}${it('skill','Skills',cur==='skills',"rgo('skills')")}${it('library','Library',cur==='library',"rgo('library')")}${it('term','Activity'/* studio: the app's word for it */,cur==='claude',"rgo('claude')")}
       <div class="sb-sp"></div>
       ${ji?`<button class="rl-it rl-job" onclick="${ji.go}" title="${esc(ji.label+': '+ji.text)}"><span class="ic">${ringSvg(ji.frac)}${ji.n}</span>${ji.short}</button>`:''}
-      ${it('heart','Support',false,"supportGo()")}${it('upload',updLabel(true),false,"sbUpd()",updBusy()?'disabled':'')}${it('gear','Settings',cur==='settings',"rgo('settings')")}${thm}`;
+      ${it('heart','Support',false,"supportGo()")}${it('upload',updLabel(true),false,"sbUpd()",updBusy()?'disabled':'')}${window.studioBellSlot?studioBellSlot(true):''/* studio: the bell, in the sidebar's own flow */}${it('gear','Settings',cur==='settings',"rgo('settings')")}${thm}`;
   }
   const cnt=(k,id)=>Object.entries(fd(k).items).filter(([d,f])=>f===id&&(k==='videos'?vids.some(v=>v.dir===d):st.some(c=>c.id===d))).length;
   const inp=(e,ph)=>`<input id="fold-name" value="${esc(e.val||'')}" placeholder="${ph}" maxlength="40" aria-label="Folder name" onclick="event.stopPropagation()" oninput="(ui.newfold||ui.renfold).val=this.value" onkeydown="event.stopPropagation();if(event.key==='Enter')foldSave();if(event.key==='Escape'){ui.newfold=ui.renfold=null;render()}">`;
@@ -2791,7 +2791,7 @@ function sideHTML(){
     ${gsBlock()}
     ${updRow()}
     <button class="sb-row" onclick="supportGo()" title="Opens Stripe in a new tab">${ic('heart')}<span class="lb">Support cooked.</span></button>
-    <div class="sb-bot"><button class="sb-row ${cur==='settings'?'on':''}" onclick="rgo('settings')" ${upd?'title="A new version is out"':''}>${ic('gear')}<span class="lb">Settings</span>${upd?'<span class="sdot"></span>':''}</button>${thm}</div>`;
+    ${window.studioBellSlot?studioBellSlot(false):''/* studio */}<div class="sb-bot"><button class="sb-row ${cur==='settings'?'on':''}" onclick="rgo('settings')" ${upd?'title="A new version is out"':''}>${ic('gear')}<span class="lb">Settings</span>${upd?'<span class="sdot"></span>':''}</button>${thm}</div>`;
 }
 // a question for a video whose editor tab has it (askhook "elsewhere"): one row on Home and in the sidebar job card
 const askAbout=()=>{const q=window.askq;return q&&q.elsewhere?q.about||'your video':null};
@@ -2990,6 +2990,7 @@ function stKeys(){
   return `<div class="scd" style="flex-direction:row;align-items:center;justify-content:space-between;padding:16px 20px"><div style="min-width:0"><b style="font-size:17px;line-height:22px">Keyboard shortcuts</b><div class="t2" style="white-space:normal">The keys the video editor uses. Every open video picks up a change.</div></div><button class="b2 s" onclick="kmOpen()">Edit</button></div>`}
 function kmOpen(){document.getElementById('kmdlg').showModal()}
 function vSettings(){
+  if(window.studioSettingsView)return studioSettingsView();   // studio: Settings in sections, connections as integrations
   return `<div class="pgc"><div class="ph"><h1>Settings</h1><p>Keys, updates, where your videos live, and the look.</p></div><div class="sgrid">
     <div class="scol">${window.studioClaudeCard?studioClaudeCard():''/* studio: the Claude account */}<div class="scd" style="gap:16px"><div class="hd"><b>Keys</b><span class="st-lock">${ic('lock',14)}Saved on this computer only</span></div>${KEYS.map(stKey).join('')}${stModal()}</div>
       <div class="scd" style="gap:16px"><div class="hd"><b>Connections for new videos</b><span class="st-lock">${ic('lock',14)}Saved on this computer only</span></div><div class="sub" style="font-size:13px;line-height:19px">Optional. ElevenLabs above gives the most natural narrator. These add footage: Pexels is free; Runway, Google and Higgsfield make AI-generated shots and charge your account with them for each one. Google uses the Gemini key above.</div>${STUDIO_KEYS.map(stKey).join('')}</div>${stPost()}</div>

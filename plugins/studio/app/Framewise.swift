@@ -79,6 +79,18 @@ function buttons(h){document.getElementById('btns').innerHTML=h}
 </script></main></body></html>
 """
 
+final class DragStrip: NSView {
+    override func mouseDown(with e: NSEvent) { if e.clickCount == 2 { window?.performZoom(nil) } else { window?.performDrag(with: e) } }
+}
+
+// The page is part of the app: no browser menu on right-click (text fields keep cut, copy and paste).
+final class AppWebView: WKWebView {
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        let keep: Set<String> = ["WKMenuItemIdentifierCopy", "WKMenuItemIdentifierCut", "WKMenuItemIdentifierPaste", "WKMenuItemIdentifierSelectAll"]
+        menu.items.filter { !keep.contains($0.identifier?.rawValue ?? "") }.forEach { menu.removeItem($0) }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
     var window: NSWindow!
     var web: WKWebView!
@@ -92,17 +104,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(self, name: "app")
         cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
-        cfg.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        web = WKWebView(frame: .zero, configuration: cfg)
+        // tells the page it is inside the app: it leaves room for the window buttons and stops behaving like a web page
+        cfg.userContentController.addUserScript(WKUserScript(source: "window.FW_APP=true;document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('fw-app')});",
+                                                             injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        web = AppWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = self
         web.uiDelegate = self
-        web.allowsBackForwardNavigationGestures = true
+        web.allowsBackForwardNavigationGestures = false
+        web.allowsMagnification = false
+        web.setValue(false, forKey: "drawsBackground")
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1360, height: 860),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Framewise"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = NSColor(calibratedRed: 0.039, green: 0.043, blue: 0.055, alpha: 1)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.minSize = NSSize(width: 1040, height: 680)
         window.center()
         window.setFrameAutosaveName("framewise-main")
-        window.contentView = web
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1360, height: 860))
+        web.frame = host.bounds
+        web.autoresizingMask = [.width, .height]
+        host.addSubview(web)
+        let strip = DragStrip(frame: NSRect(x: 76, y: host.bounds.height - 28, width: host.bounds.width - 76, height: 28))   // right of the window buttons
+        strip.autoresizingMask = [.width, .minYMargin]
+        host.addSubview(strip)
+        window.contentView = host
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         buildMenu()
@@ -115,8 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let app = NSMenu()
         app.addItem(withTitle: "About Framewise", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(withTitle: "Home", action: #selector(goHome), keyEquivalent: "1")
-        app.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "r")
+        app.addItem(withTitle: "Settings…", action: #selector(goSettings), keyEquivalent: ",")
         app.addItem(withTitle: "Check Setup…", action: #selector(recheck), keyEquivalent: "")
         app.addItem(.separator())
         app.addItem(withTitle: "Hide Framewise", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
@@ -133,6 +160,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
+        let fileItem = NSMenuItem(); main.insertItem(fileItem, at: 1)
+        let file = NSMenu(title: "File")
+        file.addItem(withTitle: "New Video", action: #selector(goNew), keyEquivalent: "n")
+        fileItem.submenu = file
+        let goItem = NSMenuItem(); main.addItem(goItem)
+        let go = NSMenu(title: "Go")
+        for (i, t) in [("Home", "home"), ("Videos", "videos"), ("Styles", "mystyle"), ("Library", "library"), ("Activity", "claude")].enumerated() {
+            let it = NSMenuItem(title: t.0, action: #selector(goPage(_:)), keyEquivalent: String(i + 1))
+            it.representedObject = t.1
+            go.addItem(it)
+        }
+        go.addItem(.separator())
+        go.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "r")
+        goItem.submenu = go
         let winItem = NSMenuItem(); main.addItem(winItem)
         let win = NSMenu(title: "Window")
         win.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
@@ -201,6 +242,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {
         guard let what = m.body as? String else { return }
+        if what.hasPrefix("badge:") {   // what needs the user, on the Dock icon
+            let n = Int(what.dropFirst(6)) ?? 0
+            if n > (Int(NSApp.dockTile.badgeLabel ?? "") ?? 0) && !NSApp.isActive { NSApp.requestUserAttention(.informationalRequest) }
+            NSApp.dockTile.badgeLabel = n > 0 ? String(n) : nil
+            return
+        }
         if what == "install" || what == "claude" {
             js("buttons('<button disabled>Installing…</button>');note('This can take a few minutes on a slow connection.')")
             DispatchQueue.global().async {
@@ -308,6 +355,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    // menu items drive the page: on the app's own page they switch section, from the editor they go back to it first
+    func page(_ v: String) {
+        if web.url?.port == PORT { js("try{rgo('\(v)')}catch(e){}") } else if let u = runningURL(), let U = URL(string: u + "#" + v) { web.load(URLRequest(url: U)) }
+    }
+    @objc func goSettings() { page("settings") }
+    @objc func goNew() { page("new") }
+    @objc func goPage(_ s: NSMenuItem) { page(s.representedObject as? String ?? "home") }
     @objc func goHome() { if let u = runningURL(), let U = URL(string: u) { web.load(URLRequest(url: U)) } else { recheck() } }
     @objc func reload() { web.reload() }
     @objc func recheck() { web.loadHTMLString(SETUP_HTML, baseURL: nil) }

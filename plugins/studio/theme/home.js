@@ -144,20 +144,95 @@
     if (bell.open) { items().forEach(function (i) { bell.seen[i.id] = 1; }); try { localStorage.setItem('fw-seen', JSON.stringify(bell.seen)); } catch (e) {} }
     bell.last = ''; bellDraw();
   };
+  function fresh() { return items().filter(function (i) { return i.kind === 'ask' || (i.kind === 'turn' && !bell.seen[i.id]); }).length; }
+  var BELL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS.bell + '</svg>';
+  // the sidebar draws this where its own items are, so it can never sit on top of one
+  window.studioBellSlot = function (rail) {
+    var n = fresh(), badge = n ? '<i class="fw-badge">' + n + '</i>' : '';
+    return rail ? '<button id="fw-bellb" class="rl-it fw-bellb' + (n ? ' ring' : '') + (bell.open ? ' on' : '') + '" onclick="studioBell()" title="Notifications"><span class="ic">' + BELL + badge + '</span>Alerts</button>'
+      : '<button id="fw-bellb" class="sb-row fw-bellb' + (n ? ' ring' : '') + (bell.open ? ' on' : '') + '" onclick="studioBell()">' + BELL + '<span class="lb">Notifications</span>' + (n ? '<span class="fw-badge in">' + n + '</span>' : '') + '</button>';
+  };
   function bellDraw() {
     var el = document.getElementById('fw-bell'); if (!el) return;
-    var it = items(), fresh = it.filter(function (i) { return i.kind === 'ask' || (i.kind === 'turn' && !bell.seen[i.id]); }).length;
+    var it = items(), n = fresh();
     if (!asking()) document.body.classList.remove('fw-ask');
-    var html = '<button class="fw-bell-b' + (fresh ? ' ring' : '') + '" title="Notifications" aria-label="Notifications" onclick="studioBell()">' +
-      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ICONS.bell + '</svg>' + (fresh ? '<i>' + fresh + '</i>' : '') + '</button>' +
-      (bell.open ? '<div class="fw-pop"><div class="fw-pop-h">Notifications</div>' + (it.map(function (i) {
-        return '<button class="fw-it ' + i.kind + '" onclick="' + i.js + '"><span class="fw-dot"></span><span><b>' + esc(i.t || '') + '</b><em>' + esc(i.s || '') + '</em></span></button>';
-      }).join('') || '<div class="fw-none">Nothing needs you right now.</div>') + '</div>' : '');
-    if (html !== bell.last) { el.innerHTML = html; bell.last = html; }
+    var html = bell.open ? '<div class="fw-pop"><div class="fw-pop-h">Notifications</div>' + (it.map(function (i) {
+      return '<button class="fw-it ' + i.kind + '" onclick="' + i.js + '"><span class="fw-dot"></span><span><b>' + esc(i.t || '') + '</b><em>' + esc(i.s || '') + '</em></span></button>';
+    }).join('') || '<div class="fw-none">Nothing needs you right now.</div>') + '</div>' : '';
+    var key = html + '|' + n;
+    if (key !== bell.last) {
+      el.innerHTML = html; bell.last = key;
+      try { paintSide(); } catch (e) {}                       // the badge on the sidebar's button
+      try { if (window.webkit && webkit.messageHandlers && webkit.messageHandlers.app) webkit.messageHandlers.app.postMessage('badge:' + n); } catch (e) {}   // the Dock icon, in the app
+    }
+    if (bell.open) {   // beside the button, wherever the sidebar put it
+      var b = document.getElementById('fw-bellb'), pop = el.firstChild;
+      if (b && pop) { var r = b.getBoundingClientRect(); pop.style.left = Math.round(r.right + 10) + 'px'; pop.style.bottom = Math.max(12, Math.round(innerHeight - r.bottom)) + 'px'; }
+    }
   }
   function bellMount() {
     var el = document.createElement('div'); el.id = 'fw-bell'; document.body.appendChild(el);
     setInterval(bellDraw, 1200); bellDraw();
-    document.addEventListener('mousedown', function (e) { if (bell.open && !el.contains(e.target)) studioBell(false); if (document.body.classList.contains('fw-ask')) { var a = document.getElementById('askq'); if (a && e.target === a) document.body.classList.remove('fw-ask'); } });
+    addEventListener('resize', bellDraw);
+    document.addEventListener('mousedown', function (e) {
+      var b = document.getElementById('fw-bellb');
+      if (bell.open && !el.contains(e.target) && !(b && b.contains(e.target))) studioBell(false);
+      if (document.body.classList.contains('fw-ask')) { var a = document.getElementById('askq'); if (a && e.target === a) document.body.classList.remove('fw-ask'); }
+    });
   }
+
+  // ---- Settings: sections down the side, every service a connection you turn on
+  var set = { tab: 'account', open: null };
+  window.studioSet = function (t) { set.tab = t; set.open = null; redraw(); scrollTo(0, 0); };
+  window.studioConn = function (id, on) { set.open = on ? id : null; if (id !== 'modal') ui.keys[id] = on && !(S.keys[id] || {}).set ? { edit: 1 } : {}; redraw(); };
+  function conn(k, group) {
+    var st = S.keys[k.id] || {}, c = st.check, ok = st.set && (!c || c.ok), bad = st.set && c && !c.ok, open = set.open === k.id;
+    var pill = !st.set ? '<span class="fw-pill">Not connected</span>' : bad ? '<span class="fw-pill bad">Needs attention</span>' : '<span class="fw-pill ok">Connected</span>';
+    var act = open ? '<button class="b2 s" onclick="studioConn(\'' + k.id + '\', false)">Done</button>'
+      : st.set ? '<button class="b2 s" onclick="studioConn(\'' + k.id + '\', true)">Manage</button>' : '<button class="b1 s" onclick="studioConn(\'' + k.id + '\', true)">Connect</button>';
+    return '<div class="fw-int' + (open ? ' open' : '') + (ok ? ' is-on' : '') + '"><div class="fw-int-top"><span class="fw-int-logo">' + ((typeof LOGO_PATHS !== 'undefined' && LOGO_PATHS[k.id]) ? logo(k.id, 22) : '<b>' + esc(k.name.slice(0, 1)) + '</b>') + '</span>' +
+      '<div class="fw-int-tx"><b>' + esc(k.name) + '</b><span>' + esc(KDS[k.id] || k.tag || '') + '</span></div></div>' +
+      '<div class="fw-int-foot">' + pill + act + '</div>' + (open ? '<div class="fw-int-body">' + stKey(k) + '</div>' : '') + '</div>';
+  }
+  function modalConn() {
+    var m = mState(), open = set.open === 'modal';
+    var pill = m.ready ? '<span class="fw-pill ok">Connected</span>' : m.busy ? '<span class="fw-pill">Connecting…</span>' : m['in'] ? '<span class="fw-pill bad">One step left</span>' : '<span class="fw-pill">Not connected</span>';
+    return '<div class="fw-int' + (open ? ' open' : '') + (m.ready ? ' is-on' : '') + '"><div class="fw-int-top"><span class="fw-int-logo" style="background:#0C0A09">' + logo('modal', 22) + '</span>' +
+      '<div class="fw-int-tx"><b>Modal</b><span>Renders your videos in the cloud, so this Mac stays free</span></div></div>' +
+      '<div class="fw-int-foot">' + pill + '<button class="' + (m.ready || open ? 'b2' : 'b1') + ' s" onclick="studioConn(\'modal\', ' + (!open) + ')">' + (open ? 'Done' : m.ready ? 'Manage' : 'Connect') + '</button></div>' +
+      (open ? '<div class="fw-int-body">' + stModal() + '</div>' : '') + '</div>';
+  }
+  window.studioSettingsView = function () {
+    var by = {}; KEYS.concat(STUDIO_KEYS).forEach(function (k) { by[k.id] = k; });
+    var pick = function (ids) { return ids.filter(function (i) { return by[i]; }).map(function (i) { return conn(by[i]); }).join(''); };
+    var TABS = [['account', 'Account', 'gear'], ['connections', 'Connections', 'link'], ['publishing', 'Publishing', 'upload'], ['storage', 'Storage', 'folder'], ['appearance', 'Appearance', 'sun'], ['general', 'General', 'check']];
+    var group = function (title, note, cards) { return cards ? '<div class="fw-grp"><div class="fw-grp-h"><b>' + title + '</b><span>' + note + '</span></div><div class="fw-ints">' + cards + '</div></div>' : ''; };
+    var body = {
+      account: function () {
+        return '<div class="fw-sec-h"><h2>Account</h2><p>Framewise writes, cuts and animates with Claude. Each person signs in with their own Claude account.</p></div>' + studioClaudeCard();
+      },
+      connections: function () {
+        return '<div class="fw-sec-h"><h2>Connections</h2><p>Optional services that make videos better. Each is your own account with that service; keys stay on this computer.</p></div>' +
+          group('Voice', 'The narrator', pick(['elevenlabs'])) +
+          group('Footage and pictures', 'For long videos', pick(['pixabay', 'pexels'])) +
+          group('AI video', 'Generated shots, charged by each service', pick(['gemini', 'runway', 'higgsfield'])) +
+          group('Rendering', 'Where the video is made', modalConn());
+      },
+      publishing: function () { return '<div class="fw-sec-h"><h2>Publishing</h2><p>Post finished videos to your social accounts.</p></div>' + stPost(); },
+      storage: function () {
+        return '<div class="fw-sec-h"><h2>Storage</h2><p>Where your videos live, and what Framewise may look through.</p></div>' + stFolder() +
+          '<div class="scd"><label class="srow" style="cursor:pointer"><div><div>Recent clips</div><div class="t2">Show clips from Movies, Desktop and Downloads when you start a video</div></div><input type="checkbox" class="st-check" ' + (R && R.scan_home ? 'checked' : '') + ' onchange="scanHome(this.checked)"></label></div>';
+      },
+      appearance: function () { return '<div class="fw-sec-h"><h2>Appearance</h2><p>The look of the app and the keys the editor uses.</p></div>' + stLook() + stKeys(); },
+      general: function () {
+        var v = (S.update || {}).installed || '';
+        return '<div class="fw-sec-h"><h2>General</h2><p>Alerts, tools and this copy of Framewise.</p></div>' + stAlerts() + '<div class="scd">' + toolsRow() + '</div>' +
+          '<div class="scd"><div class="srow"><div><div>Framewise</div><div class="t2" style="white-space:normal">Your own build' + (v ? ', on editor ' + esc(v) : '') + '. Built on the open-source cooked. editor (MIT licence).</div></div></div></div>';
+      }
+    };
+    var cur = body[set.tab] ? set.tab : 'account';
+    return '<div class="pgc fw-set"><div class="ph"><h1>Settings</h1></div><div class="fw-set-grid"><nav class="fw-set-nav">' +
+      TABS.map(function (t) { return '<button class="' + (t[0] === cur ? 'on' : '') + '" onclick="studioSet(\'' + t[0] + '\')">' + ic(t[2], 18) + '<span>' + t[1] + '</span></button>'; }).join('') +
+      '</nav><div class="fw-set-body">' + body[cur]() + '</div></div></div>';
+  };
 })();

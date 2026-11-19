@@ -18,6 +18,15 @@ What changed for every user, newest first.
   Skills and Library, then Activity (the page that was called Claude). The original's updater and support ask are
   not shown in this build.
 - **Fields.** Every text field is one height in the app's own font, and pages fade in.
+- **Settings, rebuilt.** Sections down the side (Account, Connections, Publishing, Storage, Appearance, General).
+  Every service is a connection card with its state and one button: Connect, then Manage. Claude signs in through
+  its own page in the browser; the others take the key that service gives you.
+- **A window that behaves like an app.** The page fills the window under the title bar, the window drags from its
+  top edge and has a minimum size, right-click no longer shows a browser menu, and there are real menus and keys:
+  New Video (Cmd N), Settings (Cmd ,), Go to Home, Videos, Styles, Library and Activity (Cmd 1 to 5). What needs you
+  shows as a number on the Dock icon.
+- **The sidebar cannot overlap itself.** The bell is one of the sidebar's own items, and the sidebar tightens on a
+  short window. Checked by measurement at 1040 by 680, 1280 by 800 and 1720 by 1000, in both sidebar widths.
 
 ## studio 0.16.0 (this fork, 2026-11-19)
 
