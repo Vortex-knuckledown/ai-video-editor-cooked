@@ -2,6 +2,27 @@
 
 What changed for every user, newest first.
 
+## studio 0.18.0 (this fork, 2026-11-19)
+
+- **Graphics that sit on the footage, the way edited channels do it.** New `over` kinds for long videos: a glass
+  data card (`stat` with `unit`, `kicker`, `note`), a `ring` drawn round the thing on screen with its measure, and
+  a `clip` (a cutting from the article being quoted, its key words marked). A scene's `hud` is a readout that stays
+  in the top left through a section. The script is told to prefer these to full-frame graphic cards.
+- **Shorts captions.** Three or four words in capitals a little below the middle, the said word lit.
+- **A finished video always opens.** An editor page left running from an older copy of the app could not load
+  after an update, so its video did not open. The app now checks that the page itself loads, replaces a dead one,
+  and clears leftovers when it starts.
+- **The editor is the same app.** The video editor carries the Framewise mark, sidebar and blue, and leaves room
+  for the window buttons.
+- **Footage that is what was asked for.** Game, tutorial and product videos are passed over when anything else was
+  found (a search for "starfield" no longer returns the game). `find` prints `WEAK <shot>` when the best frame of a
+  clip barely shows the words (match under 0.24). A shot with no footage is tried again with fewer words, then as a
+  still picture, so it is not left empty.
+- **3D chart.** The tallest bar and its labels stay clear of the title and the source line.
+- **A question survives the app restarting.** A hidden assistant's waiting question is offered again at once.
+
+
+
 ## studio 0.17.0 (this fork, 2026-11-19)
 
 - **The app is now Framewise.** A new name, a new icon (a blue tile, a white frame, a play head) and the same mark

@@ -66,6 +66,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | studio 0.15.0 | 3D videos built from worlds; a shared library of 20 worlds, clothed characters with outfits and free props that every video reuses; a Library page (released 2026-11-19, tag `studio-v0.15.0`) |
 | studio 0.16.0 | cooked. as a Mac app with a first-run setup; a dark studio look with electric blue on every screen; a create-first Home (released 2026-11-19, tag `studio-v0.16.0`) |
 | studio 0.17.0 | Framewise: the rebrand, a one-box Home, Library and Settings as sections, a notification bell, Claude connected in the app, a native window; 4K, tier lists, research pages, 3D charts, OpenAI images, split-screen Shorts (released 2026-11-19, tag `studio-v0.17.0`) |
+| studio 0.18.0 | Long videos built the way edited channels build them: graphics on the footage (data card, ring, article cutting, a readout that stays), footage that is what was asked for, a finished video always opens, the editor carries the Framewise look (released 2026-11-19, tag `studio-v0.18.0`) |
 | studio 0.13.0 | Natural free voices (edge-tts); real 3D in animated shots (three.js); sound bites that show the speaker (released 2026-11-19, tag `studio-v0.13.0`) |
 | studio 0.12.0 | Long video picks the matching moment of each clip, passes over subtitled clips, and checks the render at every cut (released 2026-11-19, tag `studio-v0.12.0`) |
 | studio 0.11.0 | UGC ad; Make Shorts from a Long video; sound bites; black bars cropped; Pixabay (released 2026-11-19, tag `studio-v0.11.0`) |

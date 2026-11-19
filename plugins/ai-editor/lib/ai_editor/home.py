@@ -3429,13 +3429,37 @@ def head_start(path):
         pass
 
 
+def _page_loads(url):
+    """fork: the page itself comes back, not only the server's state."""
+    try:
+        with urllib.request.urlopen(url, timeout=4) as r:
+            return r.status == 200 and len(r.read(2048)) > 500
+    except (OSError, ValueError, http.client.HTTPException):
+        return False
+
+
+def _end_server(url):
+    """fork: stop whatever listens on a dead editor page's port (macOS and Linux; elsewhere it is left to exit by itself)."""
+    try:
+        port = urlsplit(url).port
+        out = subprocess.run(["lsof", "-nP", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"], capture_output=True, text=True, timeout=5).stdout.split()
+        for pid in out:
+            if pid.isdigit() and int(pid) != os.getpid():
+                os.kill(int(pid), 15)
+        time.sleep(0.4)
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pass
+
+
 def review_url(d):
     """The URL of review.py's page for edit folder d, starting its server (detached) when none answers."""
     sys.path.insert(0, str(REVIEW.parent))
     import review
     url = review.running(d)
-    if url:
+    if url and _page_loads(url):
         return url
+    if url:   # fork: a server that answers but cannot serve its page (its files moved: the app was replaced). End it, start a new one
+        _end_server(url)
     p = subprocess.Popen([sys.executable, str(REVIEW), str(d), "serve", "--no-open"], stdout=subprocess.PIPE,
                          stderr=subprocess.DEVNULL, text=True, encoding="utf-8", start_new_session=True)
     _spawned.append(p)

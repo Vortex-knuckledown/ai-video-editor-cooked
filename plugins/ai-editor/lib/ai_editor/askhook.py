@@ -461,6 +461,8 @@ def relay(payload, timeout=None, poll=0.5):
                     result = _call(u, "/ask?id=" + qid).get("result")
                 except Exception:   # that page's server stopped: the others may still answer
                     sent.remove(u)
+                    if hide:        # fork: the app restarted under a waiting question: offer it again at once, not at the next check
+                        beat = 0
                 if result:
                     break
             if not sent and not hide:

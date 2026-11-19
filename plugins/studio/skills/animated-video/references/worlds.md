@@ -25,6 +25,10 @@ data display in the same two corners for ten minutes.
   world for 6 to 20 scenes in a row before leaving it; come back to it later for the pay-off.
 - **`hud`**: one or two quantities that run through the whole video. Each scene gives their values at its end
   (`hud_values`), so the display counts between scenes instead of jumping.
+- **A tall video (a Short)**: the `hud` is one card at the top centre, not two corners; the first scene shows the
+  question as a title in heavy white capitals with its number largest ("WHAT IF EVERY PUNCH YOU THREW WAS 2x
+  STRONGER?") over the first shot, and the last scene shows it again with "FULL VIDEO ON THE CHANNEL" under it when
+  there is a long version. A new shot every 2 seconds.
 - **Story**: one person and one escalating question ("what if you could not stop speeding up?"), each step measured
   against something the viewer knows. Not a list of facts.
 

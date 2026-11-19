@@ -91,8 +91,8 @@ def check(edit):
                 errs.append(f"scene {s.get('id')} shot {k}: kind must be one of {', '.join(NEEDS)}")
                 continue
             ov = sh.get("over")
-            if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat"))):
-                errs.append(f"scene {s.get('id')} shot {k}: \"over\" goes on footage or a picture and has a label, a name or a stat")
+            if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat", "ring", "clip"))):
+                errs.append(f"scene {s.get('id')} shot {k}: \"over\" goes on footage or a picture and has a label, a name, a stat, a ring or a clip")
             for f in NEEDS[kind]:
                 if not sh.get(f):
                     errs.append(f"scene {s.get('id')} shot {k} ({kind}): no \"{f}\"")
@@ -209,10 +209,17 @@ BUSY = re.compile(r"\b(news|podcast|reaction|reacts|interview|review|tutorial|ho
                   r"full movie|lyrics|top \d+|shorts)\b|#", re.I)
 
 
+# a video game, a tutorial or a product video shares its words with real footage ("starfield" is a game, "black hole" a level):
+# it is tried last, and never when anything else was found
+GAME = re.compile(r"\b(gameplay|walkthrough|playthrough|let'?s play|speedrun|gaming|mods?|settings|guide|build|ps[45]|xbox|playstation|nintendo|"
+                  r"steam deck|fortnite|minecraft|roblox|unboxing|asmr|tier list|ranked|vs\.?|update \d|patch)\b", re.I)
+WEAK_MATCH = 0.24      # under this the best frame of a clip does not show what was asked for (good matches measure 0.27 to 0.34)
+
+
 def title_score(c):
     """Which search result to try first: plain footage before a presenter's video (which carries a face, titles, a logo)."""
     t = f"{c.get('title', '')} {c.get('channel', '')}"
-    return 2 * bool(CLEAN.search(t)) - 2 * bool(BUSY.search(t)) - (c.get("duration", 0) > 1200)
+    return 2 * bool(CLEAN.search(t)) - 2 * bool(BUSY.search(t)) - 4 * bool(GAME.search(t)) - (c.get("duration", 0) > 1200)
 
 
 _OCR, OCR_LOCK = [], threading.Lock()
@@ -375,6 +382,9 @@ def fetch_clip(edit, key, sh, need, w, h, used):
     cands = search_youtube(sh["query"])
     if not cands:
         return {"missing": "nothing found on YouTube for this search"}
+    if not GAME.search(str(sh["query"])):       # unless a game is what was asked for
+        plain = [c for c in cands if not GAME.search(f"{c.get('title', '')} {c.get('channel', '')}")]
+        cands = plain or cands
     first = min(len(cands) - 1, max(0, int(sh.get("pick") or 0)))
     v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
     out, why, marked = edit / "shots" / f"{key}.mp4", "the download failed", None
@@ -740,7 +750,7 @@ def cmd_charts(edit):
             continue
         beat = {"id": key, "type": "scene", "props": {}, "start": sp["a"], "dur": dur, "clock": "video", "size": [w, h], "words": [],
                 "line": "", "before": "", "after": ""}
-        fill = lambda t: t.replace("__ID__", key).replace("__TY__", str(int(h * 0.05))).replace("__SY__", str(int(h * 0.75))).replace("__W__", str(w)).replace("__H__", str(h)).replace("__DATA__", json.dumps(data))   # noqa: E731
+        fill = lambda t: t.replace("__ID__", key).replace("__TY__", str(int(h * 0.04))).replace("__SY__", str(int(h * 0.8))).replace("__W__", str(w)).replace("__H__", str(h)).replace("__DATA__", json.dumps(data))   # noqa: E731
         markup, module = tpl.split("\n==MODULE==\n", 1)
         markup = markup.split("-->", 1)[1]
         page = motion.fill_template(beat, look)
@@ -974,6 +984,16 @@ def cmd_find(edit, only=None):
                 if img:
                     made[0] += 1
                     got = img
+        if sh["kind"] in ("clip", "stock") and got.get("missing"):     # a shot is not left empty: fewer words, then a still picture
+            why, short = got["missing"], " ".join(str(sh.get("query") or "").split()[:3])
+            if short and short != str(sh.get("query") or "").strip():
+                alt = fetch_clip(edit, key, {**sh, "query": short, "see": sh.get("see") or sh.get("query")}, need, w, h, used)
+                if not alt.get("missing"):
+                    got = {**alt, "retried": short}
+            if got.get("missing") and (studio.brief_of(edit).get("footage") or {}).get("photos", True):
+                alt = fetch_photo(edit, key, sh, w, h)
+                if not alt.get("missing"):
+                    got = {**alt, "instead": "a picture (no footage: " + why + ")"}
         return key, {**got, "kind": sh["kind"], "query": sh.get("query"), "stamp": stamp_of(sh, need)}
     with ThreadPoolExecutor(4) as ex:
         for key, got in ex.map(one, todo):
@@ -982,6 +1002,9 @@ def cmd_find(edit, only=None):
             print(f"MISSING {key}: {got.get('query')} ({got['missing']})" if got.get("missing") else
                   (f"LOGO {key}: every result tried carries a logo or subtitles; change the words or the kind. " if got.get("logo") else "") +
                   (f"AI FAILED {key} ({got['ai_failed']}), its fallback is used. " if got.get("ai_failed") else "") +
+                  (f"WEAK {key}: the best frame barely shows \"{got.get('query')}\" (match {got['match']:.2f}); look at it on the sheet, change the words or give a \"see\". "
+                   if isinstance(got.get("match"), float) and got["match"] < WEAK_MATCH else "") +
+                  (f"PICTURE {key}: {got['instead']}. " if got.get("instead") else "") +
                   f"{key}: {got.get('title') or got.get('file')}"[:110])
     keys = {sp["key"] for sp in spans(edit)}
     for k in [k for k in db if k not in keys]:          # a shot the script no longer has
@@ -1503,16 +1526,82 @@ def overlay(S, ov, a, z, W, H, look):
             rs = s * 0.026
             S.text(str(ov["role"]).upper(), a + 0.2, hold, track="Graphics", x=x0 + tw(str(ov["role"]).upper(), rs, 600) / 2 + s * 0.01, y=y + size * 1.0, w=int(W * 0.6),
                    size=int(rs), weight=600, color=look["accent"], align="left", shadow=sh, anim={"in": "fade", "out": "fade", "dur": 0.2})
-    if ov.get("stat"):
-        cw, chh = W * 0.27, H * (0.27 if ov.get("note") else 0.19)
-        cx, cy = W * 0.81, H * 0.27
-        S.shape(a + 0.1, hold, track="Graphics bg", x=cx, y=cy, w=cw, h=chh, radius=s * 0.022, fill="#0B0C0F", opacity=0.82,
-                shadow={"blur": 40, "y": 14, "opacity": 0.5}, anim={"in": "slide-up", "out": "fade", "dur": 0.25})
-        S.text(str(ov["stat"]).upper(), a + 0.16, hold, track="Graphics", x=cx, y=cy - (chh * 0.12 if ov.get("note") else 0), w=int(cw * 0.9), size=int(s * 0.1),
-               font=DISPLAY, weight=400, color=look["accent"], anim={"in": "pop", "out": "fade", "dur": 0.2})
+    GLASS = {"fill": "#0B0C0F", "opacity": 0.62, "stroke": {"color": "#FFFFFF2E", "width": 2}, "shadow": {"blur": 44, "y": 16, "opacity": 0.45}}
+    mono = lambda t: " ".join(str(t).upper())     # noqa: E731  (small spaced capitals, the way a data label is set)
+    if ov.get("stat"):          # a glass data card: a small label, the number, its unit, a note
+        num, unit = str(ov["stat"]), str(ov.get("unit") or "")
+        ns = s * 0.105
+        cw = max(W * 0.2, tw(num, ns, 800) * 1.07 + tw(unit, ns * 0.36, 600) + s * 0.12)
+        chh = H * (0.13 + (0.045 if ov.get("kicker") else 0) + (0.045 if ov.get("note") else 0))
+        left_side = str(ov.get("at") or "").startswith("l")
+        cx, cy = (W * 0.06 + cw / 2) if left_side else (W * 0.94 - cw / 2), H * 0.26
+        S.shape(a + 0.1, hold, track="Graphics bg", x=cx, y=cy, w=cw, h=chh, radius=s * 0.02, **GLASS, anim={"in": "slide-up", "out": "fade", "dur": 0.25})
+        x0 = cx - cw / 2 + s * 0.04
+        ny = cy + (chh * 0.12 if ov.get("kicker") else 0) - (chh * 0.12 if ov.get("note") else 0)
+        if ov.get("kicker"):
+            ks = s * 0.017
+            S.text(mono(ov["kicker"]), a + 0.14, hold, track="Graphics", x=x0 + tw(mono(ov["kicker"]), ks, 600) / 2, y=cy - chh / 2 + s * 0.045, w=int(cw),
+                   size=int(ks), weight=600, color="#FFFFFF", opacity=0.6, align="left", anim={"in": "fade", "out": "fade", "dur": 0.2})
+        nw = tw(num, ns, 800)
+        S.text(num, a + 0.16, hold, track="Graphics", x=x0 + nw / 2, y=ny, w=int(cw), size=int(ns), weight=800, color="#FFFFFF", align="left",
+               anim={"in": "pop", "out": "fade", "dur": 0.2})
+        if unit:
+            S.text(unit.upper(), a + 0.2, hold, track="Graphics", x=x0 + nw * 1.07 + s * 0.02 + tw(unit.upper(), ns * 0.34, 600) / 2, y=ny + ns * 0.24, w=int(cw),
+                   size=int(ns * 0.34), weight=600, color="#FFFFFF", opacity=0.75, align="left", anim={"in": "fade", "out": "fade", "dur": 0.2})
         if ov.get("note"):
-            S.text(str(ov["note"]), a + 0.26, hold, track="Graphics", x=cx, y=cy + chh * 0.27, w=int(cw * 0.86), size=int(s * 0.027), weight=600,
-                   color="#FFFFFF", opacity=0.85, anim={"in": "fade", "out": "fade", "dur": 0.2})
+            nt = s * 0.019
+            S.text(mono(ov["note"]), a + 0.26, hold, track="Graphics", x=x0 + min(cw * 0.9, tw(mono(ov["note"]), nt, 600)) / 2, y=cy + chh / 2 - s * 0.045, w=int(cw * 0.92),
+                   size=int(nt), weight=600, color="#FFFFFF", opacity=0.6, align="left", anim={"in": "fade", "out": "fade", "dur": 0.2})
+    if isinstance(ov.get("ring"), dict):       # a thin circle drawn on the footage round the thing being talked about, with its measure beside it
+        r = ov["ring"]
+        cx, cy, rad = W * float(r.get("x", 50)) / 100, H * float(r.get("y", 45)) / 100, s * float(r.get("r", 16)) / 100
+        S.shape(a + 0.15, hold, track="Graphics", x=cx, y=cy, w=rad * 2, h=rad * 2, radius=rad, fill="#FFFFFF00", stroke={"color": "#FFFFFFE6", "width": max(2, int(s * 0.003))},
+                anim={"in": "fade", "out": "fade", "dur": 0.3}, keys={"scale": [[0, 0.6, "out"], [0.5, 1.0, "out"], [d, 1.03, "linear"]]})
+        lx = cx + rad + s * 0.03
+        S.shape(a + 0.4, hold, track="Graphics", x=cx + rad + s * 0.012, y=cy - rad * 0.5, w=s * 0.024, h=max(2, int(s * 0.002)), radius=1, fill="#FFFFFF", opacity=0.9)
+        if r.get("text"):
+            ts = s * 0.04
+            S.text(str(r["text"]).upper(), a + 0.45, hold, track="Graphics", x=lx + tw(str(r["text"]).upper(), ts, 800) / 2, y=cy - rad * 0.5, w=int(W * 0.4), size=int(ts),
+                   weight=800, color="#FFFFFF", align="left", shadow=sh, anim={"in": "fade", "out": "fade", "dur": 0.2})
+        if r.get("sub"):
+            ss = s * 0.019
+            S.text(mono(r["sub"]), a + 0.55, hold, track="Graphics", x=lx + tw(mono(r["sub"]), ss, 600) / 2, y=cy - rad * 0.5 + s * 0.042, w=int(W * 0.4), size=int(ss),
+                   weight=600, color="#FFFFFF", opacity=0.7, align="left", shadow=sh, anim={"in": "fade", "out": "fade", "dur": 0.2})
+    if isinstance(ov.get("clip"), dict):       # a cutting from the article being quoted, floating on the footage, its key words marked
+        c = ov["clip"]
+        pw, ph = W * 0.3, H * (0.3 if c.get("highlight") else 0.2)
+        cx, cy = W * 0.79, H * 0.3
+        S.shape(a + 0.1, hold, track="Graphics bg", x=cx, y=cy, w=pw, h=ph, radius=s * 0.006, fill="#F6F3EA", shadow={"blur": 50, "y": 20, "opacity": 0.55},
+                anim={"in": "slide-up", "out": "fade", "dur": 0.3}, keys={"rotation": [[0, 4, "out"], [0.5, 1.2, "out"], [d, 0.6, "linear"]]})
+        S.text(str(c.get("title") or ""), a + 0.2, hold, track="Graphics", x=cx, y=cy - ph * (0.2 if c.get("highlight") else 0.08), w=int(pw * 0.86), size=int(s * 0.03),
+               weight=800, color="#16181D", line_height=1.18, align="left", anim={"in": "fade", "out": "fade", "dur": 0.2})
+        if c.get("highlight"):
+            S.text(str(c["highlight"]), a + 0.5, hold, track="Graphics", x=cx, y=cy + ph * 0.16, w=int(pw * 0.86), size=int(s * 0.022), weight=600, color="#16181D",
+                   line_height=1.4, align="left", box={"color": look["accent"], "pad": [8, 3], "radius": 3, "opacity": 0.9}, anim={"in": "fade", "out": "fade", "dur": 0.25})
+        if c.get("source"):
+            S.text(mono(c["source"]), a + 0.3, hold, track="Graphics", x=cx + pw * 0.1, y=cy + ph / 2 - s * 0.03, w=int(pw * 0.7), size=int(s * 0.013), weight=600,
+                   color="#5B5F68", align="right", anim={"in": "fade", "out": "fade", "dur": 0.2})
+
+
+def hud(S, rows, a, z, W, H, first):
+    """A small readout that stays in the top left through a section (two clocks, a distance, a count): the same card
+    from shot to shot, only its numbers change. rows: [[label, value], ...], at most 3."""
+    s = min(W, H)
+    rows = [r for r in rows if isinstance(r, (list, tuple)) and len(r) == 2][:3]
+    if not rows:
+        return
+    ls, vs, rh = s * 0.017, s * 0.03, s * 0.046
+    lab_w = max(tw(" ".join(str(r[0]).upper()), ls, 600) for r in rows)
+    val_w = max(tw(str(r[1]), vs, 700) for r in rows)
+    cw, chh = lab_w + val_w + s * 0.09, rh * len(rows) + s * 0.03
+    x0, y0 = W * 0.045, H * 0.06
+    S.shape(a, z, track="Graphics bg", x=x0 + cw / 2, y=y0 + chh / 2, w=cw, h=chh, radius=s * 0.012, fill="#0B0C0F", opacity=0.6,
+            stroke={"color": "#FFFFFF2E", "width": 2}, anim={"in": "fade", "out": "none", "dur": 0.25} if first else None)
+    for i, (label, value) in enumerate(rows):
+        y = y0 + s * 0.015 + rh * (i + 0.5)
+        lab = " ".join(str(label).upper())
+        S.text(lab, a, z, track="Graphics", x=x0 + s * 0.03 + tw(lab, ls, 600) / 2, y=y, w=int(cw), size=int(ls), weight=600, color="#FFFFFF", opacity=0.6, align="left")
+        S.text(str(value), a, z, track="Graphics", x=x0 + cw - s * 0.03 - tw(str(value), vs, 700) / 2, y=y, w=int(cw), size=int(vs), weight=700, color="#FFFFFF", align="right")
 
 
 def backdrop(edit, sp, all_sp, db):
@@ -1602,6 +1691,13 @@ def cmd_build(edit):
                           "x": [[0, W / 2 - drift, "linear"], [d, W / 2 + drift, "linear"]]})
         if ov:
             overlay(S, ov, a, z, W, H, look)
+    prev_hud = False
+    for s in sc["scenes"]:           # a readout that stays through a section: {"hud": [["EARTH", "00:00:01.3"], ["SHIP", "00:00:00"]]} on each of its lines
+        r = next((r for r in tm["scenes"] if r["id"] == s["id"]), None)
+        rows = s.get("hud") if isinstance(s.get("hud"), list) else None
+        if r and rows:
+            hud(S, rows, r["start"], r["start"] + r["dur"], W, H, not prev_hud)
+        prev_hud = bool(r and rows)
     for s in sc["scenes"]:           # where a line's fact comes from, small, while it is said
         r = next((r for r in tm["scenes"] if r["id"] == s["id"]), None)
         if r and s.get("source") and not any(x["kind"] in ("bars", "source") for x in s["shots"]):
@@ -1749,7 +1845,8 @@ def cmd_qa(edit):
 
 
 # ---------------------------------------------------------------- Shorts from the finished video
-SHORT_CAPTIONS = {"size_pct": 5.2, "case": "sentence", "effect": "pop", "stroke": True, "words_per_caption": 3, "y_pct": 67}
+# measured on published Shorts of this kind: three or four words in capitals a little below the middle, the said word white and the rest grey
+SHORT_CAPTIONS = {"size_pct": 4.6, "case": "upper", "effect": "karaoke", "weight": 800, "stroke": True, "words_per_caption": 3, "y_pct": 61, "inactive_opacity": 0.55}
 
 
 def short_ranges(sc, tm, count=3, lo=14.0, hi=58.0):

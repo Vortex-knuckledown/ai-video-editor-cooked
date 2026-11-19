@@ -1149,6 +1149,8 @@ def cmd_music(edit, mood="linear"):
 # ---------------------------------------------------------------- the scene, render, stills
 CAPTION_STYLE = {"y_pct": 72, "size_pct": 5.6, "case": "sentence", "effect": "pop", "stroke": True}
 # a 3D video: the picture is the subject, so the words sit small at the bottom and light up as they are said
+# a tall 3D video (a Short): measured on published ones, three or four words in capitals a little below the middle, the said word lit
+CAPTION_3D_TALL = {"y_pct": 61, "size_pct": 4.6, "case": "upper", "effect": "karaoke", "weight": 800, "stroke": True, "words_per_caption": 3, "inactive_opacity": 0.55}
 CAPTION_3D = {"y_pct": 91, "size_pct": 2.9, "case": "sentence", "effect": "karaoke", "weight": 600, "stroke": True, "inactive_opacity": 0.5}
 
 
@@ -1173,7 +1175,7 @@ def cmd_build(edit):
                 dark.append(f"{r['id']} ({y:.0f})")
         S.video(str(f.relative_to(edit)), r["start"], r["start"] + r["dur"], track="Scenes", volume=0)
     if b["text"] and words:   # one captions item per scene: a caption page never runs across a cut
-        style = {**(CAPTION_3D if sc.get("style3d") else CAPTION_STYLE), **(sc.get("captions") or {})}
+        style = {**((CAPTION_3D_TALL if h > w else CAPTION_3D) if sc.get("style3d") else CAPTION_STYLE), **(sc.get("captions") or {})}
         for r in tm["scenes"]:
             mine = [{"w": x["w"], "start": x["start"], "end": x["end"]} for x in words
                     if r["start"] <= x["start"] < r["start"] + r["dur"]]
