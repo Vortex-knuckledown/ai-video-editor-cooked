@@ -2,6 +2,10 @@
 
 What changed for every user, newest first.
 
+## Unreleased (studio)
+- Create from a prompt makes videos up to 10 minutes, with 3 and 5 minute options. It was capped at 3 minutes. A long video's scenes are animated six at a time, so a laptop is not asked to render 40 at once. A 5-minute video in 3D (67 scenes) was made this way.
+- Captions no longer split a number or a hyphenated word in two ("384. ,000", "light -years", "3 %").
+
 ## studio 0.13.0 (this fork, 2026-11-19)
 - Natural voices, free: 19 of Microsoft's neural voices (American, British, Indian, Australian) through the open-source edge-tts library, as a Natural tab in the narrator picker, with a click-to-hear preview. No key. The script's words are sent to Microsoft to be spoken. If the service does not answer, the offline voice takes that line.
 - ElevenLabs narration works with your saved key, and the picker selects your first ElevenLabs voice by default when a key is connected.

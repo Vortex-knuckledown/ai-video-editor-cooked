@@ -3049,7 +3049,7 @@ def make_handler(token):
             aspect = "16:9" if b.get("aspect") == "16:9" else "9:16"
             # "auto" (like only): the skill sets it from what the liked video has
             opts = {k: "auto" if like and b.get(k) == "auto" else b.get(k) is not False for k in ("voice", "text", "music")}
-            length = 0 if like and not b.get("length") else max(10, min(180, int(b.get("length") or 30)))   # 0: as long as the liked video
+            length = 0 if like and not b.get("length") else max(10, min(600, int(b.get("length") or 30)))   # 0: as long as the liked video
             if like and b.get("aspect") not in ("9:16", "16:9"):
                 aspect = "auto"   # the liked video's own shape; the placeholder is tall until it is measured
             edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or ("like a video" if like else "animated"))

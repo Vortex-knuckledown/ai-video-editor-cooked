@@ -124,6 +124,12 @@ video on their ElevenLabs plan. A 401 from ElevenLabs: the key lacks text to spe
 
 ## 4. Animate every scene
 
+More than 8 scenes (a video over a minute): launch the agents 6 at a time, the next 6 when those are back, and say
+"Animating scenes 7 to 12 of 40" on the page as it goes; a laptop cannot render 40 at once. A scene whose `visual`
+says "in 3D" is built with three.js (its brief explains how); for a video the user asked to be 3D, every scene's
+`visual` says so and describes one continuous world (the same lighting, palette and camera manner in every scene).
+A video over 2 minutes takes about 3 minutes a scene: say how long on the page before starting.
+
 Launch one `ai-editor:clip-builder` agent per scene, all in one message, in the background, each given only the
 full path of its `EDIT/motion/<id>/brief.md`. While they build, run the music (it needs only the timing):
 
