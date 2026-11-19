@@ -2271,7 +2271,11 @@ def studio_theme(html):
     for f in [here.parents[3] / "studio" / "theme" / name, *sorted(here.parents[3].parent.glob(f"studio/*/theme/{name}"), reverse=True),
               *sorted(here.parents[4].glob(f"studio/*/theme/{name}"), reverse=True)]:
         try:
-            return html.replace(b"</head>", b'<style id="studio-theme">\n' + f.read_bytes() + b"\n</style></head>", 1)
+            add = b'<style id="studio-theme">\n' + f.read_bytes() + b"\n</style>"
+            js = f.with_suffix(".js")   # the layout that goes with the look (the create-first Home)
+            if js.is_file():
+                add += b'<script id="studio-layout">\n' + js.read_bytes() + b"\n</script>"
+            return html.replace(b"</head>", add + b"</head>", 1)
         except OSError:
             continue
     return html

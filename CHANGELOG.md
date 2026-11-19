@@ -15,6 +15,10 @@ What changed for every user, newest first.
   Claude, Settings, the Library, the video editor and the app's setup screen) is restyled as one dark studio with a
   single blue for the thing to press and the thing selected. It is a theme layer (`plugins/studio/theme/home.css`,
   `review.css`) over the pages' own styles: how things look changed, nothing they do. Light stays in Settings, Theme.
+- **A create-first Home.** Home opens on "What do you want to make?": a box to describe the video, a length
+  (30 s, 60 s, 3 min, 5 min), and the six kinds of video as tiles. Create opens New video already filled in (an
+  animated video up to 60 s, a long video above); nothing starts until its own button is pressed. The sidebar is the
+  slim icon one by default, and pages sit in one centred column (`plugins/studio/theme/home.js`).
 
 ## studio 0.15.0 (this fork, 2026-11-19)
 

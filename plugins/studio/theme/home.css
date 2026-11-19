@@ -197,3 +197,42 @@ button, .input, input, textarea, select, .hm-card, .hm-tile, .kind, .chip, .pill
   border-radius: var(--r-m); transition: border-color .16s var(--ease), background-color .16s var(--ease), box-shadow .2s var(--ease), transform .2s var(--ease);
 }
 .btile:hover, .ctile:hover, .scard:hover { transform: translateY(-2px); }
+
+/* ---------- create-first Home (home.js studioHero) */
+.cf { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 28px 0 6px; text-align: center; }
+.cf h1 { font-size: 40px; line-height: 46px; font-weight: 660; letter-spacing: -.032em;
+  background: linear-gradient(180deg, var(--ink) 30%, color-mix(in srgb, var(--ink) 62%, var(--accent))); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.cf-lede { margin: 10px 0 24px; color: var(--t3); font-size: 15px; line-height: 20px; }
+.cf-box {
+  width: min(760px, 100%); background: var(--panel); border: 1px solid var(--ring); border-radius: 20px; padding: 14px 14px 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 24px 60px rgba(0, 0, 0, .40), 0 0 0 6px var(--accent-soft);
+  transition: border-color .18s var(--ease), box-shadow .2s var(--ease); text-align: left;
+}
+.cf-box:focus-within { border-color: var(--accent); box-shadow: 0 1px 0 rgba(255, 255, 255, .05) inset, 0 24px 60px rgba(0, 0, 0, .40), 0 0 0 6px color-mix(in srgb, var(--accent) 26%, transparent); }
+.cf-box textarea { width: 100%; border: 0 !important; background: none !important; box-shadow: none !important; outline: none; resize: none; color: var(--ink);
+  font: 17px/25px -apple-system, "SF Pro Text", "Inter", system-ui, sans-serif; padding: 6px 8px 10px; min-height: 62px; }
+.cf-box textarea::placeholder { color: var(--t4); }
+.cf-box textarea.shake { animation: cfshake .4s; }
+@keyframes cfshake { 20% { transform: translateX(-5px) } 40% { transform: translateX(5px) } 60% { transform: translateX(-3px) } 80% { transform: translateX(3px) } }
+.cf-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cf-lens { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cf-lab { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--t4); margin: 0 6px 0 8px; }
+.cf-lens .pill { padding: 6px 12px; font-size: 13px; }
+.cf-go { height: 42px; padding: 0 20px; border-radius: 12px; }
+.cf-kinds { width: min(1040px, 100%); display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-top: 26px; }
+.cf-kind {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 12px; min-width: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-m); color: var(--ink); box-shadow: var(--shadow);
+  transition: border-color .16s var(--ease), transform .2s var(--ease), background-color .16s var(--ease);
+}
+.cf-kind:hover { border-color: var(--accent-line); transform: translateY(-3px); background: color-mix(in srgb, var(--panel) 90%, var(--accent) 10%); }
+.cf-art { width: 100%; height: 58px; border-radius: 10px; display: grid; place-items: center; color: var(--t3); background: linear-gradient(135deg, var(--soft), transparent), var(--tile); margin-bottom: 4px; }
+.cf-art svg { width: 84px; height: 45px; }
+.cf-kind:hover .cf-art { color: var(--accent-hi); }
+.cf-kind b { font-size: 14px; line-height: 18px; font-weight: 620; letter-spacing: -.01em; }
+.cf-sub { font-size: 12.5px; line-height: 17px; color: var(--t3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 1180px) { .cf-kinds { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .cf h1 { font-size: 30px; line-height: 36px; } .cf-kinds { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- one centred column, so wide windows stay composed */
+.pgc { max-width: 1240px; margin-left: auto; margin-right: auto; width: 100%; }
