@@ -27,6 +27,10 @@ RPM_BASE = {"idle": "idle/{p}_Standing_Idle_001.glb", "walk": "locomotion/{p}_Wa
             "jog": "locomotion/{p}_Jog_001.glb", "talk": "expression/{p}_Talking_Variations_001.glb"}
 RPM_BODIES = {"man": ("masculine", "M", "Masculine_TPose.glb", "A man in a dark T-shirt, dark trousers and white trainers.", 1.82),
               "woman": ("feminine", "F", "Feminine_TPose.glb", "A woman in a white T-shirt, black trousers and black trainers, hair tied up.", 1.72)}
+# where things are in each body's clothes picture, as fractions of it (x0, y0, x1, y1): the maker's logos, the shirt, the trousers
+RPM_ATLAS = {"man": {"logos": [[0.15, 0.685, 0.23, 0.735], [0.33, 0.685, 0.44, 0.76]], "shirt": [0, 0.63, 0.5, 1], "trousers": [0.5, 0, 0.75, 0.25]},
+             "woman": {"logos": [[0.145, 0.695, 0.225, 0.755], [0.33, 0.69, 0.45, 0.765]],
+                       "shirt": [[0, 0.63, 0.5, 1], [0, 0.5, 0.24, 0.63], [0.25, 0.585, 0.49, 0.63]], "trousers": [0.5, 0, 1, 0.5]}}
 KIT_FIGURES = {   # the kit's three figures, with the clips inside each file
     "mannequin": ("models/person.glb", "A plain grey figure with no face or clothes: for a diagram, not a person.",
                   {"idle": "@idle", "walk": "@walk", "run": "@run"}),
@@ -115,6 +119,7 @@ def setup_characters(kit=None):
         d = root() / "characters" / cid
         meta = jload(d / "character.json") or {"id": cid, "describe": describe, "height": height, "body": "body.glb", "clips": {},
                                                "source": f"github.com/{RPM_REPO}"}
+        meta["atlas"], meta["outfit"] = RPM_ATLAS[cid], "shirt and trousers take any colour: loadFigure({..., outfit: {shirt: \"#2f6fdd\", trousers: \"#3b4a6b\"}})"
         try:
             fetch(f"{RPM_RAW}{body}/glb/{tpose}", d / "body.glb")
             for name, pat in RPM_BASE.items():
@@ -264,13 +269,13 @@ def head_comment(js):
     return "\n".join(out)
 
 
-def save_world(js, describe, name=None, sheet=None, video=""):
+def save_world(js, describe, name=None, sheet=None, video="", replace=None):
     """A world that passed, kept for every later video. The same file saved again is not a second copy. Returns its library id."""
     js = Path(js)
     text = js.read_text(encoding="utf-8")
-    wid = base = slug(name or js.stem)
+    wid = base = slug(replace or name or js.stem)
     k = 1
-    while (root() / "worlds" / wid / "world.js").is_file():
+    while not replace and (root() / "worlds" / wid / "world.js").is_file():
         if (root() / "worlds" / wid / "world.js").read_text(encoding="utf-8") == text:
             return wid
         k += 1

@@ -45,15 +45,18 @@ Characters, worlds and props are kept in one library outside any video (`~/.ai-v
 - **Worlds.** When the script is in a place the library has (it says New York, the library has a New York street),
   the world in scenes.json is `{"id": "street", "library": "street", "describe": "..."}` and nothing is built: it is
   copied in. When the place is there but the video needs more of it, add `"extend": "snow on the ground and falling"`:
-  the world's agent starts from the library copy and adds that. A place the library does not have is written as a new
+  the world's agent starts from the library copy and adds that (saved as a new library world; with `"update": true`
+  it replaces the library's copy, for an improvement every video should get). A place the library does not have is written as a new
   world, and once it passes it is saved to the library by `studio.py briefs`, so the next video has it. Write a new
   world's `describe` as the place itself (what is there, the time of day), not this video's story, so it can be found
   and reused.
 - **Characters.** `import { loadFigure } from "../lib/figure.js"`; `const f = await loadFigure({THREE, id: "woman",
   clips: ["idle", "walk", "run"]})`; `scene.add(f.object)` (feet on y = 0, facing +z, in metres); in `update`,
   `f.pose(seconds, {walk: 0.3, run: 0.7})`. `man` and `woman` are clothed people with idle, walk, run, jog and talk, and
-  any of about 130 more movements on request (`studio.py lib clip woman "dance"`). `mannequin`, `soldier` and `robot`
-  have only the clips in their files. A figure moves well only with clips made for its own skeleton: never load one
+  any of about 130 more movements on request (`studio.py lib clip woman "dance"`). Their shirt and trousers take any colour
+  (`loadFigure({..., outfit: {shirt: "#2f6fdd", trousers: "#3b4a6b"}})`), so two bodies give a whole cast: give the
+  story's person one outfit and keep it for the whole video; dress passers-by differently. `mannequin`, `soldier` and
+  `robot` have only the clips in their files. A figure moves well only with clips made for its own skeleton: never load one
   character's clip onto another (tested: it folds up). A world takes `cast = ["woman"]` and exposes `world.cast.<id>`,
   so the same place works with anyone in it.
 - **Props.** A thing the world needs (a bench, a tree, a rock, a sofa, a lamp): `studio.py lib prop "<what>"` lists

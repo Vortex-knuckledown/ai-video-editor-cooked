@@ -884,6 +884,8 @@ The shared library is at `./assets/lib/` in every clip (`../lib/` from this modu
   Do not fix who it is: `createWorld({{..., cast = ["woman"]}})` loads the characters named in `cast` and exposes them as
   `world.cast.<id>` (each a loadFigure result), so another video can walk someone else through the same place.
   `update(state)` places and poses them from `state.people = {{<id>: {{x, z, heading, time, gait: {{walk, run}}}}}}`.
+  `cast` entries may also be `{{id, outfit: {{shirt: "#2f6fdd", trousers: "#3b4a6b"}}, as: "sam"}}` (man and woman only):
+  pass `outfit` on to loadFigure, so one body gives differently dressed people, and expose that one as `world.cast.<as>`.
   Another movement (a dance, a crouch, a jump): `{lib} clip <id> "<what>"`, then name it in `clips`.
 - A thing the world needs (a bench, a tree, a rock, a sofa): `{lib} prop "<what>"` lists free models, `{lib} prop-get <id>`
   puts the right one in the library, then `import {{ loadProp }} from "../lib/figure.js"` and `await loadProp({{THREE, id}})`. In it already: {props}.
@@ -907,7 +909,8 @@ def save_worlds(edit, sc):
         if js.is_file() and (not wd.get("library") or wd.get("extend")):
             sheet = Path(edit) / "worlds" / f"demo-{wd['id']}" / "renders" / "sheet.png"
             describe = (wd.get("describe") or "") + ((" Also: " + wd["extend"]) if wd.get("extend") else "")
-            saved.append(lib3d.save_world(js, describe, name=wd.get("name") or wd["id"], sheet=sheet, video=sc.get("title") or ""))
+            saved.append(lib3d.save_world(js, describe, name=wd.get("name") or wd["id"], sheet=sheet, video=sc.get("title") or "",
+                                          replace=wd["library"] if wd.get("library") and wd.get("update") else None))   # "update": the library's own copy is improved
     if saved:
         print("library: kept " + ", ".join(saved))
     return saved
