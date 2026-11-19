@@ -30,3 +30,27 @@ illustration, and the publishing kit lists it as AI-generated.
 draws every frame at twice the size (3840 by 2160 for a wide video). Text and graphics are sharp at that size;
 footage is as sharp as what was found, and most of YouTube is 1080p. It takes about four times as long to render
 and needs the disk space. `studio.py render EDIT --4k` does the same for one render of any video.
+
+## Graphics on the footage (`over`), and a readout that stays
+
+Measured on published videos of this kind (two documentaries and a Short, November 2026): nearly every shot is real
+footage, and the graphics sit ON it as small glass cards and thin white lines. A full-frame graphic is rare: a
+chapter title, a ranked list, a chart. One shot in three carries something. So prefer `over` to a graphic shot:
+
+- `"over": {"stat": "406,000", "unit": "km", "kicker": "from Earth", "note": "252,000 mi"}`: a glass data card at the
+  right (`"at": "left"` for the left). The number is white and heavy; `kicker` and `note` are small spaced capitals.
+- `"over": {"ring": {"x": 44, "y": 44, "r": 30, "text": "27 km", "sub": "16.8 mi"}}`: a thin circle drawn round the
+  thing on screen, with its measure beside it. `x`, `y` are where its centre is in the frame, in percent; `r` its
+  radius in percent of the frame's short side. Look at the shot (`sheet`) before placing it.
+- `"over": {"clip": {"title": "the headline as printed", "highlight": "its few words that matter", "source": "ABC
+  News, 14 Oct 2026"}}`: a cutting from the article being quoted, floating at the right. Real headlines only.
+- `"over": {"name": "Brian Cox", "role": "Physicist, The Joe Rogan Experience #2217"}` on a sound bite, as before, and
+  `"over": {"label": "56 years later"}` for two to four words that punch a line.
+- A scene's `"hud": [["EARTH", "00:00:01.3"], ["SHIP", "00:00:00"]]` (1 to 3 rows) is a readout in the top left for
+  that line. Give it to every line of a section with the values at that moment and it stays put while the footage
+  changes under it: two clocks, a distance, a count. Use it when one quantity runs through a section.
+
+The shape of a video that holds attention, from the same measurements: open on a sound bite of the person or the
+moment the video is about (10 to 20 seconds, their name on screen), then the narrator. A new picture every 2 to 3.5
+seconds. Words on screen are the caption line at the bottom, small, with the said word lit; everything else is a
+number or a name, never a sentence. No yellow headline cards one after another.

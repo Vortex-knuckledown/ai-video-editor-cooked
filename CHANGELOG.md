@@ -2,6 +2,14 @@
 
 What changed for every user, newest first.
 
+## Unreleased (studio)
+
+- **Graphics that sit on the footage, the way edited channels do it.** New `over` kinds for long videos: a glass
+  data card (`stat` with `unit`, `kicker`, `note`), a `ring` drawn round the thing on screen with its measure, and
+  a `clip` (a cutting from the article being quoted, its key words marked). A scene's `hud` is a readout that stays
+  in the top left through a section. The script is told to prefer these to full-frame graphic cards.
+- **Shorts captions.** Three or four words in capitals a little below the middle, the said word lit.
+
 ## studio 0.17.0 (this fork, 2026-11-19)
 
 - **The app is now Framewise.** A new name, a new icon (a blue tile, a white frame, a play head) and the same mark
