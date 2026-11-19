@@ -14,6 +14,13 @@ What changed for every user, newest first.
   and clears leftovers when it starts.
 - **The editor is the same app.** The video editor carries the Framewise mark, sidebar and blue, and leaves room
   for the window buttons.
+- **Footage that is what was asked for.** Game, tutorial and product videos are passed over when anything else was
+  found (a search for "starfield" no longer returns the game). `find` prints `WEAK <shot>` when the best frame of a
+  clip barely shows the words (match under 0.24). A shot with no footage is tried again with fewer words, then as a
+  still picture, so it is not left empty.
+- **3D chart.** The tallest bar and its labels stay clear of the title and the source line.
+- **A question survives the app restarting.** A hidden assistant's waiting question is offered again at once.
+
 
 
 ## studio 0.17.0 (this fork, 2026-11-19)

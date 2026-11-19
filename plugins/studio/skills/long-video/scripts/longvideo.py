@@ -209,10 +209,17 @@ BUSY = re.compile(r"\b(news|podcast|reaction|reacts|interview|review|tutorial|ho
                   r"full movie|lyrics|top \d+|shorts)\b|#", re.I)
 
 
+# a video game, a tutorial or a product video shares its words with real footage ("starfield" is a game, "black hole" a level):
+# it is tried last, and never when anything else was found
+GAME = re.compile(r"\b(gameplay|walkthrough|playthrough|let'?s play|speedrun|gaming|mods?|settings|guide|build|ps[45]|xbox|playstation|nintendo|"
+                  r"steam deck|fortnite|minecraft|roblox|unboxing|asmr|tier list|ranked|vs\.?|update \d|patch)\b", re.I)
+WEAK_MATCH = 0.24      # under this the best frame of a clip does not show what was asked for (good matches measure 0.27 to 0.34)
+
+
 def title_score(c):
     """Which search result to try first: plain footage before a presenter's video (which carries a face, titles, a logo)."""
     t = f"{c.get('title', '')} {c.get('channel', '')}"
-    return 2 * bool(CLEAN.search(t)) - 2 * bool(BUSY.search(t)) - (c.get("duration", 0) > 1200)
+    return 2 * bool(CLEAN.search(t)) - 2 * bool(BUSY.search(t)) - 4 * bool(GAME.search(t)) - (c.get("duration", 0) > 1200)
 
 
 _OCR, OCR_LOCK = [], threading.Lock()
@@ -375,6 +382,9 @@ def fetch_clip(edit, key, sh, need, w, h, used):
     cands = search_youtube(sh["query"])
     if not cands:
         return {"missing": "nothing found on YouTube for this search"}
+    if not GAME.search(str(sh["query"])):       # unless a game is what was asked for
+        plain = [c for c in cands if not GAME.search(f"{c.get('title', '')} {c.get('channel', '')}")]
+        cands = plain or cands
     first = min(len(cands) - 1, max(0, int(sh.get("pick") or 0)))
     v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
     out, why, marked = edit / "shots" / f"{key}.mp4", "the download failed", None
@@ -974,6 +984,16 @@ def cmd_find(edit, only=None):
                 if img:
                     made[0] += 1
                     got = img
+        if sh["kind"] in ("clip", "stock") and got.get("missing"):     # a shot is not left empty: fewer words, then a still picture
+            why, short = got["missing"], " ".join(str(sh.get("query") or "").split()[:3])
+            if short and short != str(sh.get("query") or "").strip():
+                alt = fetch_clip(edit, key, {**sh, "query": short, "see": sh.get("see") or sh.get("query")}, need, w, h, used)
+                if not alt.get("missing"):
+                    got = {**alt, "retried": short}
+            if got.get("missing") and (studio.brief_of(edit).get("footage") or {}).get("photos", True):
+                alt = fetch_photo(edit, key, sh, w, h)
+                if not alt.get("missing"):
+                    got = {**alt, "instead": "a picture (no footage: " + why + ")"}
         return key, {**got, "kind": sh["kind"], "query": sh.get("query"), "stamp": stamp_of(sh, need)}
     with ThreadPoolExecutor(4) as ex:
         for key, got in ex.map(one, todo):
@@ -982,6 +1002,9 @@ def cmd_find(edit, only=None):
             print(f"MISSING {key}: {got.get('query')} ({got['missing']})" if got.get("missing") else
                   (f"LOGO {key}: every result tried carries a logo or subtitles; change the words or the kind. " if got.get("logo") else "") +
                   (f"AI FAILED {key} ({got['ai_failed']}), its fallback is used. " if got.get("ai_failed") else "") +
+                  (f"WEAK {key}: the best frame barely shows \"{got.get('query')}\" (match {got['match']:.2f}); look at it on the sheet, change the words or give a \"see\". "
+                   if isinstance(got.get("match"), float) and got["match"] < WEAK_MATCH else "") +
+                  (f"PICTURE {key}: {got['instead']}. " if got.get("instead") else "") +
                   f"{key}: {got.get('title') or got.get('file')}"[:110])
     keys = {sp["key"] for sp in spans(edit)}
     for k in [k for k in db if k not in keys]:          # a shot the script no longer has
