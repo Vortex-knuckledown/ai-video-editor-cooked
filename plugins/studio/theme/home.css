@@ -423,3 +423,10 @@ body.fw-app a, body.fw-app button { cursor: default; }
 .cf-wait span { height: 24px; line-height: 24px; padding: 0 10px; border-radius: 99px; background: var(--act); color: var(--ink); font-weight: 560; }
 .cf-wait:hover { border-color: var(--accent-line); color: var(--ink); }
 .cf-kinds { margin-top: 30px; }
+
+/* the Working indicator: its ring sits in the middle of its tile at every sidebar size, with the count inside it */
+.rl-job .ic { position: relative; display: grid !important; place-items: center; width: 40px !important; height: 34px !important; background: var(--soft) !important;
+  border: 1px solid var(--line) !important; border-radius: 10px; font-size: 10.5px; font-weight: 700; color: var(--ink); }
+.rl-job .ic svg { position: absolute !important; left: 50% !important; top: 50% !important; width: 24px; height: 24px; margin: -12px 0 0 -12px; }
+.rl-job .ic svg circle:last-child { stroke: var(--accent-hi); }
+@media (max-height: 1000px) { .rl-job .ic { height: 30px !important; } .rl-job .ic svg { width: 22px; height: 22px; margin: -11px 0 0 -11px; } }
