@@ -1,0 +1,84 @@
+<!-- chart3d: a real 3D bar chart, built from a shot's own numbers by `longvideo.py charts` (no agent).
+     The part above ==MODULE== goes inside #scene; the part below goes after the clip's main script. -->
+<canvas id="gl" width="__W__" height="__H__" style="position:absolute;left:0;top:0;width:__W__px;height:__H__px"></canvas>
+<!-- real-text: the chart's title, names and numbers are the data being shown -->
+<div id="ctitle" style="position:absolute;left:0;top:__TY__px;width:__W__px;text-align:center;font-family:'Arial Narrow','Helvetica Neue',Arial,sans-serif;font-weight:800;letter-spacing:.02em;text-transform:uppercase;color:#fff;opacity:0"></div>
+<div id="clabels" style="position:absolute;left:0;top:0;width:__W__px;height:__H__px;pointer-events:none;font-family:'Helvetica Neue',Arial,sans-serif"></div>
+<div id="csource" style="position:absolute;left:0;top:__SY__px;width:__W__px;text-align:center;font-family:'Helvetica Neue',Arial,sans-serif;font-weight:500;color:#fff;opacity:0"></div>
+==MODULE==
+<script type="module">
+      import * as THREE from "three";
+      const W = __W__, H = __H__, S = Math.min(W, H), DATA = __DATA__;
+      const canvas = document.getElementById("gl");
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+      renderer.setSize(W, H, false); renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
+      renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+      const scene = new THREE.Scene(); scene.background = new THREE.Color(DATA.ground); scene.fog = new THREE.Fog(DATA.ground, 26, 60);
+      const cam = new THREE.PerspectiveCamera(30, W / H, 0.1, 200);
+
+      const items = DATA.items, n = items.length, top = Math.max(...items.map(i => Math.abs(i[1]))) || 1;
+      const best = items.reduce((b, it, i) => it[1] > items[b][1] ? i : b, 0);
+      const gap = 2.6, bw = 1.5, maxH = 6.2, x0 = -gap * (n - 1) / 2;
+
+      // the floor: a dark stage with a faint grid, so the bars stand on something
+      const floor = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: new THREE.Color(DATA.ground).multiplyScalar(2.2), roughness: 0.42, metalness: 0.35 }));
+      floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+      const grid = new THREE.GridHelper(60, 60, 0xffffff, 0xffffff); grid.material.transparent = true; grid.material.opacity = 0.06; grid.position.y = 0.01; scene.add(grid);
+      const plinth = new THREE.Mesh(new THREE.BoxGeometry(gap * n + 1.2, 0.18, 3.4), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, metalness: 0.1, transparent: true, opacity: 0.1 }));
+      plinth.position.y = 0.09; plinth.receiveShadow = true; scene.add(plinth);
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x202028, 0.75));
+      const glow = new THREE.PointLight(new THREE.Color(DATA.accent), 22, 18); glow.position.set(x0 + best * gap, 3.2, 3.2); scene.add(glow);   // the tallest bar lights the stage
+      const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(-7, 14, 9); key.castShadow = true;
+      key.shadow.mapSize.set(2048, 2048); Object.assign(key.shadow.camera, { left: -14, right: 14, top: 14, bottom: -6, near: 1, far: 50 }); key.shadow.bias = -0.0004; scene.add(key);
+      const rim = new THREE.DirectionalLight(new THREE.Color(DATA.accent), 1.1); rim.position.set(9, 5, -8); scene.add(rim);
+
+      const bars = items.map((it, i) => {
+        const on = i === best;
+        const mat = new THREE.MeshStandardMaterial({ color: on ? new THREE.Color(DATA.accent) : new THREE.Color(0xdfe3ea), roughness: on ? 0.32 : 0.5, metalness: 0.1,
+          emissive: on ? new THREE.Color(DATA.accent) : new THREE.Color(0x000000), emissiveIntensity: on ? 0.22 : 0 });
+        const m = new THREE.Mesh(new THREE.BoxGeometry(bw, 1, bw), mat);
+        m.castShadow = true; m.receiveShadow = true; m.position.set(x0 + i * gap, 0.18, 0); scene.add(m);
+        return m;
+      });
+
+      // names and numbers are HTML over the canvas, placed from each bar's own position every frame
+      const box = document.getElementById("clabels");
+      const lab = items.map((it, i) => {
+        const name = document.createElement("div"), val = document.createElement("div");
+        name.textContent = it[0]; val.textContent = "0";
+        for (const e of [name, val]) { e.style.cssText = "position:absolute;transform:translate(-50%,-50%);white-space:nowrap;text-align:center;color:#fff"; box.appendChild(e); }
+        name.style.fontSize = Math.round(S * 0.034) + "px"; name.style.fontWeight = "700"; name.style.textShadow = "0 2px 12px rgba(0,0,0,.7)";
+        val.style.fontSize = Math.round(S * 0.05) + "px"; val.style.fontWeight = "800"; val.style.textShadow = "0 2px 14px rgba(0,0,0,.75)";
+        if (i === best) val.style.color = DATA.accent;
+        return { name, val };
+      });
+      const title = document.getElementById("ctitle"); title.textContent = DATA.title; title.style.fontSize = Math.round(S * 0.075) + "px";
+      const src = document.getElementById("csource"); src.textContent = DATA.source ? "Source: " + DATA.source : ""; src.style.fontSize = Math.round(S * 0.026) + "px";
+
+      const ease = t => 1 - Math.pow(1 - Math.min(1, Math.max(0, t)), 3);
+      const fmt = v => (Math.abs(v) >= 100 ? Math.round(v).toLocaleString("en-US") : (Math.round(v * 10) / 10).toString()) + DATA.unit;
+      const v3 = new THREE.Vector3();
+      const put = (el, x, y, z, show) => { v3.set(x, y, z).project(cam); el.style.left = ((v3.x + 1) / 2 * W) + "px"; el.style.top = ((1 - v3.y) / 2 * H) + "px"; el.style.opacity = show; };
+      const st = { t: 0 };
+      function draw() {
+        const T = st.t * DURATION, grow = Math.min(1.1, DURATION * 0.3);
+        const u = T / DURATION;
+        const a = -0.52 + 0.3 * ease(u * 1.6) + 0.2 * u;                       // the camera comes round from the left, then never quite stops
+        const dist = 20 + n * 1.25 - 1.6 * ease(u * 1.4) - 1.4 * u;
+        cam.position.set(Math.sin(a) * dist, 7.4 - 1.2 * ease(u * 1.4) - 0.6 * u, Math.cos(a) * dist); cam.lookAt(0, maxH * 0.36, 0); cam.updateMatrixWorld();
+        bars.forEach((m, i) => {
+          const k = ease((T - 0.25 - i * 0.12) / grow), h = Math.max(0.02, maxH * Math.abs(items[i][1]) / top * k);
+          m.scale.y = h; m.position.y = 0.18 + h / 2;
+          put(lab[i].name, m.position.x, -0.15, 1.9, ease((T - 0.15 - i * 0.1) / 0.3));
+          put(lab[i].val, m.position.x, 0.18 + h + 0.62, 0, k > 0.05 ? 1 : 0);
+          lab[i].val.textContent = fmt(items[i][1] * k);
+        });
+        title.style.opacity = ease(T / 0.4); src.style.opacity = 0.6 * ease((T - 0.6) / 0.4);
+        renderer.render(scene, cam);
+      }
+      const tl = window.__timelines["__ID__"];
+      tl.to(st, { t: 1, duration: DURATION, ease: "none", onUpdate: draw }, 0);
+      draw();
+</script>

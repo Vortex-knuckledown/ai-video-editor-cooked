@@ -27,6 +27,16 @@ What changed for every user, newest first.
   shows as a number on the Dock icon.
 - **The sidebar cannot overlap itself.** The bell is one of the sidebar's own items, and the sidebar tightens on a
   short window. Checked by measurement at 1040 by 680, 1280 by 800 and 1720 by 1000, in both sidebar widths.
+- **Home is one box.** A prompt, your clips (dropped on it or picked) or a link, with buttons that change to match.
+  Your videos and the styles shelves are no longer on Home.
+- **4K.** A Quality choice on Long video: footage is kept at up to 2160 lines and the render draws 3840 by 2160
+  (`studio.py render --4k` for any video).
+- **Three more graphics for long videos.** `tier` (a ranked tier list), `paper` (a study lifting off the page with
+  one sentence marked) and `chart3d` (a real 3D bar chart with a moving camera, rendered by `longvideo.py charts`
+  with no agent; flat bars if it does not render).
+- **AI images.** OpenAI is a connection: a photo shot with `make` is generated when no real picture is found.
+- **Split screen for Shorts.** `streamclips.py layout --mode split` stacks the two halves of an interview.
+
 
 ## studio 0.16.0 (this fork, 2026-11-19)
 

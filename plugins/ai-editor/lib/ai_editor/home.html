@@ -1091,7 +1091,8 @@ const STUDIO_KEYS=[
  {id:'pixabay',name:'Pixabay',tag:'free stock footage and pictures',cost:'Free',url:'https://pixabay.com/api/docs/'},
  {id:'pexels',name:'Pexels',tag:'free stock footage and pictures',cost:'Free, when Pexels is taking new API users',url:'https://www.pexels.com/api/'},
  {id:'runway',name:'Runway',tag:'AI-generated shots',cost:'Paid by the second, from about $0.12',url:'https://dev.runwayml.com/'},
- {id:'higgsfield',name:'Higgsfield',tag:'AI-generated shots',cost:'Paid from your Higgsfield balance',url:'https://cloud.higgsfield.ai/'}];
+ {id:'higgsfield',name:'Higgsfield',tag:'AI-generated shots',cost:'Paid from your Higgsfield balance',url:'https://cloud.higgsfield.ai/'},
+ {id:'openai',name:'OpenAI',tag:'AI images',cost:'Paid by the picture, to OpenAI',url:'https://platform.openai.com/api-keys'}];
 const PARTS=[['captions','Captions'],['pace','Pace'],['graphics','Graphics'],['sound','Sound']];
 // creator-teardown quick mode, in order. Claude reports these step names (references/home.md).
 const PLAN=['Listed their videos','Downloaded the top 5 and 2 median','Transcribed every word','Measured cuts, zooms and camera moves','Reading captions and faces','Naming graphics','Sound effects and music','Writing the style'];
@@ -1544,7 +1545,7 @@ const nvKind=()=>nv.ugc?'ugc':nv.long?'long':nv.like?'like':nv.stream?'stream':n
 function setKind(k){
   const keep={prompt:nv.prompt,like:nv.like,stream:nv.stream,long:nv.long,ugc:nv.ugc}[k];nv.prompt=nv.like=nv.stream=nv.long=nv.ugc=null;
   if(k==='ugc')nv.ugc=keep||{product:'',about:'',audience:'',link:'',clips:'',media:'',versions:3,caption:true,music:true,cta:'',msg:''};
-  if(k==='long')nv.long=keep||{text:'',minutes:3,shape:'16:9',youtube:true,photos:true,caption:true,music:true,own:'',ai:false,voiceover:'',msg:''};
+  if(k==='long')nv.long=keep||{quality:'1080',text:'',minutes:3,shape:'16:9',youtube:true,photos:true,caption:true,music:true,own:'',ai:false,voiceover:'',msg:''};
   if(k==='prompt')nv.prompt=keep||{text:'',refs:'',length:30,voice:true,caption:true,music:true,msg:''};
   if(k==='like')nv.like=keep||{link:'',topic:'',shape:'auto',match:true,voice:true,caption:true,music:true,msg:''};
   if(k==='stream')nv.stream=keep||{links:'',latest:1,count:3,length:'short',layout:'auto',captions:true,titles:true,style:'',msg:''};
@@ -1628,6 +1629,7 @@ function longSide(){
     <div class="sec"><div class="h">Length</div><div class="row">${[2,3,5,8].map(n=>`<button class="pill ${P.minutes===n?'on':''}" onclick="nv.long.minutes=${n};render()">${n} min</button>`).join('')}</div>
       <div class="muted faint" style="line-height:18px">About ${P.minutes*4} minutes to make and ${P.minutes*2} to render.</div></div>
     <div class="sec"><div class="h">Shape</div><div class="row">${[['16:9','Wide · 16:9'],['9:16','Tall · 9:16']].map(([a,t])=>`<button class="pill ${P.shape===a?'on':''}" onclick="nv.long.shape='${a}';render()">${t}</button>`).join('')}</div></div>
+    <div class="sec"><div class="h">Quality</div><div class="row">${[['1080','1080p'],['4k','4K']].map(([a,t])=>`<button class="pill ${(P.quality||'1080')===a?'on':''}" onclick="nv.long.quality='${a}';render()">${t}</button>`).join('')}</div>${P.quality==='4k'?'<div class="sub" style="font-size:13px">4K takes about four times as long to render. Text and graphics are sharp; footage is as sharp as what is found.</div>':''}</div>
     <div class="sec"><div class="h">What it shows</div><div style="display:flex;flex-direction:column;gap:8px">
       ${tick('youtube','Footage found on YouTube','A few seconds each from other people\'s videos, listed in your publishing kit. Publishing them is your call.')}
       ${tick('photos','Free pictures','From Wikimedia Commons and Openverse: free to reuse, credited in the kit.')}
@@ -1652,7 +1654,7 @@ const AIK=['runway','higgsfield','gemini'],aiOn=()=>AIK.some(k=>(S.keys[k]||{}).
 function longReady(){const b=$('#make');if(b)b.disabled=nv.long.text.trim().length<8&&!nv.long.voiceover.trim()}
 async function makeLong(){
   const P=nv.long,b=$('#make');if(b)b.disabled=true;
-  const r=await post('/job',{type:'longvideo',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,text:!!P.caption,music:!!P.music,own:P.own.trim(),ai:!!P.ai&&aiOn(),voiceover:P.voiceover.trim(),...voiceBody()});
+  const r=await post('/job',{type:'longvideo',quality:P.quality||'1080',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,text:!!P.caption,music:!!P.music,own:P.own.trim(),ai:!!P.ai&&aiOn(),voiceover:P.voiceover.trim(),...voiceBody()});
   if(!r._ok){nv.long.msg=r.msg||r.error||'That did not work.';render();return}
   nv.long=null;await load();toEditor(r);
 }
@@ -2890,7 +2892,7 @@ function stHelp(k){
 }
 // ---- Settings: keys (each with its own status and a little of its brand colour), updates, the videos folder, the theme
 const KLT={elevenlabs:'var(--soft)',gemini:'color-mix(in srgb,#9168C0 14%,var(--skbg))'};
-const KDS={pixabay:'Stock clips and pictures with no logos, for Long video',pexels:'Stock clips and pictures with no logos, for Long video',runway:'A few seconds of generated video for a shot nobody filmed',higgsfield:'A found picture brought to life as a moving shot',elevenlabs:'Exact words, so the cut finds your retakes',gemini:"Reads a creator's look when it analyses them",zernio:'Does the posting for cooked.'};
+const KDS={openai:'Makes a picture when no real one exists, for Long video',pixabay:'Stock clips and pictures with no logos, for Long video',pexels:'Stock clips and pictures with no logos, for Long video',runway:'A few seconds of generated video for a shot nobody filmed',higgsfield:'A found picture brought to life as a moving shot',elevenlabs:'Exact words, so the cut finds your retakes',gemini:"Reads a creator's look when it analyses them",zernio:'Does the posting for cooked.'};
 const OKTICK=ic('check',14,2.6);
 function stKey(k){
   const st=S.keys[k.id]||{},u=ui.keys[k.id]||{},c=st.check,editing=u.edit||!st.set;

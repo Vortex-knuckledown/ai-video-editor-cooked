@@ -1193,12 +1193,17 @@ def cmd_build(edit):
     return 0
 
 
-def cmd_render(edit, draft=False):
+def cmd_render(edit, draft=False, uhd=False):
+    """--4k (or "quality": "4k" in the brief): every frame drawn at twice the size, 3840 x 2160 for a wide video. Type and
+    graphics are sharp at that size; footage is as sharp as what was found. About four times as long to render."""
     edit = Path(edit).resolve()
     use_editor()
     import scene
     if not (edit / SCENE_FILE).exists():
         sys.exit("ERROR: run studio.py build first.")
+    if (uhd or str(brief_of(edit).get("quality") or "").lower() == "4k") and not draft:
+        os.environ["FW_SCALE"] = "2"
+        print("4K: rendering at twice the size. This takes about four times as long as 1080p.")
     out = scene.render(edit, out=edit / "render.mp4", draft=draft, log=edit / "render.studio.log", name=SCENE_FILE)
     print(f"{out} ({duration(out):.1f} s)")
     return 0
@@ -1321,6 +1326,7 @@ def main(argv):
     r = sub.add_parser("render")
     r.add_argument("edit")
     r.add_argument("--draft", action="store_true")
+    r.add_argument("--4k", dest="uhd", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "root":
         print(editor_root())
@@ -1342,7 +1348,7 @@ def main(argv):
     return {"check-scenes": lambda: cmd_check_scenes(a.edit), "voice": lambda: cmd_voice(a.edit, a.engine, a.voice, a.fit),
             "words": lambda: cmd_words(a.edit), "briefs": lambda: cmd_briefs(a.edit), "worlds": lambda: cmd_worlds(a.edit),
             "music": lambda: cmd_music(a.edit, a.mood), "build": lambda: cmd_build(a.edit),
-            "render": lambda: cmd_render(a.edit, a.draft), "stills": lambda: cmd_stills(a.edit)}[a.cmd]()
+            "render": lambda: cmd_render(a.edit, a.draft, a.uhd), "stills": lambda: cmd_stills(a.edit)}[a.cmd]()
 
 
 if __name__ == "__main__":

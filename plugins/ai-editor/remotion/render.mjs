@@ -158,7 +158,7 @@ async function bench(publicDir, planPath) {
 async function local(publicDir, planPath, out) {
   const { serveUrl, composition, inputProps } = await prepare(publicDir, planPath);
   const t0 = Date.now();
-  const scale = flags.draft ? 2 / 3 : 1;
+  const scale = flags.draft ? 2 / 3 : (Number(process.env.FW_SCALE) || 1);   // fork: FW_SCALE=2 is 4K from a 1080p scene
   // Rendering straight to mp4 puts the AAC encoder's start-up padding in front of the sound, so the
   // audio lands 43 ms after the picture. Render PCM audio in an mkv, then encode AAC once, trimmed
   // to the video: the same path the GitHub join takes, sample-aligned with the cut.
@@ -181,7 +181,7 @@ async function chunk(publicDir, planPath, out, from, to) {
   // gap. The join encodes the audio to AAC once.
   await renderMedia({ serveUrl, composition, inputProps, codec: "h264-mkv", outputLocation: out,
     frameRange: [Number(from), Number(to)], enforceAudioTrack: true, concurrency: concurrency(),
-    scale: flags.draft ? 2 / 3 : 1, timeoutInMilliseconds: TIMEOUT_MS, onProgress: progress(Number(to) - Number(from) + 1) });
+    scale: flags.draft ? 2 / 3 : (Number(process.env.FW_SCALE) || 1), timeoutInMilliseconds: TIMEOUT_MS, onProgress: progress(Number(to) - Number(from) + 1) });
   console.log(`rendered ${out} (frames ${from}-${to}) in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
 }
 
