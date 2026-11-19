@@ -2271,6 +2271,11 @@ def studio_theme(html):
     for f in [here.parents[3] / "studio" / "theme" / name, *sorted(here.parents[3].parent.glob(f"studio/*/theme/{name}"), reverse=True),
               *sorted(here.parents[4].glob(f"studio/*/theme/{name}"), reverse=True)]:
         try:
+            brand = f.with_name("brand.json")   # the app's own name, when the studio theme gives it one
+            if brand.is_file():
+                name = json.loads(brand.read_text(encoding="utf-8")).get("name") or ""
+                if name:
+                    html = html.replace(b"cooked.", name.encode())
             add = b'<style id="studio-theme">\n' + f.read_bytes() + b"\n</style>"
             js = f.with_suffix(".js")   # the layout that goes with the look (the create-first Home)
             if js.is_file():

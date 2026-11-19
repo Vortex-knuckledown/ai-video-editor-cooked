@@ -2,6 +2,23 @@
 
 What changed for every user, newest first.
 
+## Unreleased (studio)
+
+- **The app is now Framewise.** A new name, a new icon (a blue tile, a white frame, a play head) and the same mark
+  in the sidebar and the browser tab. `plugins/studio/theme/brand.json` holds the name; the original's licence and
+  notices still ship inside the app.
+- **Library is a section, not a window.** Worlds, Characters and Props as tabs inside the app.
+- **A notification bell.** What needs you (a question about a video, a cut or edit that is ready, a job running)
+  sits behind a bell in the sidebar. A question opens as a panel beside it when you click, never as a sheet over the
+  whole window.
+- **Connect Claude inside the app.** Settings has a Claude account card (who is signed in, their plan, Switch
+  account, Sign out), and the first-run screen has Connect Claude: the browser opens on Claude's own sign-in page.
+  No Terminal.
+- **One icon set and a tidier sidebar.** Navigation icons redrawn on one grid; Home and Videos, then Styles, Brand,
+  Skills and Library, then Activity (the page that was called Claude). The original's updater and support ask are
+  not shown in this build.
+- **Fields.** Every text field is one height in the app's own font, and pages fade in.
+
 ## studio 0.16.0 (this fork, 2026-11-19)
 
 - **cooked. as a Mac app.** `bash plugins/studio/app/build.sh` makes `dist/cooked.app` and a `.dmg` (15 MB, Apple

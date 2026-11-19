@@ -1,4 +1,4 @@
-// cooked.app: the editor as a Mac app. One window, no Terminal.
+// Framewise.app: the editor as a Mac app. One window, no Terminal.
 //
 // On launch it checks what the editor needs (runtime.sh), shows a setup screen for anything missing, starts the
 // editor's own server (home.py, bundled in Resources/plugins) and shows its page in this window. Claude Code still
@@ -50,7 +50,7 @@ let SETUP_HTML = """
 :root{color-scheme:dark}body{margin:0;color:#F2F4F8;font:14.5px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
 background:radial-gradient(900px 480px at 50% -160px,rgba(61,123,255,.18),transparent 70%),#0A0B0E;
 display:flex;align-items:center;justify-content:center;height:100vh}
-main{width:520px}h1{font-size:38px;font-weight:650;letter-spacing:-.03em;margin:0 0 6px}p{color:rgba(232,236,245,.6);margin:0 0 24px}
+main{width:520px}.logo{width:60px;height:60px;margin-bottom:18px;filter:drop-shadow(0 10px 26px rgba(61,123,255,.45))}.logo svg{width:100%;height:100%;display:block}h1{font-size:38px;font-weight:650;letter-spacing:-.03em;margin:0 0 6px}p{color:rgba(232,236,245,.6);margin:0 0 24px}
 .r{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:13px 16px;background:#13151A;border:1px solid rgba(255,255,255,.075);border-radius:14px;margin-bottom:8px}
 .r b{font-weight:620}.r span{color:rgba(232,236,245,.56);text-align:right}.ok span{color:#34D399}.bad span{color:#FF8A7A}
 button{font:inherit;font-weight:620;color:#fff;border:0;border-radius:10px;padding:11px 20px;margin-top:16px;cursor:pointer;
@@ -59,11 +59,12 @@ button:hover{filter:brightness(1.08)}button[disabled]{opacity:.5;cursor:default;
 button.b2{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);box-shadow:none;margin-left:8px}
 #note{margin-top:16px;color:rgba(232,236,245,.56);font-size:13.5px;min-height:20px}
 </style></head><body><main>
-<h1>cooked.</h1><p id="sub">Starting…</p><div id="rows"></div>
+<div class="logo"><svg viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5C92FF"/><stop offset="1" stop-color="#2A62E8"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#g)"/><path d="M19 22a5 5 0 0 1 5-5h9M45 42a5 5 0 0 1-5 5h-9M19 31v11a5 5 0 0 0 5 5M45 33V22a5 5 0 0 0-5-5" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round"/><path d="M27.5 24.5 40 32l-12.5 7.5z" fill="#fff"/></svg></div>
+<h1>Framewise</h1><p id="sub">Starting…</p><div id="rows"></div>
 <div id="btns"></div><div id="note"></div>
 <script>
 const NAMES={python:['Python','runs the editor'],node:['Node','renders the video'],ffmpeg:['ffmpeg','cuts and joins video'],
-  ffprobe:['ffprobe','reads video files'],claude:['Claude Code','does the editing, with your Claude account']};
+  ffprobe:['ffprobe','reads video files'],claude:['Claude','does the editing, with your own Claude account']};
 let st={};
 function send(m){window.webkit.messageHandlers.app.postMessage(m)}
 function draw(){
@@ -98,9 +99,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         web.allowsBackForwardNavigationGestures = true
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1360, height: 860),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "cooked."
+        window.title = "Framewise"
         window.center()
-        window.setFrameAutosaveName("cooked-main")
+        window.setFrameAutosaveName("framewise-main")
         window.contentView = web
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -112,14 +113,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let main = NSMenu()
         let appItem = NSMenuItem(); main.addItem(appItem)
         let app = NSMenu()
-        app.addItem(withTitle: "About cooked.", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(withTitle: "About Framewise", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
         app.addItem(withTitle: "Home", action: #selector(goHome), keyEquivalent: "1")
         app.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "r")
         app.addItem(withTitle: "Check Setup…", action: #selector(recheck), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(withTitle: "Hide cooked.", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        app.addItem(withTitle: "Quit cooked.", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: "Hide Framewise", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: "Quit Framewise", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         app.addItem(withTitle: "Quit and Stop the Editor", action: #selector(quitAll), keyEquivalent: "")
         appItem.submenu = app
         let editItem = NSMenuItem(); main.addItem(editItem)
@@ -219,23 +220,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
-    // Claude Code signs in once, in its own window: the one step that is not in this app.
+    // Claude signs in on Claude's own page in the browser; the app starts that and waits. No Terminal.
+    var login: Process?
     func signIn() {
-        let cmd = "export PATH=\(q(env["PATH"] ?? "")); clear; echo 'Sign in to Claude here, then come back to cooked.'; claude"
-        let script = "tell application \"Terminal\"\nactivate\ndo script \(q(cmd))\nend tell"
+        login?.terminate()
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        p.arguments = ["-e", script]
+        p.executableURL = URL(fileURLWithPath: "/bin/bash")
+        p.arguments = ["-c", "claude auth login"]
+        p.environment = env
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
         try? p.run()
+        login = p
+        js("sub('Finish signing in on the page that opened in your browser. This window carries on by itself.');" +
+           "buttons('<button class=\"b2\" style=\"margin-left:0\" onclick=\"send(\\'signin\\')\">Open the sign-in page again</button>');note('Waiting for Claude…')")
+        DispatchQueue.global().async {
+            for _ in 0..<150 {
+                Thread.sleep(forTimeInterval: 2)
+                if self.claudeSignedIn() { DispatchQueue.main.async { self.js("note('Signed in.')"); self.start() }; return }
+            }
+            DispatchQueue.main.async { self.js("note('Still not signed in. Press the button to try again.')") }
+        }
     }
 
     func claudeSignedIn() -> Bool {
-        let fm = FileManager.default, h = NSHomeDirectory()
-        if fm.fileExists(atPath: h + "/.claude/.credentials.json") { return true }
-        if let d = try? Data(contentsOf: URL(fileURLWithPath: h + "/.claude.json")),
-           let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
-            return o["oauthAccount"] != nil || o["primaryApiKey"] != nil || (o["hasCompletedOnboarding"] as? Bool ?? false)
-        }
+        let (_, out) = sh(["-c", "claude auth status --json 2>/dev/null"], env: env)
+        if let d = out.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { return o["loggedIn"] as? Bool ?? false }
         return false
     }
 
@@ -257,8 +268,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         DispatchQueue.global().async {
             if !self.claudeSignedIn() {
                 DispatchQueue.main.async {
-                    self.js("sub('Sign in to Claude once. A Terminal window opens for it; come back here when it says you are in.');" +
-                            "buttons('<button onclick=\"send(\\'signin\\')\">Sign in to Claude</button><button class=\"b2\" onclick=\"send(\\'recheck\\')\">I have signed in</button>')")
+                    self.js("sub('Connect your Claude account. Your browser opens on the Claude sign-in page; nothing is typed here.');" +
+                            "buttons('<button onclick=\"send(\\'signin\\')\">Connect Claude</button>')")
                 }
                 return
             }
@@ -332,7 +343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         v.uiDelegate = self
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
                            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        win.title = "cooked."
+        win.title = "Framewise"
         win.isReleasedWhenClosed = false
         win.contentView = v
         win.cascadeTopLeft(from: window.frame.origin)
