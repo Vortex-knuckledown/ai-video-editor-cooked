@@ -37,6 +37,8 @@ question and every step shows in the editor.
 ## 0. The brief
 
 `EDIT/brief.json`: `{"prompt", "refs": [links], "aspect": "9:16"|"16:9", "length": seconds, "voice", "text", "music"}`
+(read `~/.ai-video-editor/taste.md` first when it exists: the user's standing rules beat this file; a note that says
+"always" or "never" is saved with the `taste` skill after it is fixed)
 (the last three true or false: what the user ticked). With `"like": <link>` (New video's "Make one like this") the
 prompt may be empty and `aspect`, `length` (0) and the three may say `auto`: step 0b fills them in. Asked in chat instead of the page: make the edit folder with
 `python3 "$E/lib/ai_editor/library.py" path`, then `edits/<slug>/`, write brief.json yourself, and ask in one question

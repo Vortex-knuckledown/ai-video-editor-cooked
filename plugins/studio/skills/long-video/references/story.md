@@ -121,3 +121,13 @@ first words. It marks a section, a number and a graphic with a sound, and nothin
 silent. It prints `FLAT MIX` when the loud and quiet moments are less than 9 dB apart (published videos of this kind
 measure 11 to 12). Fix a flat mix before the preview: leave air between lines in the voice (`voice --fit`), or turn
 the music off for that video. Never raise the music to "fill" a pause: the pause is the production value.
+
+## The user's standing rules, and how a note becomes one
+
+Before step 0 read `~/.ai-video-editor/taste.md` when it exists: rules the user gave on earlier videos ("no music under
+the hook", "British narrator", "never a tier list"). They beat everything in this file. When a note on this video
+reads as a preference for every video and not a fix for this one (it says "always", "never", "from now on", or it
+repeats a note from an earlier video), fix this video and then run the `taste` skill with the note, so the next video
+starts with it. Say in one line on the page that it was saved as a rule. Pronunciations go in
+`~/.ai-video-editor/pronounce.json` (`{"Kyutai": "cue tie"}`): the voice says them that way in every video.
+

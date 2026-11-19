@@ -117,7 +117,8 @@ def voice_of(b):
     if eng == "edge" and re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]{3,40}Neural", vid):
         return {"voice_engine": "edge", "voice_id": vid}
     if eng == "pocket" and re.fullmatch(r"[a-z_]{3,20}", vid):       # studio: the Pocket TTS voices
-        return {"voice_engine": "pocket", "voice_id": vid}
+        sp = b.get("voice_speed")
+        return {"voice_engine": "pocket", "voice_id": vid, **({"voice_speed": float(sp)} if isinstance(sp, (int, float)) and 0.8 <= sp <= 1.25 and sp != 1 else {})}
     return {}
 
 
@@ -137,7 +138,8 @@ def studio_voices():
         edge_ok = False
     pocket = re.findall(r'\("([a-z_]+)", "(\w+)", "([^"]+)"\)', src.split("POCKET_VOICES = [", 1)[1].split("]\n", 1)[0]) if "POCKET_VOICES = [" in src else []
     pk = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor") / "pocket"
-    out = {"pocket": {"ready": any(pk.glob("lib/python*/site-packages/pocket_tts")), "voices": [{"id": i, "name": n, "desc": d} for i, n, d in pocket]},   # studio
+    mine = [{"id": "mine", "name": "My voice", "desc": "Yours"}] if (pk.parent / "voices" / "mine.wav").is_file() and keys.get("huggingface")[0] else []
+    out = {"pocket": {"ready": any(pk.glob("lib/python*/site-packages/pocket_tts")), "voices": mine + [{"id": i, "name": n, "desc": d} for i, n, d in pocket]},   # studio
            "edge": {"ready": edge_ok, "voices": [{"id": i, "name": n, "desc": d} for i, n, d in edge]},
            "kokoro": {"ready": ready, "voices": [{"id": v, "name": v[3:].title(), "desc": kind[v[:2]]} for v in ids]},
            "eleven": {"ready": False, "voices": []}}
@@ -199,7 +201,7 @@ _POCKET_SETUP = {"p": None}
 
 
 def studio_pocket(do=None):
-    pk = home() / "pocket"
+    pk = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor") / "pocket"
     ready = any(pk.glob("lib/python*/site-packages/pocket_tts"))
     p = _POCKET_SETUP["p"]
     t = studio_script("animated-video", "studio.py")
@@ -207,7 +209,36 @@ def studio_pocket(do=None):
         _POCKET_SETUP["p"] = p = subprocess.Popen([sys.executable, str(Path(__file__).with_name("run.py")), str(t), "pocket-setup"],
                                                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         VOICE_CACHE.clear()
-    return {"ready": ready, "busy": bool(p and p.poll() is None) and not ready}
+    return {"ready": ready, "busy": bool(p and p.poll() is None) and not ready, "mine": (pk.parent / "voices" / "mine.wav").is_file(),
+            "hf": bool(keys.get("huggingface")[0])}
+
+
+def studio_myvoice(handler):
+    """A recording of the user's own voice (any audio or video file, up to 60 MB): its first 30 seconds, as the sample the Studio voice copies."""
+    n = body_len(handler.headers)
+    if not 0 < n <= 60 * 1024 * 1024:
+        return {"ok": False, "msg": "Add a recording of your voice, up to 60 MB."}
+    d = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor") / "voices"
+    d.mkdir(parents=True, exist_ok=True)
+    raw, left = d / "mine.upload", n
+    with open(raw, "wb") as f:
+        while left > 0:
+            b = handler.rfile.read(min(1 << 20, left))
+            if not b:
+                break
+            f.write(b)
+            left -= len(b)
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-vn", "-t", "30", "-af", "silenceremove=start_periods=1:start_threshold=-45dB,loudnorm=I=-18:TP=-2",
+                        "-ac", "1", "-ar", "24000", str(d / "mine.part.wav")], capture_output=True)
+    raw.unlink(missing_ok=True)
+    if r.returncode or not (d / "mine.part.wav").is_file() or (d / "mine.part.wav").stat().st_size < 24000 * 2 * 5:
+        (d / "mine.part.wav").unlink(missing_ok=True)
+        return {"ok": False, "msg": "That file has no usable sound. Add 10 to 30 seconds of yourself speaking clearly."}
+    (d / "mine.part.wav").replace(d / "mine.wav")
+    VOICE_CACHE.clear()
+    for f in (home() / "voice-previews").glob("pocket-mine*"):
+        f.unlink(missing_ok=True)
+    return {"ok": True}
 
 
 # studio: Export all. The studio plugin sits beside this one in the repo, or in Claude Code's plugin cache.
@@ -2379,6 +2410,9 @@ def make_handler(token):
                 okid = re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]{3,40}Neural", vid) if eng == "edge" else re.fullmatch(r"[ab][fm]_[a-z]{2,12}", vid)
                 if eng == "pocket":     # studio
                     okid = re.fullmatch(r"[a-z_]{3,20}", vid)
+                    if vid == "mine":   # the sample may be replaced: its preview is keyed by the sample's own time
+                        mv = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor") / "voices" / "mine.wav"
+                        vid = f"mine-{int(mv.stat().st_mtime)}" if mv.is_file() else vid
                 if not t or eng not in ("kokoro", "edge", "pocket") or not okid:
                     return self.send(404, {})
                 f = home() / "voice-previews" / f"{eng}-{vid}.wav"
@@ -2478,6 +2512,9 @@ def make_handler(token):
             path = urlsplit(self.path).path
             if path == "/script":
                 return self.script()
+            if path == "/studio/myvoice":   # studio: the user's own voice sample, streamed like an upload
+                with live.busy():
+                    return self.send(200, studio_myvoice(self))
             if path in ("/upload", "/style/cover"):
                 with live.busy():   # no live-reload restart under an upload
                     return self.upload() if path == "/upload" else self.cover()
@@ -3239,7 +3276,7 @@ def make_handler(token):
                 return self.send(400, {"ok": False, "msg": "That voiceover file is not there (a .wav, .mp3 or .m4a recording)."})
             brief = {"prompt": prompt, "minutes": max(1, min(10, int(b.get("minutes") or 3))), "aspect": aspect, "voice": True,
                      "text": b.get("text") is not False, "music": b.get("music") is not False,
-                     "footage": {"youtube": b.get("youtube") is not False, "photos": b.get("photos") is not False},
+                     "footage": {"youtube": b.get("youtube") is not False, "photos": b.get("photos") is not False, "licensed_first": bool(b.get("licensed"))},   # fork: licensed_first
                      "own": os.path.expanduser(own) if own else None, **voice_of(b),
                      "ai": bool(b.get("ai")) and any(keys.get(n)[0] for n in ("runway", "gemini", "higgsfield", "openai")),   # AI-generated shots: only with a connection
                      "voiceover": vo or None, "quality": "4k" if str(b.get("quality") or "").lower() == "4k" else "1080"}   # fork: 4K output

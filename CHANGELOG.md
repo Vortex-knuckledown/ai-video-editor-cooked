@@ -40,6 +40,21 @@ What changed for every user, newest first.
 - **An open-licence character.** `actor`: Quaternius' Universal Animation Library figure (CC0) with 45 motions
   (sit, talk, push, pick up, jump, swim, drive, dance), free to pass on, now that Ready Player Me has closed.
 - **One look.** Near-black, white type and one electric blue accent across graphics, charts and thumbnails.
+- **Your own voice.** Settings > Connections > Voice: add 10 to 30 seconds of yourself speaking and the Studio
+  voice narrates in your voice ("My voice" in the picker). It needs a free Hugging Face token, pasted once in
+  Settings, because the voice-copying model sits behind a free sign-in. The sample stays on this computer.
+- **Pace and pronunciation.** The Studio voice has Slower, Normal and Faster; `~/.ai-video-editor/pronounce.json`
+  says how a name is spoken in every video while the captions keep its spelling.
+- **Three more graphics.** `map` (1 to 5 places pinned on a dark world plate, from Natural Earth), `layers` (what a
+  thing is made of, as plates that come apart) and a `count` running on the footage.
+- **Thumbnails pick a better frame.** Of the eight sharpest frames, the ones with a face or one clear subject come
+  first, and thin parts of a cut-out (an antenna, hair) are kept.
+- **Rules carry over.** Long and animated videos read `taste.md` before they start, and a note that says "always" or
+  "never" is saved as a rule for the next video.
+- **Footage is asked for twice.** On a real video 17 of 48 shots missed on the first pass and were all found on the
+  second; `find` now asks again by itself, one at a time. "Licensed stock first" (with a Pexels or Pixabay key) tries
+  licensed footage before YouTube for every shot.
+- **The script to approve reads as a script**: a heading and paragraphs, not one bold block.
 
 ## studio 0.18.0 (this fork, 2026-11-19)
 

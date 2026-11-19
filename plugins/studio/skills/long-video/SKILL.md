@@ -52,7 +52,7 @@ depends on how they are used). Off: no `clip` shots at all, only pictures, the u
 The recording is the script: nothing is written or approved, no AI voice is made, and `voice` and `words` are never
 run. Read `${CLAUDE_SKILL_DIR}/references/voiceover.md` and follow it, then go on at step 4.
 
-## 1. Research, then the story (read `${CLAUDE_SKILL_DIR}/references/story.md` first: it is the method)
+## 1. Research, then the story (read `${CLAUDE_SKILL_DIR}/references/story.md` and `~/.ai-video-editor/taste.md` first)
 
 WebSearch, then WebFetch 5 to 8 pages from at least 3 sites. `EDIT/research.md`: the angle, the one question the
 video answers, every fact as `- <fact> [Source](url)`. Then `EDIT/beats.md`: 6 to 10 beats. `check` refuses fewer

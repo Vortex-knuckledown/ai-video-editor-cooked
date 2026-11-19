@@ -66,6 +66,7 @@ def cutout(img):
         x = ((x - 0.5) / 1.0).transpose(2, 0, 1)[None]
         m = s.run(None, {s.get_inputs()[0].name: x})[0][0][0]
         m = (m - m.min()) / max(1e-6, float(m.max() - m.min()))
+        m = np.clip(m * 1.25, 0, 1) ** 0.75          # thin parts (an antenna, a wing tip, hair) come out faint: lift them, keep the ground at nothing
         a = Image.fromarray((m * 255).astype("uint8")).resize(img.size, Image.LANCZOS)
         out = img.convert("RGBA")
         out.putalpha(a)

@@ -1092,7 +1092,8 @@ const STUDIO_KEYS=[
  {id:'pexels',name:'Pexels',tag:'free stock footage and pictures',cost:'Free, when Pexels is taking new API users',url:'https://www.pexels.com/api/'},
  {id:'runway',name:'Runway',tag:'AI-generated shots',cost:'Paid by the second, from about $0.12',url:'https://dev.runwayml.com/'},
  {id:'higgsfield',name:'Higgsfield',tag:'AI-generated shots',cost:'Paid from your Higgsfield balance',url:'https://cloud.higgsfield.ai/'},
- {id:'openai',name:'OpenAI',tag:'AI images',cost:'Paid by the picture, to OpenAI',url:'https://platform.openai.com/api-keys'}];
+ {id:'openai',name:'OpenAI',tag:'AI images',cost:'Paid by the picture, to OpenAI',url:'https://platform.openai.com/api-keys'},
+ {id:'huggingface',name:'Hugging Face',tag:'lets the Studio voice copy your own voice',cost:'Free. Accept the terms at huggingface.co/kyutai/pocket-tts first, then make a Read token',url:'https://huggingface.co/settings/tokens'}];
 const PARTS=[['captions','Captions'],['pace','Pace'],['graphics','Graphics'],['sound','Sound']];
 // creator-teardown quick mode, in order. Claude reports these step names (references/home.md).
 const PLAN=['Listed their videos','Downloaded the top 5 and 2 median','Transcribed every word','Measured cuts, zooms and camera moves','Reading captions and faces','Naming graphics','Sound effects and music','Writing the style'];
@@ -1611,14 +1612,14 @@ function voiceSec(){
   const pill=(engine,v)=>`<button class="pill ${V.engine===engine&&V.id===v.id?'on':''}" title="${esc(v.desc||'')}" onclick="pickVoice('${engine}',${J(v.id)},${J(v.preview||'')})">${esc(v.name)}</button>`;
   const pk=VO.pocket||{ready:false,voices:[]};   /* studio: the Pocket TTS voices */
   const src=tab==='edge'?ed:tab==='pocket'?pk:ko,eng=tab==='edge'?'edge':tab==='pocket'?'pocket':'kokoro';
-  const groups=['American · man','American · woman','British · man','British · woman','Indian · man','Indian · woman','Australian · man','Australian · woman'].map(g=>[g,src.voices.filter(v=>v.desc===g)]).filter(x=>x[1].length);
+  const groups=['Yours','American · man','American · woman','British · man','British · woman','Indian · man','Indian · woman','Australian · man','Australian · woman'].map(g=>[g,src.voices.filter(v=>v.desc===g)]).filter(x=>x[1].length);
   const body=tab==='eleven'?(el.voices.length?`<div class="row" style="flex-wrap:wrap;gap:8px">${el.voices.map(v=>pill('eleven',v)).join('')}</div>`:`<div class="muted">${esc(el.msg||'No voices in your ElevenLabs account yet.')}</div>`)
     :groups.map(([g,vs])=>`<div class="muted" style="font-size:12px;margin-top:2px">${g}</div><div class="row" style="flex-wrap:wrap;gap:8px">${vs.map(v=>pill(eng,v)).join('')}</div>`).join('');
   return `<div class="sec"><div class="between"><span class="h">Narrator</span><div class="row" style="gap:6px">${ed.ready?`<button class="pill ${tab==='edge'?'on':''}" onclick="nv.vtab='edge';render()">Natural</button>`:''}${pk.ready?`<button class="pill ${tab==='pocket'?'on':''}" onclick="nv.vtab='pocket';render()">Studio</button>`:''}<button class="pill ${tab==='kokoro'?'on':''}" onclick="nv.vtab='kokoro';render()">Offline</button><button class="pill ${tab==='eleven'?'on':''}" onclick="nv.vtab='eleven';render()">ElevenLabs</button></div></div>
     ${tab==='eleven'&&!el.ready?`<div class="sub" style="font-size:13px;line-height:19px">The most natural voices, from your own ElevenLabs account (paid to ElevenLabs). <button class="hlink" style="font-size:13px" onclick="rgo('settings')">Connect it in Settings</button>, then pick a voice here.</div>`:body}
-    <div class="muted faint" style="line-height:18px">${tab==='edge'?'Click a voice to hear it. Free Microsoft voices: your script\'s words are sent to Microsoft to be spoken, so they need the internet.':tab==='pocket'?'Click a voice to hear it. Studio voices run on your computer, offline, and cost nothing.':tab==='kokoro'?(ko.ready?'Click a voice to hear it. These run on your computer, offline, and cost nothing.':'These install on your first video (a 350 MB download, once).'):el.ready?'Click a voice to hear its sample. Each video uses your ElevenLabs plan.':''}</div></div>`;
+    <div class="muted faint" style="line-height:18px">${tab==='edge'?'Click a voice to hear it. Free Microsoft voices: your script\'s words are sent to Microsoft to be spoken, so they need the internet.':tab==='pocket'?`Click a voice to hear it. Studio voices run on your computer, offline, and cost nothing. Pace: ${[[0.9,'Slower'],[1,'Normal'],[1.1,'Faster']].map(([v,n])=>`<button class="hlink" style="font-size:12px;${(nv.pace||1)===v?'font-weight:700':''}" onclick="nv.pace=${v};render()">${n}</button>`).join(' · ')}`:tab==='kokoro'?(ko.ready?'Click a voice to hear it. These run on your computer, offline, and cost nothing.':'These install on your first video (a 350 MB download, once).'):el.ready?'Click a voice to hear its sample. Each video uses your ElevenLabs plan.':''}</div></div>`;
 }
-const voiceBody=()=>nv.voice?{voice_engine:nv.voice.engine,voice_id:nv.voice.id}:{};
+const voiceBody=()=>nv.voice?{voice_engine:nv.voice.engine,voice_id:nv.voice.id,...(nv.voice.engine==='pocket'&&nv.pace&&nv.pace!==1?{voice_speed:nv.pace}:{})}:{};   /* studio: the Studio voice's pace */
 // ---- studio: Long video (plugins/studio, the long-video skill). One prompt in, a 2 to 10 minute video out: researched,
 // narrated, a new shot every few seconds (found footage, free pictures, graphics), with thumbnails and a publishing kit.
 function longSide(){
@@ -1634,13 +1635,14 @@ function longSide(){
     <div class="sec"><div class="h">What it shows</div><div style="display:flex;flex-direction:column;gap:8px">
       ${tick('youtube','Footage found on YouTube','A few seconds each from other people\'s videos, listed in your publishing kit. Publishing them is your call.')}
       ${tick('photos','Free pictures','From Wikimedia Commons and Openverse: free to reuse, credited in the kit.')}
+      ${(S.keys.pexels||{}).set||(S.keys.pixabay||{}).set?tick('licensed','Licensed stock first','For a monetised channel: Pexels and Pixabay footage is tried before YouTube for every shot.'):''}
       ${aiOn()?tick('ai','AI-generated shots','A few shots made by '+aiName()+' for what nobody filmed. Each one spends credits on your account there; Claude tells you how many first.'):`<div class="sub" style="font-size:13px;line-height:18px">AI-generated shots: <button class="hlink" style="font-size:13px" onclick="rgo('settings')">connect Runway, Google or Higgsfield in Settings</button> to use them.</div>`}
       <div class="sub" style="font-size:13px;line-height:18px">Charts, lists, quotes and big numbers are always made from the script.</div></div></div>
     <div class="sec"><div class="h">Your own clips <span class="muted">(optional)</span></div>
       <input class="input" style="height:38px;min-height:38px;padding:0 10px;font-family:inherit" placeholder="A folder's path, like ~/Movies/my-broll" value="${esc(P.own)}" oninput="nv.long.own=this.value"></div>
     <div class="sec"><div class="h">Include</div><div style="display:flex;flex-direction:column;gap:8px">
       ${tick('caption','Captions','Every word, as it is said.')}
-      ${tick('music','Music and sound','Music made for this video, and a quiet sound on the cuts.')}
+      ${tick('music','Music and sound','A real track chosen for this video, kept quiet under the voice, and a sound where something lands.')}
 </div></div>
     ${P.voiceover.trim()?'':voiceSec()}
     <div class="sec"><div class="h">Your own voiceover <span class="muted">(optional)</span></div>
@@ -1655,7 +1657,7 @@ const AIK=['runway','higgsfield','gemini'],aiOn=()=>AIK.some(k=>(S.keys[k]||{}).
 function longReady(){const b=$('#make');if(b)b.disabled=nv.long.text.trim().length<8&&!nv.long.voiceover.trim()}
 async function makeLong(){
   const P=nv.long,b=$('#make');if(b)b.disabled=true;
-  const r=await post('/job',{type:'longvideo',quality:P.quality||'1080',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,text:!!P.caption,music:!!P.music,own:P.own.trim(),ai:!!P.ai&&aiOn(),voiceover:P.voiceover.trim(),...voiceBody()});
+  const r=await post('/job',{type:'longvideo',quality:P.quality||'1080',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,licensed:!!P.licensed,text:!!P.caption,music:!!P.music,own:P.own.trim(),ai:!!P.ai&&aiOn(),voiceover:P.voiceover.trim(),...voiceBody()});
   if(!r._ok){nv.long.msg=r.msg||r.error||'That did not work.';render();return}
   nv.long=null;await load();toEditor(r);
 }
@@ -2893,7 +2895,7 @@ function stHelp(k){
 }
 // ---- Settings: keys (each with its own status and a little of its brand colour), updates, the videos folder, the theme
 const KLT={elevenlabs:'var(--soft)',gemini:'color-mix(in srgb,#9168C0 14%,var(--skbg))'};
-const KDS={openai:'Makes a picture when no real one exists, for Long video',pixabay:'Stock clips and pictures with no logos, for Long video',pexels:'Stock clips and pictures with no logos, for Long video',runway:'A few seconds of generated video for a shot nobody filmed',higgsfield:'A found picture brought to life as a moving shot',elevenlabs:'Exact words, so the cut finds your retakes',gemini:"Reads a creator's look when it analyses them",zernio:'Does the posting for cooked.'};
+const KDS={huggingface:'A free account, only so the Studio voice can copy your own voice',openai:'Makes a picture when no real one exists, for Long video',pixabay:'Stock clips and pictures with no logos, for Long video',pexels:'Stock clips and pictures with no logos, for Long video',runway:'A few seconds of generated video for a shot nobody filmed',higgsfield:'A found picture brought to life as a moving shot',elevenlabs:'Exact words, so the cut finds your retakes',gemini:"Reads a creator's look when it analyses them",zernio:'Does the posting for cooked.'};
 const OKTICK=ic('check',14,2.6);
 function stKey(k){
   const st=S.keys[k.id]||{},u=ui.keys[k.id]||{},c=st.check,editing=u.edit||!st.set;

@@ -53,7 +53,7 @@ import streamclips  # noqa: E402  (yt-dlp, the cover image)
 
 MEDIA = ("clip", "stock", "photo", "own", "ai", "bite")
 MAX_AI = 6                # AI-generated shots a video: each one is paid for on the user's own account
-GRAPHICS = ("title", "stat", "bars", "list", "quote", "source", "tier", "paper", "word", "versus", "timeline", "place", "line")
+GRAPHICS = ("title", "stat", "bars", "list", "quote", "source", "tier", "paper", "word", "versus", "timeline", "place", "line", "map", "layers")
 TIER_COLOURS = {"S": "#FF5A5F", "A": "#FF9F43", "B": "#FFD24A", "C": "#5AD17E", "D": "#4D9FFF", "E": "#9B7BFF", "F": "#8B93A1"}
 MAXH = 1080               # the tallest footage fetched; 2160 for a 4K video (brief "quality": "4k")
 MAX_IMAGES = 8            # pictures made by the user's AI image tool a video: each is paid for on their own account
@@ -63,7 +63,7 @@ NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("
          "title": ("text",), "stat": ("value", "label"),
          "bars": ("items",), "list": ("items",), "quote": ("text",), "source": ("title", "highlight"),
          "tier": ("tiers",), "paper": ("title", "highlight"), "chart3d": ("items",),
-         "word": ("text",), "versus": ("items",), "timeline": ("events",), "place": ("text",), "line": ("points",)}
+         "word": ("text",), "versus": ("items",), "timeline": ("events",), "place": ("text",), "line": ("points",), "map": ("points",), "layers": ("items",)}
 MIN_SHOT_S = 1.2          # a shot shorter than this is dropped: the line's other shots take its time
 PACE_S = 3.4              # more than this a shot on average reads as slow (edited channels change picture every 1.5 to 2.5 s)
 DISPLAY = "Anton"         # the condensed capitals of titles, numbers and labels; everything else is the renderer's sans
@@ -94,7 +94,7 @@ def check(edit):
                 errs.append(f"scene {s.get('id')} shot {k}: kind must be one of {', '.join(NEEDS)}")
                 continue
             ov = sh.get("over")
-            if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat", "ring", "clip", "stamp"))):
+            if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat", "ring", "clip", "stamp", "count"))):
                 errs.append(f"scene {s.get('id')} shot {k}: \"over\" goes on footage or a picture and has a label, a name, a stat, a ring, a clip or a stamp")
             for f in NEEDS[kind]:
                 if not sh.get(f):
@@ -111,6 +111,12 @@ def check(edit):
             if kind == "line" and not (isinstance(sh.get("points"), list) and 3 <= len(sh["points"]) <= 12 and all(
                     isinstance(i, list) and len(i) == 2 and isinstance(i[1], (int, float)) for i in sh["points"])):
                 errs.append(f"scene {s.get('id')} shot {k} (line): \"points\" is 3 to 12 [\"label\", number]")
+            if kind == "map" and not (isinstance(sh.get("points"), list) and 1 <= len(sh["points"]) <= 5 and all(
+                    isinstance(i, list) and len(i) == 3 and all(isinstance(v, (int, float)) for v in i[1:]) and -90 <= i[1] <= 90 and -180 <= i[2] <= 180
+                    for i in sh["points"])):
+                errs.append(f"scene {s.get('id')} shot {k} (map): \"points\" is 1 to 5 [\"name\", latitude, longitude]")
+            if kind == "layers" and not (isinstance(sh.get("items"), list) and 2 <= len(sh["items"]) <= 5):
+                errs.append(f"scene {s.get('id')} shot {k} (layers): 2 to 5 items, top first; each a name or [\"name\", \"note\"]")
             if kind == "word" and len(str(sh.get("text") or "").split()) > 3:
                 errs.append(f"scene {s.get('id')} shot {k} (word): one to three words")
             if kind in ("bars", "list", "chart3d") and not (isinstance(sh.get("items"), list) and 2 <= len(sh["items"]) <= 6):
@@ -1046,6 +1052,11 @@ def cmd_find(edit, only=None):
             if got is None:
                 got = fetch_clip(edit, key, sh, need, w, h, used) if (studio.brief_of(edit).get("footage") or {}).get("youtube", True) \
                     else {"missing": "stock footage needs a Pexels key (longvideo.py setkey), and YouTube footage is off"}
+        elif sh["kind"] == "clip" and (studio.brief_of(edit).get("footage") or {}).get("licensed_first"):
+            # for a monetised channel: licensed stock (Pexels, Pixabay) is tried before a few seconds of someone's YouTube video
+            got = fetch_stock(edit, key, sh, need, w, h)
+            if got is None or got.get("missing"):
+                got = fetch_clip(edit, key, sh, need, w, h, used)
         else:
             got = fetch_clip(edit, key, sh, need, w, h, used) if sh["kind"] == "clip" else \
                 fetch_photo(edit, key, sh, w, h) if sh["kind"] == "photo" else fetch_own(edit, key, sh, need, w, h)
@@ -1076,6 +1087,18 @@ def cmd_find(edit, only=None):
                    if isinstance(got.get("match"), float) and got["match"] < WEAK_MATCH else "") +
                   (f"PICTURE {key}: {got['instead']}. " if got.get("instead") else "") +
                   f"{key}: {got.get('title') or got.get('file')}"[:110])
+    # measured on a real video: 17 of 48 shots missed with four searches running at once and all 17 were found when asked
+    # again (the video sites slow a burst of requests). So what is missing is asked for once more, one at a time.
+    again = [sp for sp in todo if (db.get(sp["key"]) or {}).get("missing") and sp["shot"]["kind"] not in ("bite", "own")]
+    if again and len(again) < len(todo):
+        import time
+        print(f"asking again for {len(again)} shot(s), one at a time", flush=True)
+        for sp in again:
+            time.sleep(1.5)
+            key, got = one(sp)
+            db[key] = got
+            jsave(edit / "shots.json", db)
+            print(f"MISSING {key}: {got.get('query')} ({got['missing']})" if got.get("missing") else f"found on the second ask: {key}", flush=True)
     keys = {sp["key"] for sp in spans(edit)}
     for k in [k for k in db if k not in keys]:          # a shot the script no longer has
         if db[k].get("file"):
@@ -1652,6 +1675,24 @@ def tw(text, size, weight=700):
     return len(str(text)) * size * 0.56
 
 
+def world_map(edit):
+    """The world as a dark plate in the video's own look: EDIT/shots/_worldmap.png, the whole globe edge to edge, 2:1
+    (templates/worldmap.png is the land, from the public-domain Natural Earth, 1:50m land and country lines)."""
+    out = Path(edit) / "shots" / "_worldmap.png"
+    if out.is_file():
+        return out
+    try:
+        import numpy as np
+        from PIL import Image
+        land = np.asarray(Image.open(Path(__file__).resolve().parents[1] / "templates" / "worldmap.png").convert("L"), dtype=np.float32)[..., None] / 255.0
+        g = np.array([int(LOOK["ground"][i:i + 2], 16) for i in (1, 3, 5)], dtype=np.float32)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        Image.fromarray((g + land * 34).clip(0, 255).astype("uint8")).save(out)
+        return out
+    except Exception:   # noqa: BLE001
+        return None
+
+
 def graphic(S, sh, a, b, W, H, look):
     """One motion graphic as scene items on the Graphics tracks, between a and b. Everything stays above the
     captions (the bottom fifth of the frame)."""
@@ -1878,6 +1919,52 @@ def graphic(S, sh, a, b, W, H, look):
             T(str(pts[i][0]), 0.2, x=P[i][0], y=y0 + s * 0.05, w=int(W * 0.2), size=int(s * 0.03), weight=600, color=ink, opacity=0.7)
         if sh.get("source"):
             T("Source: " + sh["source"], 0.3, x=W / 2, y=H * 0.79, w=int(W * 0.8), size=int(s * 0.026), weight=500, color=ink, opacity=0.6)
+    elif kind == "map":         # where on Earth: the world as a dark plate, the camera easing toward the places, each pinned in turn
+        pts = [(str(n), float(la), float(lo)) for n, la, lo in sh["points"][:5]]
+        clat, clon = sum(p[1] for p in pts) / len(pts), sum(p[2] for p in pts) / len(pts)
+        spread = max([abs(q[2] - clon) for q in pts] + [abs(q[1] - clat) * 2 for q in pts] + [1.0])
+        z = max(1.15 if W >= H else 3.6, min(3.2 if W >= H else 5.0, 110.0 / (spread + 18.0)))                # one city: close in; two continents: the whole map
+        mw, mh = W * z, W * z / 2
+        mx0, my0 = W / 2 - (clon + 180) / 360 * mw, H * 0.47 - (90 - clat) / 180 * mh
+        mx0 = min(0.0, max(W - mw, mx0))
+        my0 = min(0.0, max(H - mh, my0)) if mh >= H else (H - mh) / 2      # the plate always fills the frame's height when it can
+        f = world_map(getattr(S, "edit", None)) if getattr(S, "edit", None) else None
+        if f:
+            S.image(f"shots/{f.name}", a, b, track="Graphics bg", x=mx0 + mw / 2, y=my0 + mh / 2, w=mw, h=mh,
+                    anim={"in": "fade", "out": "none", "dur": 0.3}, keys={"scale": [[0, 0.94, "out"], [min(1.2, d * 0.5), 1.0, "out"], [d, 1.02, "linear"]]})
+        if sh.get("title"):
+            T(str(sh["title"]).upper(), 0, x=W / 2, y=H * 0.1, w=int(W * 0.86), size=int(s * 0.085), font=DISPLAY, weight=400, color=ink, anim=up)
+        for i, (name, la_, lo_) in enumerate(pts):
+            px, py = mx0 + (lo_ + 180) / 360 * mw, my0 + (90 - la_) / 180 * mh
+            t0 = min(max(0.0, d - 0.4), 0.7 + i * min(0.7, d * 0.5 / len(pts)))
+            dot = s * 0.022
+            S.shape(a + t0, b, track="Graphics", x=px, y=py, w=dot * 3.2, h=dot * 3.2, radius=dot * 1.6, fill="#FFFFFF00", stroke={"color": acc, "width": max(2, int(s * 0.003))},
+                    anim={"in": "fade", "out": "none", "dur": 0.2}, keys={"scale": [[0, 0.3, "out"], [0.5, 1.0, "out"], [max(0.6, d - t0), 1.25, "linear"]]})
+            S.shape(a + t0, b, track="Graphics top", x=px, y=py, w=dot, h=dot, radius=dot / 2, fill=acc, anim=pop)
+            ls = s * 0.036
+            side = -1 if px > W * 0.7 else 1
+            (left if side > 0 else right)(name.upper(), t0 + 0.1, px + side * dot * 2.2, py, ls, W * 0.3, weight=800, color=ink, anim=pop,
+                                          shadow={"blur": 14, "y": 3, "opacity": 0.8}, track="Graphics top")
+    elif kind == "layers":      # what a thing is made of: plates that come apart, the top one first, each named at its side
+        items = [(i if isinstance(i, list) else [i, ""]) for i in sh["items"][:5]]
+        if sh.get("title"):
+            T(str(sh["title"]).upper(), 0, x=W / 2, y=H * 0.1, w=int(W * 0.86), size=int(s * 0.085), font=DISPLAY, weight=400, color=ink, anim=up)
+        n_, pw_, ph_ = len(items), W * 0.34, s * 0.1
+        cx, top_, bot_ = W * 0.36, H * 0.26, H * 0.72
+        gap_ = (bot_ - top_) / max(1, n_ - 1)
+        mid = (top_ + bot_) / 2
+        for i, (name, note) in enumerate(items):
+            y1, y0 = top_ + i * gap_, mid + (i - (n_ - 1) / 2) * ph_ * 0.5       # closed: a tight stack; open: spread down the frame
+            last = bool(sh.get("mark") is not None and int(sh.get("mark") or 0) == i + 1)
+            t_open = min(0.9, d * 0.35)
+            S.shape(a, b, track="Graphics", x=cx, y=y1, w=pw_ * (1 - 0.05 * i), h=ph_, radius=s * 0.014, fill=acc if last else "#FFFFFF", opacity=0.95 if last else max(0.16, 0.5 - 0.09 * i),
+                    stroke={"color": "#FFFFFF55", "width": 2}, shadow={"blur": 30, "y": 14, "opacity": 0.5}, anim={"in": "fade", "out": "none", "dur": 0.25},
+                    keys={"y": [[0, y0, "out"], [0.25, y0, "out"], [0.25 + t_open, y1, "out"]]})
+            t0 = min(max(0.0, d - 0.4), 0.3 + t_open + i * 0.12)
+            S.shape(a + t0, b, track="Graphics", x=cx + pw_ / 2 + W * 0.045, y=y1, w=W * 0.06, h=max(2, s * 0.003), fill=ink, opacity=0.5, keys={"w": [[0, 2, "out"], [0.25, W * 0.06, "out"]]})
+            left(str(name), t0 + 0.1, cx + pw_ / 2 + W * 0.085, y1 - (s * 0.018 if note else 0), s * 0.042, W * 0.34, weight=800, color=acc if last else ink, anim=up)
+            if note:
+                left(str(note), t0 + 0.18, cx + pw_ / 2 + W * 0.085, y1 + s * 0.026, s * 0.024, W * 0.34, weight=500, color=ink, opacity=0.65, anim={"in": "fade", "out": "none", "dur": 0.2})
     elif kind == "source":
         pw, ph = W * 0.7, H * 0.68
         S.shape(a, b, track="Graphics", x=W / 2, y=H * 0.4, w=pw, h=ph, radius=s * 0.012, fill="#F7F4EC",
@@ -1946,6 +2033,28 @@ def overlay(S, ov, a, z, W, H, look):
             nt = s * 0.019
             S.text(mono(ov["note"]), a + 0.26, hold, track="Graphics", x=x0 + min(cw * 0.9, tw(mono(ov["note"]), nt, 600)) / 2, y=cy + chh / 2 - s * 0.045, w=int(cw * 0.92),
                    size=int(nt), weight=600, color="#FFFFFF", opacity=0.6, align="left", anim={"in": "fade", "out": "fade", "dur": 0.2})
+    if isinstance(ov.get("count"), dict):      # a number running on the footage, lower left: an altitude climbing, a price, a year
+        c = ov["count"]
+        v0, v1 = float(c.get("from") or 0), float(c.get("to") or 0)
+        unit, cs = str(c.get("unit") or ""), s * 0.15
+        run = max(0.6, min(d - 0.5, float(c.get("seconds") or 1.6)))
+        steps = max(4, min(22, int(run / 0.07)))
+        fm = (lambda v: f"{v:,.0f}") if abs(v1) >= 100 or float(v1).is_integer() and float(v0).is_integer() else (lambda v: f"{v:,.1f}")
+        x0, y = W * 0.06, H * 0.66
+        wmax = anton_w(fm(v1), cs)
+        for i in range(steps + 1):
+            k = 1 - (1 - i / steps) ** 2.2
+            t0, t1 = a + 0.15 + run * i / steps, (a + 0.15 + run * (i + 1) / steps) if i < steps else hold
+            txt = fm(v0 + (v1 - v0) * k)
+            S.text(txt, t0, t1, track="Graphics", x=x0 + wmax - anton_w(txt, cs) / 2, y=y, w=int(W * 0.6), size=int(cs), font=DISPLAY, weight=400, color="#FFFFFF", shadow=sh,
+                   anim={"in": "pop", "out": "none", "dur": 0.16} if i == 0 else ({"in": "none", "out": "fade", "dur": 0.2} if i == steps else None))
+        if unit:
+            S.text(unit.upper(), a + 0.15, hold, track="Graphics", x=x0 + wmax + s * 0.02 + tw(unit.upper(), cs * 0.3, 700) / 2, y=y + cs * 0.22, w=int(W * 0.3), size=int(cs * 0.3),
+                   weight=700, color=look["accent"], align="left", shadow=sh, anim={"in": "fade", "out": "fade", "dur": 0.2})
+        if c.get("label"):
+            lb = mono(c["label"])
+            S.text(lb, a + 0.2, hold, track="Graphics", x=x0 + tw(lb, s * 0.02, 600) / 2, y=y - cs * 0.62, w=int(W * 0.5), size=int(s * 0.02), weight=600, color="#FFFFFF", opacity=0.75,
+                   align="left", shadow=sh, anim={"in": "fade", "out": "fade", "dur": 0.2})
     if ov.get("stamp"):         # a verdict stamped on the picture, a little turned: SOLVED, FALSE, CONFIRMED
         st = str(ov["stamp"]).upper()[:14]
         size = min(s * 0.11, W * 0.34 / max(1.0, anton_w(st, 1.0)))
@@ -2152,8 +2261,18 @@ def cmd_thumbs(edit, title):
             scored.append((first + min(1.0, cv2.Laplacian(g, cv2.CV_64F).var() / 600.0) + 0.5 * (1 - abs(float(g.mean()) - 125) / 125), fr))
     out = edit / "exports"
     out.mkdir(exist_ok=True)
+    # of the eight sharpest, the ones a thumbnail can be built on come first: a face, or one thing that stands clear of its ground
+    faces = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml") if hasattr(cv2, "CascadeClassifier") and hasattr(cv2, "data") else None
+    cand = []
+    for sc_, fr in sorted(scored, key=lambda x: -x[0])[:8]:
+        im = Image.fromarray(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB))
+        cut = thumbs.cutout(im)
+        _, fill = thumbs.subject_box(cut) if cut is not None else (None, 0.0)
+        g = cv2.cvtColor(cv2.resize(fr, (480, int(480 * fr.shape[0] / fr.shape[1]))), cv2.COLOR_BGR2GRAY)
+        face = faces is not None and len(faces.detectMultiScale(g, 1.2, 5, minSize=(60, 60))) > 0
+        cand.append((sc_ + (1.0 if 0.06 <= fill <= 0.55 else 0.0) + (0.8 if face else 0.0), fr))
     made, used = [], []
-    for i, (_, fr) in enumerate(sorted(scored, key=lambda x: -x[0])[:3], 1):
+    for i, (_, fr) in enumerate(sorted(cand, key=lambda x: -x[0])[:3], 1):
         im = Image.fromarray(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB))
         used.append(thumbs.make(im, words, out / f"thumbnail-{i}.jpg", layout=thumbs.LAYOUTS[(i - 1) % 3], accent=LOOK["accent"], mark=tj.get("mark")))
         made.append(f"thumbnail-{i}.jpg")

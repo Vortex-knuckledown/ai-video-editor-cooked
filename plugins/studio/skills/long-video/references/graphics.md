@@ -74,4 +74,13 @@ number or a name, never a sentence. No yellow headline cards one after another.
   KEY FINDING card arrives beside it, after the line is marked.
 - **`over: {"stamp": "CONFIRMED"}`**: a verdict stamped on footage or a picture, a little turned, in the accent.
   One or two words. For the moment a question in the video is settled, not for decoration.
+- **`map`**: where on Earth. `{"kind": "map", "title": "The polar route", "points": [["London", 51.5, -0.12],
+  ["Tokyo", 35.68, 139.69]]}`: 1 to 5 places as `["name", latitude, longitude]` (decimal degrees, south and west
+  negative, from a source). The world is a dark plate; the camera comes in close for one city and stays wide for two
+  continents; each place is pinned in turn.
+- **`layers`**: what a thing is made of, as plates that come apart. `{"kind": "layers", "title": "The atmosphere",
+  "items": [["Stratosphere", "calm, thin, very cold"], ["Tropopause", "the lid"], ["Troposphere", "all the
+  weather"]], "mark": 2}`: 2 to 5 items, top first, each a name or `["name", "note"]`; `mark` is the one in the accent.
+- **`over: {"count": {"from": 0, "to": 35000, "unit": "ft", "label": "altitude"}}`**: a number running on the
+  footage, lower left: a height climbing, a price, a year. `seconds` sets how long it runs (default 1.6).
 

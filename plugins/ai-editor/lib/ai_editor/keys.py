@@ -37,11 +37,12 @@ def key_file():
     return Path(home) / ".env" if home else KEY_FILE
 VARS = {"gemini": "GEMINI_API_KEY", "elevenlabs": "ELEVENLABS_API_KEY", "zernio": "ZERNIO_API_KEY",
         # fork: the studio plugin's connections (stock footage, AI-generated shots). Higgsfield's is "key id:key secret".
-        "pexels": "PEXELS_API_KEY", "runway": "RUNWAYML_API_SECRET", "higgsfield": "HIGGSFIELD_API_KEY", "pixabay": "PIXABAY_API_KEY", "openai": "OPENAI_API_KEY"}
+        "pexels": "PEXELS_API_KEY", "runway": "RUNWAYML_API_SECRET", "higgsfield": "HIGGSFIELD_API_KEY", "pixabay": "PIXABAY_API_KEY", "openai": "OPENAI_API_KEY",
+        "huggingface": "HF_TOKEN"}   # fork: only to copy the user's own voice (the Studio voice's cloning model is behind a free sign-in)
 # The fixed start of each vendor's key, checked before any request. Google keys start with AQ. or AIza
 # (creator-teardown references/setup.md). ElevenLabs' older keys have none.
 PREFIX = {"gemini": ("AIza", "AQ.")}   # AI Studio issues AQ. keys since mid-2026; older keys start AIza
-NAMES = {"gemini": "Gemini", "elevenlabs": "ElevenLabs", "zernio": "Zernio", "pexels": "Pexels", "runway": "Runway", "higgsfield": "Higgsfield", "pixabay": "Pixabay", "openai": "OpenAI"}
+NAMES = {"gemini": "Gemini", "elevenlabs": "ElevenLabs", "zernio": "Zernio", "pexels": "Pexels", "runway": "Runway", "higgsfield": "Higgsfield", "pixabay": "Pixabay", "openai": "OpenAI", "huggingface": "Hugging Face"}
 
 
 def get(name):
@@ -155,6 +156,8 @@ def verify(name, key):
         code, body = _get("https://api.higgsfield.ai/requests/00000000-0000-0000-0000-000000000000/status", {"Authorization": f"Key {key}"})
         if code not in (0, 401, 403):
             code = 200
+    elif name == "huggingface":   # fork: whose token it is, free
+        code, body = _get("https://huggingface.co/api/whoami-v2", {"Authorization": f"Bearer {key}"})
     elif name == "openai":   # fork: the list of models, free
         code, body = _get("https://api.openai.com/v1/models", {"Authorization": f"Bearer {key}"})
     elif name == "zernio":   # the posting key (post.py): listing the connected accounts is free

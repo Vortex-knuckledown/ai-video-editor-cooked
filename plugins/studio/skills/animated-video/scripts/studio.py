@@ -423,11 +423,39 @@ def cmd_pocket_setup():
     return 0 if pocket_ready() else 1
 
 
-def tts_pocket(text, out, voice):
+def my_voice():
+    """The user's own voice sample (Settings > Connections > Voice), which the Studio voice copies. A path that may not exist."""
+    return pocket_py().parents[2] / "voices" / "mine.wav"
+
+
+def pronounce(text):
+    """The text as it should be SPOKEN: ~/.ai-video-editor/pronounce.json maps a word or name to how to say it
+    ({"Kyutai": "cue tie", "GIF": "jif"}). Whole words, any case. The script and the captions keep the real spelling."""
+    try:
+        m = json.loads((pocket_py().parents[2] / "pronounce.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return text
+    for k, v in (m.items() if isinstance(m, dict) else []):
+        if k and isinstance(v, str):
+            text = re.sub(r"(?<!\w)" + re.escape(str(k)) + r"(?!\w)", v, text, flags=re.I)
+    return text
+
+
+def tts_pocket(text, out, voice, speed=1.0):
     """One line in a Pocket voice. `voice`: a catalogue name, or a recording's path to copy the voice of."""
     if not _POCKET or _POCKET[0].poll() is not None:
+        import os
+        env = dict(os.environ)
+        try:                    # only copying a voice needs it: the user's own free Hugging Face token, from Settings
+            use_editor()
+            from ai_editor import keys
+            tok = keys.get("huggingface")[0]
+            if tok:
+                env["HF_TOKEN"] = tok
+        except Exception:   # noqa: BLE001
+            pass
         _POCKET[:] = [subprocess.Popen([str(pocket_py()), str(Path(__file__).with_name("pocket_say.py"))], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                       stderr=subprocess.DEVNULL, text=True)]
+                                       stderr=subprocess.DEVNULL, text=True, env=env)]
         if not json.loads(_POCKET[0].stdout.readline() or "{}").get("ready"):
             raise RuntimeError("the Pocket voice did not start")
     raw = Path(out).with_suffix(".p.wav")
@@ -436,7 +464,11 @@ def tts_pocket(text, out, voice):
     got = json.loads(_POCKET[0].stdout.readline() or '{"error": "no answer"}')
     if not got.get("ok"):
         raise RuntimeError(got.get("error") or "the Pocket voice failed")
-    to_wav(raw, out)
+    sp = max(0.75, min(1.3, float(speed or 1.0)))
+    if abs(sp - 1.0) >= 0.02:   # the model has no pace of its own: the same voice, stretched without changing its pitch
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-af", f"atempo={sp:.3f}", "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", str(out)], check=True)
+    else:
+        to_wav(raw, out)
     raw.unlink()
 
 
@@ -451,6 +483,10 @@ def cmd_preview(engine, voice, out):
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     if engine == "edge" and voice in [v[0] for v in EDGE_VOICES] and edge_ready():
         tts_edge(PREVIEW_LINE, out, voice)
+        print(out)
+        return 0
+    if engine == "pocket" and voice.startswith("mine") and pocket_ready() and my_voice().is_file():
+        tts_pocket(PREVIEW_LINE, out, str(my_voice()))
         print(out)
         return 0
     if engine == "pocket" and voice in [v[0] for v in POCKET_VOICES] and pocket_ready():
@@ -555,7 +591,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
     if not voice and str(b.get("voice_id") or "").strip():
         vid = str(b["voice_id"]).strip()
         if (eng == "kokoro" and vid in KOKORO_VOICES) or (eng == "eleven" and want == "eleven" and re.fullmatch(r"[A-Za-z0-9]{12,40}", vid)) \
-                or (eng == "edge" and vid in [v[0] for v in EDGE_VOICES]) or (eng == "pocket" and vid in [v[0] for v in POCKET_VOICES]):
+                or (eng == "edge" and vid in [v[0] for v in EDGE_VOICES]) or (eng == "pocket" and (vid in [v[0] for v in POCKET_VOICES] or vid == "mine")):
             voice = vid
     like = jload(edit / "like" / "like.json", {}) if b.get("like") else {}
     if fit is None and like:
@@ -565,7 +601,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
         out_d = []
         for s in scenes:
             out = edit / "audio" / f"vo-{s['id']}.wav"
-            text = str(s["say"]).strip()
+            text = pronounce(str(s["say"]).strip())
             stamp = edit / "audio" / f"vo-{s['id']}.txt"
             want = f"{eng}|{voice}|{text}" + (f"|r{rate}" if rate else "")
             bite = edit / "audio" / f"bite-{s['id']}.wav"       # a sound bite (long-video): the person's own words are the voice
@@ -588,15 +624,18 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
                     tts_kokoro(text, out, voice or KOKORO_VOICE, (rate or 100) / 100.0)
                 elif eng == "pocket":       # brief "voice_sample": a recording in the edit folder to copy the voice of
                     sample = edit / str(b.get("voice_sample") or "-")
+                    if voice == "mine" and not sample.is_file() and b.get("voice_sample") != "":
+                        sample = my_voice()
+                    pv = POCKET_VOICE if voice in (None, "mine") else voice
                     try:
-                        tts_pocket(text, out, str(sample) if sample.is_file() else (voice or POCKET_VOICE))
+                        tts_pocket(text, out, str(sample) if sample.is_file() else pv, (rate or 100) / 100.0)
                     except RuntimeError as e:
                         if not sample.is_file():
                             raise
-                        print(f"note: could not copy the voice in {sample.name} ({str(e)[:90]}); using {POCKET_VOICE}. Copying a voice needs the "
-                              "user's own Hugging Face login with the model's terms accepted (huggingface.co/kyutai/pocket-tts).")
+                        print(f"note: could not copy the voice in {sample.name} ({str(e)[:90]}); using {pv}. Copying a voice needs the user's own free "
+                              "Hugging Face token in Settings, with the model's terms accepted at huggingface.co/kyutai/pocket-tts.")
                         b["voice_sample"] = ""
-                        tts_pocket(text, out, voice or POCKET_VOICE)
+                        tts_pocket(text, out, pv, (rate or 100) / 100.0)
                 else:
                     tts_mac(text, out, voice or MAC_VOICE, rate)
                 stamp.write_text(want, encoding="utf-8")
@@ -614,9 +653,14 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
             if abs(sum(vds) - want) > 0.05 * want:        # say's own pace differs a voice to a voice: one correction
                 rate = max(round(MAC_RATE * SLOWEST * 0.9), round(rate * sum(vds) / want))
                 vds = speak(rate)
-        elif eng in ("kokoro", "edge") and fit:   # these take a speed: slower when short, a little faster when long
+        elif eng in ("kokoro", "edge", "pocket") and (fit or b.get("voice_speed")):   # these take a speed: slower when short, a little faster when long
             total = LEAD_S + sum(vds) + len(scenes) * TAIL_S
-            speed = round(max(SLOWEST + 0.05, min(1.12, total / fit if total > fit else sum(vds) / (fit * 0.9))), 2)
+            speed = round(max(SLOWEST + 0.05, min(1.12, total / fit if total > fit else sum(vds) / (fit * 0.9))), 2) if fit else 1.0
+            if b.get("voice_speed"):        # the user's own pace for the narrator (0.8 slow to 1.25 fast) wins
+                try:
+                    speed = round(max(0.8, min(1.25, float(b["voice_speed"]))), 2)
+                except (TypeError, ValueError):
+                    pass
             if abs(speed - 1.0) >= 0.03:
                 vds = speak(round(100 * speed))
             else:

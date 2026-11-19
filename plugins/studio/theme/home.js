@@ -247,13 +247,24 @@
   var pocket = { d: null, at: 0 };
   function pocketLoad() { pocket.at = Date.now(); get('/studio/pocket').then(function (d) { var was = JSON.stringify(pocket.d); pocket.d = d; if (was !== JSON.stringify(d)) { if (d.ready && typeof VO !== 'undefined') VO = null; redraw(); } if (d.busy) setTimeout(pocketLoad, 4000); }).catch(function () {}); }
   window.studioPocket = function () { pocket.d = { ready: false, busy: true }; redraw(); send('/studio/pocket', {}).then(function () { setTimeout(pocketLoad, 3000); }); };
+  window.studioMyVoice = function (f) {
+    if (!f) return;
+    pocket.up = true; pocket.msg = ''; redraw();
+    fetch('/studio/myvoice', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }, body: f }).then(function (r) { return r.json(); })
+      .then(function (r) { pocket.up = false; pocket.msg = r.ok ? '' : (r.msg || 'That did not save.'); if (typeof VO !== 'undefined') VO = null; pocketLoad(); redraw(); })
+      .catch(function () { pocket.up = false; pocket.msg = 'That did not save.'; redraw(); });
+  };
   function pocketConn() {
     if (!pocket.d || Date.now() - pocket.at > 30000) pocketLoad();
     var d = pocket.d || {};
     var pill = d.ready ? '<span class="fw-pill ok">Installed</span>' : d.busy ? '<span class="fw-pill">Installing…</span>' : '<span class="fw-pill">Not installed</span>';
-    return '<div class="fw-int' + (d.ready ? ' is-on' : '') + '"><div class="fw-int-top"><span class="fw-int-logo"><b>S</b></span>' +
+    var mine = !d.ready ? '' : '<div class="fw-int-body"><div class="fw-mine"><div><b>Your own voice</b><span>' +
+      (pocket.msg ? esc(pocket.msg) : d.mine ? (d.hf ? 'Saved. Pick "My voice" under Studio when you make a video.' : 'Sample saved. One step left: connect Hugging Face below (free).')
+        : 'Add 10 to 30 seconds of yourself speaking clearly, and the narrator speaks in your voice. It stays on this computer.') + '</span></div>' +
+      '<label class="b2 s" style="cursor:pointer">' + (pocket.up ? 'Saving…' : d.mine ? 'Replace' : 'Add a recording') + '<input type="file" accept="audio/*,video/*" style="display:none" onchange="studioMyVoice(this.files[0])"></label></div></div>';
+    return '<div class="fw-int' + (d.ready ? ' is-on open' : '') + '"><div class="fw-int-top"><span class="fw-int-logo"><b>S</b></span>' +
       '<div class="fw-int-tx"><b>Studio voice</b><span>21 natural narrators that run on this computer: free, offline, nothing sent anywhere. About 1 GB, once.</span></div></div>' +
-      '<div class="fw-int-foot">' + pill + (d.ready || d.busy ? '' : '<button class="b1 s" onclick="studioPocket()">Install</button>') + '</div></div>';
+      '<div class="fw-int-foot">' + pill + (d.ready || d.busy ? '' : '<button class="b1 s" onclick="studioPocket()">Install</button>') + '</div>' + mine + '</div>';
   }
   window.studioSettingsView = function () {
     var by = {}; KEYS.concat(STUDIO_KEYS).forEach(function (k) { by[k.id] = k; });
@@ -266,7 +277,7 @@
       },
       connections: function () {
         return '<div class="fw-sec-h"><h2>Connections</h2><p>Optional services that make videos better. Each is your own account with that service; keys stay on this computer.</p></div>' +
-          group('Voice', 'The narrator', pocketConn() + pick(['elevenlabs'])) +
+          group('Voice', 'The narrator', pocketConn() + pick(['huggingface', 'elevenlabs'])) +
           group('Footage and pictures', 'For long videos', pick(['pixabay', 'pexels'])) +
           group('AI video', 'Generated shots, charged by each service', pick(['gemini', 'runway', 'higgsfield'])) +
           group('Rendering', 'Where the video is made', modalConn());
