@@ -47,14 +47,17 @@ func sh(_ args: [String], env: [String: String]? = nil, cwd: String? = nil, onLi
 
 let SETUP_HTML = """
 <!doctype html><html><head><meta charset="utf-8"><style>
-:root{color-scheme:dark}body{margin:0;background:#101012;color:#eee;font:15px/1.5 -apple-system,BlinkMacSystemFont,sans-serif;
+:root{color-scheme:dark}body{margin:0;color:#F2F4F8;font:14.5px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+background:radial-gradient(900px 480px at 50% -160px,rgba(61,123,255,.18),transparent 70%),#0A0B0E;
 display:flex;align-items:center;justify-content:center;height:100vh}
-main{width:520px}h1{font-size:30px;margin:0 0 4px}p{color:#a5a5ad;margin:0 0 22px}
-.r{display:flex;justify-content:space-between;gap:16px;padding:12px 16px;background:#1a1a1e;border:1px solid #2a2a30;border-radius:10px;margin-bottom:8px}
-.r b{font-weight:600}.r span{color:#9a9aa2;text-align:right}.ok span{color:#5fd38d}.bad span{color:#ff8a7a}
-button{font:inherit;font-weight:600;background:#fff;color:#111;border:0;border-radius:10px;padding:11px 20px;margin-top:14px;cursor:pointer}
-button[disabled]{opacity:.45;cursor:default}button.b2{background:#26262c;color:#eee;margin-left:8px}
-#note{margin-top:16px;color:#a5a5ad;font-size:13.5px;min-height:20px}
+main{width:520px}h1{font-size:38px;font-weight:650;letter-spacing:-.03em;margin:0 0 6px}p{color:rgba(232,236,245,.6);margin:0 0 24px}
+.r{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:13px 16px;background:#13151A;border:1px solid rgba(255,255,255,.075);border-radius:14px;margin-bottom:8px}
+.r b{font-weight:620}.r span{color:rgba(232,236,245,.56);text-align:right}.ok span{color:#34D399}.bad span{color:#FF8A7A}
+button{font:inherit;font-weight:620;color:#fff;border:0;border-radius:10px;padding:11px 20px;margin-top:16px;cursor:pointer;
+background:linear-gradient(180deg,#5C92FF,#2A62E8);box-shadow:0 1px 0 rgba(255,255,255,.22) inset,0 6px 22px rgba(61,123,255,.32)}
+button:hover{filter:brightness(1.08)}button[disabled]{opacity:.5;cursor:default;box-shadow:none}
+button.b2{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);box-shadow:none;margin-left:8px}
+#note{margin-top:16px;color:rgba(232,236,245,.56);font-size:13.5px;min-height:20px}
 </style></head><body><main>
 <h1>cooked.</h1><p id="sub">Starting…</p><div id="rows"></div>
 <div id="btns"></div><div id="note"></div>
@@ -66,7 +69,7 @@ function send(m){window.webkit.messageHandlers.app.postMessage(m)}
 function draw(){
   document.getElementById('rows').innerHTML=Object.keys(NAMES).filter(k=>k in st).map(k=>{
     const s=st[k],c=s==='ok'?'ok':(s==='missing'||s.startsWith('failed'))?'bad':'';
-    return `<div class="r ${c}"><div><b>${NAMES[k][0]}</b><div style="color:#8a8a93;font-size:13px">${NAMES[k][1]}</div></div><span>${s==='ok'?'Ready':s==='missing'?'Not installed':s}</span></div>`}).join('')}
+    return `<div class="r ${c}"><div><b>${NAMES[k][0]}</b><div style="color:rgba(232,236,245,.42);font-size:13px">${NAMES[k][1]}</div></div><span>${s==='ok'?'Ready':s==='missing'?'Not installed':s}</span></div>`}).join('')}
 function setState(o){st=o;draw()}
 function setRow(k,v){st[k]=v;draw()}
 function sub(t){document.getElementById('sub').textContent=t}

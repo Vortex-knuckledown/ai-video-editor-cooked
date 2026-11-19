@@ -11,6 +11,11 @@ What changed for every user, newest first.
   with Anthropic's installer. Claude Code still does the editing, signed in with the user's own Claude account. The
   app is signed ad hoc, not with an Apple Developer ID: on another Mac the first open is right-click, Open.
 
+- **A new look: dark studio, electric blue.** Every screen (Home, New video, Your videos, Styles, Brand, Skills,
+  Claude, Settings, the Library, the video editor and the app's setup screen) is restyled as one dark studio with a
+  single blue for the thing to press and the thing selected. It is a theme layer (`plugins/studio/theme/home.css`,
+  `review.css`) over the pages' own styles: how things look changed, nothing they do. Light stays in Settings, Theme.
+
 ## studio 0.15.0 (this fork, 2026-11-19)
 
 - **3D videos are built from a few worlds.** A 3D video now has 2 to 6 worlds (a street, Earth from orbit), each
