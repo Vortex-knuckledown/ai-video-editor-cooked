@@ -740,7 +740,7 @@ def cmd_charts(edit):
             continue
         beat = {"id": key, "type": "scene", "props": {}, "start": sp["a"], "dur": dur, "clock": "video", "size": [w, h], "words": [],
                 "line": "", "before": "", "after": ""}
-        fill = lambda t: t.replace("__ID__", key).replace("__TY__", str(int(h * 0.05))).replace("__SY__", str(int(h * 0.75))).replace("__W__", str(w)).replace("__H__", str(h)).replace("__DATA__", json.dumps(data))   # noqa: E731
+        fill = lambda t: t.replace("__ID__", key).replace("__TY__", str(int(h * 0.04))).replace("__SY__", str(int(h * 0.8))).replace("__W__", str(w)).replace("__H__", str(h)).replace("__DATA__", json.dumps(data))   # noqa: E731
         markup, module = tpl.split("\n==MODULE==\n", 1)
         markup = markup.split("-->", 1)[1]
         page = motion.fill_template(beat, look)

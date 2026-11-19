@@ -19,7 +19,7 @@
 
       const items = DATA.items, n = items.length, top = Math.max(...items.map(i => Math.abs(i[1]))) || 1;
       const best = items.reduce((b, it, i) => it[1] > items[b][1] ? i : b, 0);
-      const gap = 2.6, bw = 1.5, maxH = 6.2, x0 = -gap * (n - 1) / 2;
+      const gap = 2.6, bw = 1.5, maxH = 4.7, x0 = -gap * (n - 1) / 2;   // the tallest bar and its number stay under the title
 
       // the floor: a dark stage with a faint grid, so the bars stand on something
       const floor = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), new THREE.MeshStandardMaterial({ color: new THREE.Color(DATA.ground).multiplyScalar(2.2), roughness: 0.42, metalness: 0.35 }));
@@ -67,7 +67,7 @@
         const u = T / DURATION;
         const a = -0.52 + 0.3 * ease(u * 1.6) + 0.2 * u;                       // the camera comes round from the left, then never quite stops
         const dist = 20 + n * 1.25 - 1.6 * ease(u * 1.4) - 1.4 * u;
-        cam.position.set(Math.sin(a) * dist, 7.4 - 1.2 * ease(u * 1.4) - 0.6 * u, Math.cos(a) * dist); cam.lookAt(0, maxH * 0.36, 0); cam.updateMatrixWorld();
+        cam.position.set(Math.sin(a) * dist, 7.4 - 1.2 * ease(u * 1.4) - 0.6 * u, Math.cos(a) * dist); cam.lookAt(0, maxH * 0.52, 0); cam.updateMatrixWorld();
         bars.forEach((m, i) => {
           const k = ease((T - 0.25 - i * 0.12) / grow), h = Math.max(0.02, maxH * Math.abs(items[i][1]) / top * k);
           m.scale.y = h; m.position.y = 0.18 + h / 2;
