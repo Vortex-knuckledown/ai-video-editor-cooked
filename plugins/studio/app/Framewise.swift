@@ -1,4 +1,4 @@
-// cooked.app: the editor as a Mac app. One window, no Terminal.
+// Framewise.app: the editor as a Mac app. One window, no Terminal.
 //
 // On launch it checks what the editor needs (runtime.sh), shows a setup screen for anything missing, starts the
 // editor's own server (home.py, bundled in Resources/plugins) and shows its page in this window. Claude Code still
@@ -50,7 +50,7 @@ let SETUP_HTML = """
 :root{color-scheme:dark}body{margin:0;color:#F2F4F8;font:14.5px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
 background:radial-gradient(900px 480px at 50% -160px,rgba(61,123,255,.18),transparent 70%),#0A0B0E;
 display:flex;align-items:center;justify-content:center;height:100vh}
-main{width:520px}h1{font-size:38px;font-weight:650;letter-spacing:-.03em;margin:0 0 6px}p{color:rgba(232,236,245,.6);margin:0 0 24px}
+main{width:520px}.logo{width:60px;height:60px;margin-bottom:18px;filter:drop-shadow(0 10px 26px rgba(61,123,255,.45))}.logo svg{width:100%;height:100%;display:block}h1{font-size:38px;font-weight:650;letter-spacing:-.03em;margin:0 0 6px}p{color:rgba(232,236,245,.6);margin:0 0 24px}
 .r{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:13px 16px;background:#13151A;border:1px solid rgba(255,255,255,.075);border-radius:14px;margin-bottom:8px}
 .r b{font-weight:620}.r span{color:rgba(232,236,245,.56);text-align:right}.ok span{color:#34D399}.bad span{color:#FF8A7A}
 button{font:inherit;font-weight:620;color:#fff;border:0;border-radius:10px;padding:11px 20px;margin-top:16px;cursor:pointer;
@@ -59,11 +59,12 @@ button:hover{filter:brightness(1.08)}button[disabled]{opacity:.5;cursor:default;
 button.b2{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);box-shadow:none;margin-left:8px}
 #note{margin-top:16px;color:rgba(232,236,245,.56);font-size:13.5px;min-height:20px}
 </style></head><body><main>
-<h1>cooked.</h1><p id="sub">Starting…</p><div id="rows"></div>
+<div class="logo"><svg viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5C92FF"/><stop offset="1" stop-color="#2A62E8"/></linearGradient></defs><rect width="64" height="64" rx="15" fill="url(#g)"/><path d="M19 22a5 5 0 0 1 5-5h9M45 42a5 5 0 0 1-5 5h-9M19 31v11a5 5 0 0 0 5 5M45 33V22a5 5 0 0 0-5-5" fill="none" stroke="#fff" stroke-width="4.2" stroke-linecap="round"/><path d="M27.5 24.5 40 32l-12.5 7.5z" fill="#fff"/></svg></div>
+<h1>Framewise</h1><p id="sub">Starting…</p><div id="rows"></div>
 <div id="btns"></div><div id="note"></div>
 <script>
 const NAMES={python:['Python','runs the editor'],node:['Node','renders the video'],ffmpeg:['ffmpeg','cuts and joins video'],
-  ffprobe:['ffprobe','reads video files'],claude:['Claude Code','does the editing, with your Claude account']};
+  ffprobe:['ffprobe','reads video files'],claude:['Claude','does the editing, with your own Claude account']};
 let st={};
 function send(m){window.webkit.messageHandlers.app.postMessage(m)}
 function draw(){
@@ -78,6 +79,18 @@ function buttons(h){document.getElementById('btns').innerHTML=h}
 </script></main></body></html>
 """
 
+final class DragStrip: NSView {
+    override func mouseDown(with e: NSEvent) { if e.clickCount == 2 { window?.performZoom(nil) } else { window?.performDrag(with: e) } }
+}
+
+// The page is part of the app: no browser menu on right-click (text fields keep cut, copy and paste).
+final class AppWebView: WKWebView {
+    override func willOpenMenu(_ menu: NSMenu, with event: NSEvent) {
+        let keep: Set<String> = ["WKMenuItemIdentifierCopy", "WKMenuItemIdentifierCut", "WKMenuItemIdentifierPaste", "WKMenuItemIdentifierSelectAll"]
+        menu.items.filter { !keep.contains($0.identifier?.rawValue ?? "") }.forEach { menu.removeItem($0) }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler, WKDownloadDelegate {
     var window: NSWindow!
     var web: WKWebView!
@@ -91,17 +104,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let cfg = WKWebViewConfiguration()
         cfg.userContentController.add(self, name: "app")
         cfg.preferences.javaScriptCanOpenWindowsAutomatically = true
-        cfg.preferences.setValue(true, forKey: "developerExtrasEnabled")
-        web = WKWebView(frame: .zero, configuration: cfg)
+        // tells the page it is inside the app: it leaves room for the window buttons and stops behaving like a web page
+        cfg.userContentController.addUserScript(WKUserScript(source: "window.FW_APP=true;document.addEventListener('DOMContentLoaded',function(){document.body.classList.add('fw-app')});",
+                                                             injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        web = AppWebView(frame: .zero, configuration: cfg)
         web.navigationDelegate = self
         web.uiDelegate = self
-        web.allowsBackForwardNavigationGestures = true
+        web.allowsBackForwardNavigationGestures = false
+        web.allowsMagnification = false
+        web.setValue(false, forKey: "drawsBackground")
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1360, height: 860),
-                          styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "cooked."
+                          styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        window.title = "Framewise"
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = NSColor(calibratedRed: 0.039, green: 0.043, blue: 0.055, alpha: 1)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.minSize = NSSize(width: 1040, height: 680)
         window.center()
-        window.setFrameAutosaveName("cooked-main")
-        window.contentView = web
+        window.setFrameAutosaveName("framewise-main")
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1360, height: 860))
+        web.frame = host.bounds
+        web.autoresizingMask = [.width, .height]
+        host.addSubview(web)
+        let strip = DragStrip(frame: NSRect(x: 76, y: host.bounds.height - 28, width: host.bounds.width - 76, height: 28))   // right of the window buttons
+        strip.autoresizingMask = [.width, .minYMargin]
+        host.addSubview(strip)
+        window.contentView = host
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         buildMenu()
@@ -112,14 +141,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         let main = NSMenu()
         let appItem = NSMenuItem(); main.addItem(appItem)
         let app = NSMenu()
-        app.addItem(withTitle: "About cooked.", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        app.addItem(withTitle: "About Framewise", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(withTitle: "Home", action: #selector(goHome), keyEquivalent: "1")
-        app.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "r")
+        app.addItem(withTitle: "Settings…", action: #selector(goSettings), keyEquivalent: ",")
         app.addItem(withTitle: "Check Setup…", action: #selector(recheck), keyEquivalent: "")
         app.addItem(.separator())
-        app.addItem(withTitle: "Hide cooked.", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        app.addItem(withTitle: "Quit cooked.", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.addItem(withTitle: "Hide Framewise", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        app.addItem(withTitle: "Quit Framewise", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         app.addItem(withTitle: "Quit and Stop the Editor", action: #selector(quitAll), keyEquivalent: "")
         appItem.submenu = app
         let editItem = NSMenuItem(); main.addItem(editItem)
@@ -132,6 +160,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editItem.submenu = edit
+        let fileItem = NSMenuItem(); main.insertItem(fileItem, at: 1)
+        let file = NSMenu(title: "File")
+        file.addItem(withTitle: "New Video", action: #selector(goNew), keyEquivalent: "n")
+        fileItem.submenu = file
+        let goItem = NSMenuItem(); main.addItem(goItem)
+        let go = NSMenu(title: "Go")
+        for (i, t) in [("Home", "home"), ("Videos", "videos"), ("Styles", "mystyle"), ("Library", "library"), ("Activity", "claude")].enumerated() {
+            let it = NSMenuItem(title: t.0, action: #selector(goPage(_:)), keyEquivalent: String(i + 1))
+            it.representedObject = t.1
+            go.addItem(it)
+        }
+        go.addItem(.separator())
+        go.addItem(withTitle: "Reload", action: #selector(reload), keyEquivalent: "r")
+        goItem.submenu = go
         let winItem = NSMenuItem(); main.addItem(winItem)
         let win = NSMenu(title: "Window")
         win.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
@@ -200,6 +242,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     func userContentController(_ c: WKUserContentController, didReceive m: WKScriptMessage) {
         guard let what = m.body as? String else { return }
+        if what.hasPrefix("badge:") {   // what needs the user, on the Dock icon
+            let n = Int(what.dropFirst(6)) ?? 0
+            if n > (Int(NSApp.dockTile.badgeLabel ?? "") ?? 0) && !NSApp.isActive { NSApp.requestUserAttention(.informationalRequest) }
+            NSApp.dockTile.badgeLabel = n > 0 ? String(n) : nil
+            return
+        }
         if what == "install" || what == "claude" {
             js("buttons('<button disabled>Installing…</button>');note('This can take a few minutes on a slow connection.')")
             DispatchQueue.global().async {
@@ -219,23 +267,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
-    // Claude Code signs in once, in its own window: the one step that is not in this app.
+    // Claude signs in on Claude's own page in the browser; the app starts that and waits. No Terminal.
+    var login: Process?
     func signIn() {
-        let cmd = "export PATH=\(q(env["PATH"] ?? "")); clear; echo 'Sign in to Claude here, then come back to cooked.'; claude"
-        let script = "tell application \"Terminal\"\nactivate\ndo script \(q(cmd))\nend tell"
+        login?.terminate()
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        p.arguments = ["-e", script]
+        p.executableURL = URL(fileURLWithPath: "/bin/bash")
+        p.arguments = ["-c", "claude auth login"]
+        p.environment = env
+        p.standardInput = FileHandle.nullDevice
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
         try? p.run()
+        login = p
+        js("sub('Finish signing in on the page that opened in your browser. This window carries on by itself.');" +
+           "buttons('<button class=\"b2\" style=\"margin-left:0\" onclick=\"send(\\'signin\\')\">Open the sign-in page again</button>');note('Waiting for Claude…')")
+        DispatchQueue.global().async {
+            for _ in 0..<150 {
+                Thread.sleep(forTimeInterval: 2)
+                if self.claudeSignedIn() { DispatchQueue.main.async { self.js("note('Signed in.')"); self.start() }; return }
+            }
+            DispatchQueue.main.async { self.js("note('Still not signed in. Press the button to try again.')") }
+        }
     }
 
     func claudeSignedIn() -> Bool {
-        let fm = FileManager.default, h = NSHomeDirectory()
-        if fm.fileExists(atPath: h + "/.claude/.credentials.json") { return true }
-        if let d = try? Data(contentsOf: URL(fileURLWithPath: h + "/.claude.json")),
-           let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] {
-            return o["oauthAccount"] != nil || o["primaryApiKey"] != nil || (o["hasCompletedOnboarding"] as? Bool ?? false)
-        }
+        let (_, out) = sh(["-c", "claude auth status --json 2>/dev/null"], env: env)
+        if let d = out.data(using: .utf8), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] { return o["loggedIn"] as? Bool ?? false }
         return false
     }
 
@@ -257,8 +315,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         DispatchQueue.global().async {
             if !self.claudeSignedIn() {
                 DispatchQueue.main.async {
-                    self.js("sub('Sign in to Claude once. A Terminal window opens for it; come back here when it says you are in.');" +
-                            "buttons('<button onclick=\"send(\\'signin\\')\">Sign in to Claude</button><button class=\"b2\" onclick=\"send(\\'recheck\\')\">I have signed in</button>')")
+                    self.js("sub('Connect your Claude account. Your browser opens on the Claude sign-in page; nothing is typed here.');" +
+                            "buttons('<button onclick=\"send(\\'signin\\')\">Connect Claude</button>')")
                 }
                 return
             }
@@ -297,6 +355,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         }
     }
 
+    // menu items drive the page: on the app's own page they switch section, from the editor they go back to it first
+    func page(_ v: String) {
+        if web.url?.port == PORT { js("try{rgo('\(v)')}catch(e){}") } else if let u = runningURL(), let U = URL(string: u + "#" + v) { web.load(URLRequest(url: U)) }
+    }
+    @objc func goSettings() { page("settings") }
+    @objc func goNew() { page("new") }
+    @objc func goPage(_ s: NSMenuItem) { page(s.representedObject as? String ?? "home") }
     @objc func goHome() { if let u = runningURL(), let U = URL(string: u) { web.load(URLRequest(url: U)) } else { recheck() } }
     @objc func reload() { web.reload() }
     @objc func recheck() { web.loadHTMLString(SETUP_HTML, baseURL: nil) }
@@ -332,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
         v.uiDelegate = self
         let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
                            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        win.title = "cooked."
+        win.title = "Framewise"
         win.isReleasedWhenClosed = false
         win.contentView = v
         win.cascadeTopLeft(from: window.frame.origin)

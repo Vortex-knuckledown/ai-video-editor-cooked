@@ -65,6 +65,7 @@ from the script's numbers. It ends in the editor with three thumbnails and a pub
 | studio 0.14.0 | Animated videos up to 10 minutes, scenes built six at a time; captions keep numbers whole (released 2026-11-19, tag `studio-v0.14.0`) |
 | studio 0.15.0 | 3D videos built from worlds; a shared library of 20 worlds, clothed characters with outfits and free props that every video reuses; a Library page (released 2026-11-19, tag `studio-v0.15.0`) |
 | studio 0.16.0 | cooked. as a Mac app with a first-run setup; a dark studio look with electric blue on every screen; a create-first Home (released 2026-11-19, tag `studio-v0.16.0`) |
+| studio 0.17.0 | Framewise: the rebrand, a one-box Home, Library and Settings as sections, a notification bell, Claude connected in the app, a native window; 4K, tier lists, research pages, 3D charts, OpenAI images, split-screen Shorts (released 2026-11-19, tag `studio-v0.17.0`) |
 | studio 0.13.0 | Natural free voices (edge-tts); real 3D in animated shots (three.js); sound bites that show the speaker (released 2026-11-19, tag `studio-v0.13.0`) |
 | studio 0.12.0 | Long video picks the matching moment of each clip, passes over subtitled clips, and checks the render at every cut (released 2026-11-19, tag `studio-v0.12.0`) |
 | studio 0.11.0 | UGC ad; Make Shorts from a Long video; sound bites; black bars cropped; Pixabay (released 2026-11-19, tag `studio-v0.11.0`) |
@@ -152,8 +153,8 @@ python3 plugins/ai-editor/lib/ai_editor/home.py demo
 
 ## The Mac app (`plugins/studio/app`)
 
-`build.sh` compiles `Cooked.swift` (one window showing the editor's own page, a setup screen, downloads, file
-pickers) into `dist/cooked.app`, copies the three plugins and `runtime.sh` into it, signs it ad hoc and makes a
+`build.sh` compiles `Framewise.swift` (one window showing the editor's own page, a setup screen, downloads, file
+pickers) into `dist/Framewise.app`, copies the three plugins and `runtime.sh` into it, signs it ad hoc and makes a
 `.dmg`. `runtime.sh` is the installer's brain: `check`, `install` (standalone Python, Node, static ffmpeg and
 ffprobe into `~/.ai-video-editor/runtime`), `claude` (Anthropic's installer). The app reuses tools the Mac already
 has. It writes what its window shows to `~/.ai-video-editor/app-window.txt` and the server's output to

@@ -97,7 +97,8 @@ session: say so on the page, write from what you know, use no statistic you are 
     `unit`, `source`): a comparison of 2 to 6 numbers. `list` (`title`, `items`): 2 to 6 points, each a few
     words. `quote` (`text`, `by`): someone's own words. `source` (`title`, `by`, `highlight`): the paper or article
     a claim comes from, with the sentence that matters, in its own words. `title` (`text`, `sub`): a section's
-    opening, or the close.
+    opening, or the close. More in `${CLAUDE_SKILL_DIR}/references/graphics.md`: `tier` (a ranked tier list), `paper`
+    (a study lifting off the page), `chart3d` (a real 3D chart), a photo's `make` (an AI image), and 4K.
   - `ai` (`prompt`, `fallback`): a shot generated on the user's own Runway, Higgsfield or Google account, only when
     brief.json `ai` is true: for what nobody filmed and no photo shows (a scene from before cameras, a thing too
     small or too far to film). `prompt`: one sentence of what is in the frame and how the camera moves, no text in
@@ -208,7 +209,8 @@ would be empty.
 ```bash
 python3 "$PY" "$L" sound EDIT [--mood linear]      # the voice, music under it, a sound on every cut and graphic
 python3 "$PY" "$L" build EDIT
-python3 "$PY" "$T" render EDIT                      # EDIT/render.mp4; about 2 minutes of rendering a minute of video
+python3 "$PY" "$L" charts EDIT && python3 "$PY" "$L" build EDIT   # only with chart3d shots: render them, then build again
+python3 "$PY" "$T" render EDIT   # EDIT/render.mp4, about 2 min a minute of video; 4K (brief "quality") four times that
 ```
 
 Then `python3 "$PY" "$L" qa EDIT`: it checks the render just after every cut, prints `FIX` for a black or empty

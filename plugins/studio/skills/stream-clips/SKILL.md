@@ -102,6 +102,7 @@ python3 "$PY" "$T" build EDIT clip1 --title "<hook>"          # --no-captions wh
 python3 "$PY" "$T" render EDIT clip1
 ```
 
+`--mode split` is for two people side by side (an interview, a podcast): the left one on top, the right one below.
 `layout auto` finds a facecam (a small face that stays near an edge) and puts it on top with the game below, follows
 a big moving face (IRL streams), or fits the whole frame over a blurred copy (no cam). It prints what it chose. The
 hook title: at most 6 words, true to what happens and what is said in that clip, no clickbait the clip does not pay

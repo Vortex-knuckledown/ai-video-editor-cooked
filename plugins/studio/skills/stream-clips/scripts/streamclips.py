@@ -10,7 +10,7 @@
     python3 streamclips.py previews PROJ          previews.mp4: every moment numbered, one after another, for the editor
     python3 streamclips.py make PROJ m3 m1 ... [--pad-in S --pad-out S] [--number N]
                                      clips/clip<N>/: the moment trimmed on whole words, words.json
-    python3 streamclips.py layout PROJ clip1 [--mode auto|facecam|follow|fit] [--aspect 9:16|16:9]
+    python3 streamclips.py layout PROJ clip1 [--mode auto|facecam|follow|fit|split] [--aspect 9:16|16:9]
                                      vertical.mp4: facecam on top and the game below, the crop following a face,
                                      or the whole frame over a blurred copy of itself
     python3 streamclips.py build PROJ clip1 [--title "WORDS"] [--no-captions]   studio.clip1.scene.json
@@ -53,7 +53,7 @@ CHAT_LAG_S = 4           # chat reacts a few seconds after the moment: its count
 HYPE = re.compile(r"\b(?:lol|lmao|lmfao|kekw|lul|omegalul|w+|ww+|no way|bro|omg|wtf|clip it|clip that|hahaha+|ha+h)\b|"
                   r"[\U0001F602\U0001F923\U0001F480\U0001F525]", re.I)   # laughing, skull, fire, "W", "clip it"
 CAPTIONS = {"size_pct": 6.2, "case": "upper", "effect": "pop", "stroke": True, "words_per_caption": 3}
-CAPTION_Y = {"facecam": 34, "follow": 72, "fit": 76, "vertical": 72, "wide": 80}
+CAPTION_Y = {"facecam": 34, "follow": 72, "fit": 76, "vertical": 72, "wide": 80, "split": 50}   # split: the words sit on the seam between the two people
 
 
 def mmss(t):
@@ -563,6 +563,12 @@ def cmd_layout(proj, cid, mode="auto", aspect="9:16"):
     elif sh > sw:
         mode, vf = "vertical", f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1"
     else:
+        if mode == "split":      # two people side by side (an interview): the left one on top, the right one below
+            half = sw // 2 // 2 * 2
+            ch = min(sh, int(half * (H / 2) / W) // 2 * 2)
+            cy = (sh - ch) // 2
+            vf = (f"[0:v]split[a][b];[a]crop={half}:{ch}:0:{cy},scale={W}:{H // 2},setsar=1[top];"
+                  f"[b]crop={half}:{ch}:{sw - half}:{cy},scale={W}:{H // 2},setsar=1[bot];[top][bot]vstack=inputs=2")
         if mode in ("auto", "facecam"):
             studio.use_editor()
             import face
@@ -589,7 +595,7 @@ def cmd_layout(proj, cid, mode="auto", aspect="9:16"):
             vf = (f"[0:v]split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},boxblur=24:2,"
                   f"eq=brightness=-0.1[bg];[b]scale={W}:-2[fg];[bg][fg]overlay=0:(H-h)/2,setsar=1")
     if mode != "follow":
-        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-filter_complex" if mode in ("facecam", "fit") else "-vf",
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-filter_complex" if mode in ("facecam", "fit", "split") else "-vf",
                         vf, *enc, str(out)], check=True)
     jsave(d / "layout.json", {"mode": mode, "cam": box, "aspect": aspect})
     print(f"{out}: {mode}" + (f" (cam at {box[0]:.0f}%, {box[1]:.0f}%)" if box else ""))
@@ -948,7 +954,7 @@ def main(argv):
     p.add_argument("--pad-in", type=float, default=0); p.add_argument("--pad-out", type=float, default=0)
     p.add_argument("--number", type=int, default=1, help="the first clip's number (redo one clip: --number 2)")
     p = sub.add_parser("layout"); p.add_argument("proj"); p.add_argument("clip")
-    p.add_argument("--mode", default="auto", choices=("auto", "facecam", "follow", "fit")); p.add_argument("--aspect", default="9:16")
+    p.add_argument("--mode", default="auto", choices=("auto", "facecam", "follow", "fit", "split")); p.add_argument("--aspect", default="9:16")
     p = sub.add_parser("build"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--title"); p.add_argument("--no-captions", action="store_true")
     p = sub.add_parser("render"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--draft", action="store_true")
     p = sub.add_parser("styled"); p.add_argument("proj"); p.add_argument("clip"); p.add_argument("--as", dest="as_", required=True)

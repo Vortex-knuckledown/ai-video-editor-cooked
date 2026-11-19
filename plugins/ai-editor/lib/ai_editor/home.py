@@ -155,6 +155,40 @@ def studio_voices():
     return out
 
 
+# studio: the Claude account behind the app. Signing in and out are Claude Code's own commands, run for the user's click.
+_CLAUDE_LOGIN = {"p": None, "at": 0}
+
+
+def studio_claude():
+    exe = shutil.which("claude")
+    if not exe:
+        return {"installed": False, "loggedIn": False}
+    try:
+        d = json.loads(subprocess.run([exe, "auth", "status", "--json"], capture_output=True, text=True, timeout=20).stdout or "{}")
+    except (OSError, ValueError, subprocess.SubprocessError):
+        d = {}
+    p = _CLAUDE_LOGIN["p"]
+    return {"installed": True, "loggedIn": bool(d.get("loggedIn")), "email": d.get("email") or "", "plan": d.get("subscriptionType") or "",
+            "org": d.get("orgName") or "", "signing_in": bool(p and p.poll() is None and time.time() - _CLAUDE_LOGIN["at"] < 600)}
+
+
+def studio_claude_do(what):
+    exe = shutil.which("claude")
+    if not exe:
+        return {"ok": False, "msg": "Claude Code is not installed on this computer."}
+    if what == "login":   # opens the browser on Claude's own sign-in page and waits there for the user
+        p = _CLAUDE_LOGIN["p"]
+        if p and p.poll() is None:
+            p.terminate()
+        _CLAUDE_LOGIN.update(p=subprocess.Popen([exe, "auth", "login"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
+                             at=time.time())
+        return {"ok": True}
+    if what == "logout":
+        subprocess.run([exe, "auth", "logout"], capture_output=True, timeout=30)
+        return {"ok": True}
+    return {"ok": False, "msg": "unknown"}
+
+
 # studio: Export all. The studio plugin sits beside this one in the repo, or in Claude Code's plugin cache.
 def studio_script(skill, name):
     here = Path(__file__).resolve()
@@ -2298,6 +2332,8 @@ def make_handler(token):
                 except Exception:   # noqa: BLE001
                     ok = False
                 return self.send(200, f.read_bytes(), "image/jpeg", cache="private, max-age=86400") if ok else self.send(404, {})
+            if path == "/studio/claude":   # studio: whose Claude account does the editing (claude auth status), for Settings
+                return self.send(200, studio_claude())
             if path in ("/studio/library", "/studio/library/thumb"):   # studio: the shared 3D library (characters, worlds, props), as a page
                 t = studio_script("animated-video", "lib3d.py")
                 if not t:
@@ -2306,6 +2342,8 @@ def make_handler(token):
                 spec = importlib.util.spec_from_file_location("lib3d", t)
                 lib3d = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(lib3d)
+                if path == "/studio/library" and q.get("json"):   # the Library section inside the app
+                    return self.send(200, lib3d.data())
                 if path == "/studio/library":
                     return self.send(200, lib3d.page(), "text/html; charset=utf-8")
                 f = lib3d.thumb(q.get("kind", [""])[0], q.get("id", [""])[0])
@@ -2499,6 +2537,8 @@ def make_handler(token):
                     return self.send(400, {})
                 subprocess.Popen(library.reveal_cmd(p), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return self.send(200, {})
+            if path == "/studio/claude":   # studio: sign in to Claude (the browser opens) or sign out
+                return self.send(200, studio_claude_do((body or {}).get("do") if isinstance(body, dict) else None))
             if path == "/studio/shorts":   # studio: Shorts from a finished Long video, rendered in the background into its exports folder
                 d = Path(str(body.get("dir") or "")).resolve()
                 t = studio_script("long-video", "longvideo.py")
@@ -3174,8 +3214,8 @@ def make_handler(token):
                      "text": b.get("text") is not False, "music": b.get("music") is not False,
                      "footage": {"youtube": b.get("youtube") is not False, "photos": b.get("photos") is not False},
                      "own": os.path.expanduser(own) if own else None, **voice_of(b),
-                     "ai": bool(b.get("ai")) and any(keys.get(n)[0] for n in ("runway", "gemini", "higgsfield")),   # AI-generated shots: only with a connection
-                     "voiceover": vo or None}
+                     "ai": bool(b.get("ai")) and any(keys.get(n)[0] for n in ("runway", "gemini", "higgsfield", "openai")),   # AI-generated shots: only with a connection
+                     "voiceover": vo or None, "quality": "4k" if str(b.get("quality") or "").lower() == "4k" else "1080"}   # fork: 4K output
             edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or "my voiceover")
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             self.placeholder(edit, aspect, prompt[:60] or "From your voiceover")
@@ -3581,7 +3621,7 @@ def demo():
             assert e.code == 403, (p, e.code)
     r = urllib.request.urlopen(base + "/?t=" + tok)
     page = r.read()   # the brand: pan tile, "cooked." and the pan favicon
-    assert b'class="mark"' in page and b"<b>cooked.</b>" in page and b'rel="icon" href="data:image/svg+xml' in page, "brand"
+    assert b'class="mark"' in page and (b"<b>cooked.</b>" in page or b"<b>Framewise</b>" in page) and b'rel="icon" href="data:image/svg+xml' in page, "brand"
     assert "SameSite=Strict" in r.headers["Set-Cookie"]
     # one theme for the window and every review page: saved in $AI_EDITOR_HOME/ui.json, on <html> before first paint
     assert get("/state")["theme"] == "system" and b"<html data-theme" not in urllib.request.urlopen(base + "/?t=" + tok).read()

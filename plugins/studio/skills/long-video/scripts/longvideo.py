@@ -52,12 +52,16 @@ import streamclips  # noqa: E402  (yt-dlp, the cover image)
 
 MEDIA = ("clip", "stock", "photo", "own", "ai", "bite")
 MAX_AI = 6                # AI-generated shots a video: each one is paid for on the user's own account
-GRAPHICS = ("title", "stat", "bars", "list", "quote", "source")
+GRAPHICS = ("title", "stat", "bars", "list", "quote", "source", "tier", "paper")
+TIER_COLOURS = {"S": "#FF5A5F", "A": "#FF9F43", "B": "#FFD24A", "C": "#5AD17E", "D": "#4D9FFF", "E": "#9B7BFF", "F": "#8B93A1"}
+MAXH = 1080               # the tallest footage fetched; 2160 for a 4K video (brief "quality": "4k")
+MAX_IMAGES = 8            # pictures made by the user's AI image tool a video: each is paid for on their own account
 MAX_MOTION = 12           # animated hero graphics a video: each is built by its own agent, a few minutes apiece
 NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("file",), "motion": ("visual", "fallback"),
          "ai": ("prompt", "fallback"), "bite": (),
          "title": ("text",), "stat": ("value", "label"),
-         "bars": ("items",), "list": ("items",), "quote": ("text",), "source": ("title", "highlight")}
+         "bars": ("items",), "list": ("items",), "quote": ("text",), "source": ("title", "highlight"),
+         "tier": ("tiers",), "paper": ("title", "highlight"), "chart3d": ("items",)}
 MIN_SHOT_S = 1.2          # a shot shorter than this is dropped: the line's other shots take its time
 PACE_S = 3.4              # more than this a shot on average reads as slow (edited channels change picture every 1.5 to 2.5 s)
 DISPLAY = "Anton"         # the condensed capitals of titles, numbers and labels; everything else is the renderer's sans
@@ -92,7 +96,10 @@ def check(edit):
             for f in NEEDS[kind]:
                 if not sh.get(f):
                     errs.append(f"scene {s.get('id')} shot {k} ({kind}): no \"{f}\"")
-            if kind in ("bars", "list") and not (isinstance(sh.get("items"), list) and 2 <= len(sh["items"]) <= 6):
+            if kind == "tier" and not (isinstance(sh.get("tiers"), list) and 2 <= len(sh["tiers"]) <= 6 and all(
+                    isinstance(t, list) and len(t) == 2 and isinstance(t[1], list) and 1 <= len(t[1]) <= 5 for t in sh["tiers"])):
+                errs.append(f"scene {s.get('id')} shot {k} (tier): \"tiers\" is 2 to 6 rows, each [\"S\", [\"name\", ...]] with 1 to 5 names")
+            if kind in ("bars", "list", "chart3d") and not (isinstance(sh.get("items"), list) and 2 <= len(sh["items"]) <= 6):
                 errs.append(f"scene {s.get('id')} shot {k} ({kind}): 2 to 6 items")
             if kind == "motion" and not (isinstance(sh.get("fallback"), dict) and sh["fallback"].get("kind") in GRAPHICS
                                          and all(sh["fallback"].get(f) for f in NEEDS[sh["fallback"]["kind"]])):
@@ -100,9 +107,9 @@ def check(edit):
             if kind == "ai" and not (isinstance(sh.get("fallback"), dict) and sh["fallback"].get("kind") in ("clip", "stock", "photo")
                                      and sh["fallback"].get("query")):
                 errs.append(f"scene {s.get('id')} shot {k} (ai): \"fallback\" is a clip, stock or photo shot, fetched if the generation fails")
-            if kind == "bars" and isinstance(sh.get("items"), list) and any(
+            if kind in ("bars", "chart3d") and isinstance(sh.get("items"), list) and any(
                     not (isinstance(i, list) and len(i) == 2 and isinstance(i[1], (int, float))) for i in sh["items"]):
-                errs.append(f"scene {s.get('id')} shot {k} (bars): each item is [\"name\", number]")
+                errs.append(f"scene {s.get('id')} shot {k} ({kind}): each item is [\"name\", number]")
     return errs
 
 
@@ -394,7 +401,7 @@ def fetch_clip(edit, key, sh, need, w, h, used):
         raw.unlink(missing_ok=True)
         url = "https://www.youtube.com/watch?v=" + c["id"]
         r = subprocess.run(streamclips.ytdlp() + ["--no-warnings", "--no-playlist", *v4, "-f",
-                                                 "bv*[height<=1080][vcodec^=avc1]/bv*[height<=1080]/b[height<=1080]/b",
+                                                 f"bv*[height<={MAXH}][vcodec^=avc1]/bv*[height<={MAXH}]/b[height<={MAXH}]/b",
                                                  "--download-sections", f"*{a:.1f}-{a + need + 2.5:.1f}", "--merge-output-format", "mp4",
                                                  "-o", str(raw), url], capture_output=True, text=True, timeout=300)
         if r.returncode or not raw.exists():
@@ -657,6 +664,106 @@ def gen_google(prompt, out, wide, key):
         save_url(v["uri"], out, {"x-goog-api-key": key})
 
 
+def openai_key():
+    """The user's OpenAI key (OPENAI_API_KEY, or that line of the editor's key file). None: not connected."""
+    import os
+    if os.environ.get("OPENAI_API_KEY", "").strip():
+        return os.environ["OPENAI_API_KEY"].strip()
+    try:
+        studio.use_editor()
+        from ai_editor import keys
+        for line in keys.key_file().read_text(encoding="utf-8").splitlines():
+            if line.startswith("OPENAI_API_KEY="):
+                return line.split("=", 1)[1].strip().strip('"').strip("'") or None
+    except (OSError, ImportError):
+        pass
+    return None
+
+
+def make_image(edit, key, prompt, w, h):
+    """A picture nobody has, made with the user's own OpenAI key (a photo shot's "make"). None when there is no key, AI
+    is off for this video, or the request failed: the shot then stays missing and says so."""
+    k = openai_key()
+    if not k or not studio.brief_of(edit).get("ai"):
+        return None
+    import base64
+    try:
+        d = http_json("https://api.openai.com/v1/images/generations", {"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
+                      {"model": "gpt-image-1", "prompt": prompt + " Photographic, natural light, no text, no logos.",
+                       "size": "1536x1024" if w >= h else "1024x1536", "n": 1}, timeout=240)
+        raw = edit / "shots" / f"{key}.gen.png"
+        raw.write_bytes(base64.b64decode(d["data"][0]["b64_json"]))
+    except Exception:   # noqa: BLE001  (refused, out of credit, a changed API)
+        return None
+    out = edit / "shots" / f"{key}.jpg"
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(raw), "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}",
+                        "-q:v", "2", str(out)], capture_output=True, text=True)
+    raw.unlink(missing_ok=True)
+    if r.returncode or not out.exists():
+        return None
+    return {"file": f"shots/{key}.jpg", "title": "Generated: " + prompt[:70], "by": "OpenAI (AI-generated)", "license": "AI-generated", "ai": "openai"}
+
+
+def cmd_charts(edit):
+    """EDIT/motion/<key>/ for every `chart3d` shot: a real 3D bar chart (three.js) built from the shot's own numbers and
+    rendered here, no agent. A chart that does not render falls back to flat bars at build."""
+    edit = Path(edit).resolve()
+    root = studio.use_editor()
+    import motion
+    tm, sc = jload(edit / "timing.json"), jload(edit / "scenes.json")
+    if not tm:
+        sys.exit("ERROR: run studio.py voice first.")
+    todo = [sp for sp in spans(edit) if sp["shot"]["kind"] == "chart3d"]
+    if not todo:
+        print("0 charts: no chart3d shots")
+        return 0
+    ok, why = motion.ensure_tools()
+    if not ok:
+        sys.exit("ERROR: the motion tools are missing: " + str(why))
+    look, (w, h) = studio.look_of(sc), studio.size_of(edit)
+    tpl = (HERE.parent / "templates" / "chart3d.html").read_text(encoding="utf-8")
+    gsap = motion.home() / "motion" / "node_modules" / "gsap" / "dist" / "gsap.min.js"
+    bad = 0
+    for sp in todo:
+        sh, key, dur = sp["shot"], sp["key"], round(sp["b"] - sp["a"], 2)
+        d = edit / "motion" / key
+        (d / "assets").mkdir(parents=True, exist_ok=True)
+        if not studio.three_assets(d):
+            print(f"{key}: three.js is not installed (studio.py three-setup): flat bars will be used")
+            bad += 1
+            continue
+        data = {"items": [[str(n), float(v)] for n, v in sh["items"][:7]], "title": str(sh.get("title") or ""), "unit": str(sh.get("unit") or ""),
+                "source": str(sh.get("source") or ""), "accent": LOOK["accent"], "ink": LOOK["ink"], "ground": LOOK["ground"]}   # the documentary's own dark look
+        stamp = json.dumps([data, dur, w, h], sort_keys=True)
+        if (d / "chart.stamp").exists() and (d / "chart.stamp").read_text(encoding="utf-8") == stamp and (d / "renders" / "clip.mp4").exists():
+            print(f"{key}: ok (already rendered)")
+            continue
+        beat = {"id": key, "type": "scene", "props": {}, "start": sp["a"], "dur": dur, "clock": "video", "size": [w, h], "words": [],
+                "line": "", "before": "", "after": ""}
+        fill = lambda t: t.replace("__ID__", key).replace("__TY__", str(int(h * 0.05))).replace("__SY__", str(int(h * 0.75))).replace("__W__", str(w)).replace("__H__", str(h)).replace("__DATA__", json.dumps(data))   # noqa: E731
+        markup, module = tpl.split("\n==MODULE==\n", 1)
+        markup = markup.split("-->", 1)[1]
+        page = motion.fill_template(beat, look)
+        page = page.replace('<script src="assets/gsap.min.js"></script>', studio.IMPORTMAP + '\n    <script src="assets/gsap.min.js"></script>', 1)
+        page = page.replace('<div id="viewport"><div id="rail"><div id="scene">', '<div id="viewport"><div id="rail"><div id="scene">' + fill(markup), 1)
+        page = page.replace("</body>", fill(module) + "\n  </body>", 1)
+        (d / "index.html").write_text(page, encoding="utf-8")
+        shutil.copy(root / "skills" / "motion" / "template" / "hyperframes.json", d / "hyperframes.json")
+        if gsap.exists():
+            shutil.copy(gsap, d / "assets" / "gsap.min.js")
+        jsave(d / "beat.json", beat)
+        (d / "gates.json").unlink(missing_ok=True)
+        subprocess.run([sys.executable, str(root / "lib" / "ai_editor" / "run.py"), str(root / "skills" / "motion" / "scripts" / "motion.py"), "check", str(d)],
+                       capture_output=True, text=True)
+        if (d / "renders" / "clip.mp4").exists():
+            (d / "chart.stamp").write_text(stamp, encoding="utf-8")
+            print(f"{key}: rendered")
+        else:
+            bad += 1
+            print(f"{key}: did not render: flat bars will be used")
+    return 0
+
+
 def fetch_ai(edit, key, sh, need, w, h):
     prov = ai_provider()
     if not prov or not studio.brief_of(edit).get("ai"):
@@ -832,8 +939,12 @@ def cmd_find(edit, only=None):
     edit = Path(edit)
     (edit / "shots").mkdir(exist_ok=True)
     w, h = studio.size_of(edit)
+    if str(studio.brief_of(edit).get("quality") or "").lower() == "4k":   # footage kept at twice the frame, for the 4K render
+        global MAXH
+        MAXH, w, h = 2160, w * 2, h * 2
     db = jload(edit / "shots.json", {}) or {}
     todo = [sp for sp in spans(edit) if sp["shot"]["kind"] in MEDIA and (not only or sp["key"] in only)]
+    made = [0]
     used = {}
 
     def one(sp):
@@ -858,6 +969,11 @@ def cmd_find(edit, only=None):
         else:
             got = fetch_clip(edit, key, sh, need, w, h, used) if sh["kind"] == "clip" else \
                 fetch_photo(edit, key, sh, w, h) if sh["kind"] == "photo" else fetch_own(edit, key, sh, need, w, h)
+            if sh["kind"] == "photo" and got.get("missing") and sh.get("make") and made[0] < MAX_IMAGES:   # no such picture exists: the user's AI image tool makes it
+                img = make_image(edit, key, str(sh["make"]), w, h)
+                if img:
+                    made[0] += 1
+                    got = img
         return key, {**got, "kind": sh["kind"], "query": sh.get("query"), "stamp": stamp_of(sh, need)}
     with ThreadPoolExecutor(4) as ex:
         for key, got in ex.map(one, todo):
@@ -1304,6 +1420,47 @@ def graphic(S, sh, a, b, W, H, look):
                  color=acc if i == best else ink, anim={"in": "fade", "out": "none", "dur": 0.2})
         if sh.get("source"):
             T("Source: " + sh["source"], 0.3, x=W / 2, y=H * 0.77, w=int(W * 0.8), size=int(s * 0.03), weight=500, color=ink, opacity=0.6)
+    elif kind == "tier":        # a glass tier list: a coloured letter, then its names arriving one by one
+        rows = sh["tiers"][:6]
+        if sh.get("title"):
+            T(str(sh["title"]).upper(), 0, x=W / 2, y=H * 0.09, w=int(W * 0.86), size=int(s * 0.085), font=DISPLAY, weight=400, color=ink, anim=up)
+        top, bot = H * (0.2 if sh.get("title") else 0.1), H * 0.74
+        rh = min(H * 0.13, (bot - top) / len(rows))
+        x0, x1 = W * 0.1, W * 0.9
+        n_all, seen = sum(len(r[1]) for r in rows), 0
+        for i, (letter, names) in enumerate(rows):
+            y, t0 = top + rh * (i + 0.5), 0.1 + i * 0.1
+            col = TIER_COLOURS.get(str(letter).upper()[:1], acc)
+            S.shape(a + t0, b, track="Graphics bg", x=(x0 + x1) / 2, y=y, w=x1 - x0, h=rh * 0.86, radius=rh * 0.2, fill="#FFFFFF", opacity=0.09,
+                    stroke={"color": "#FFFFFF3A", "width": 2}, anim={"in": "fade", "out": "none", "dur": 0.3})
+            S.shape(a + t0, b, track="Graphics", x=x0 + rh * 0.5, y=y, w=rh * 0.86, h=rh * 0.86, radius=rh * 0.2, fill=col, anim=pop)
+            T(str(letter).upper()[:2], t0, x=x0 + rh * 0.5, y=y, w=int(rh), size=int(rh * 0.56), font=DISPLAY, weight=400, color="#0B0C0F", anim=pop, track="Graphics top")
+            cw_ = (x1 - x0 - rh * 1.2) / max(len(names), 3)
+            for j, name in enumerate(names[:5]):
+                seen += 1
+                tj = min(max(0.0, d - 0.35), 0.45 + (seen - 1) * min(0.6, (d * 0.7) / max(1, n_all)))
+                cx = x0 + rh * 1.1 + cw_ * (j + 0.5)
+                S.shape(a + tj, b, track="Graphics", x=cx, y=y, w=cw_ * 0.92, h=rh * 0.62, radius=rh * 0.16, fill="#0B0C0F", opacity=0.55, anim=pop)
+                T(name, tj, x=cx, y=y, w=int(cw_ * 0.86), size=int(min(rh * 0.3, cw_ * 0.86 / max(4, len(str(name))) * 1.7)), weight=700, color=ink, anim=pop, track="Graphics top")
+    elif kind == "paper":       # research that lifts off the page: the paper tilts up, its text greys, one line is marked
+        pw, ph = W * 0.6, H * 0.82
+        tilt = {"rotation": [[0, -9, "out"], [0.7, -3, "out"], [d, -1.5, "linear"]], "scale": [[0, 0.84, "out"], [0.7, 1.0, "out"], [d, 1.06, "linear"]],
+                "y": [[0, H * 0.6, "out"], [0.7, H * 0.44, "out"]]}
+        S.shape(a, b, track="Graphics", x=W / 2, y=H * 0.44, w=pw, h=ph, radius=s * 0.008, fill="#FBF9F3",
+                shadow={"blur": 80, "y": 34, "opacity": 0.6}, anim={"in": "fade", "out": "none", "dur": 0.25}, keys=tilt)
+        if sh.get("journal"):
+            T(str(sh["journal"]).upper(), 0.2, x=W / 2, y=H * 0.1, w=int(pw * 0.84), size=int(s * 0.02), weight=600, color="#8A8F99", anim=up, track="Graphics top")
+        T(sh["title"], 0.25, x=W / 2, y=H * 0.19, w=int(pw * 0.84), size=int(s * 0.042), weight=800, color="#16181D", line_height=1.16, anim=up, track="Graphics top")
+        if sh.get("by"):
+            T(sh["by"], 0.3, x=W / 2, y=H * 0.3, w=int(pw * 0.84), size=int(s * 0.024), weight=500, color="#5B5F68", anim=up, track="Graphics top")
+        body = str(sh.get("abstract") or "")
+        if body:
+            T(body[:420], 0.35, x=W / 2, y=H * 0.44, w=int(pw * 0.84), size=int(s * 0.023), weight=400, color="#3A3E47", opacity=0.55, line_height=1.5,
+              anim={"in": "fade", "out": "none", "dur": 0.4}, track="Graphics top")
+        hy = H * (0.64 if body else 0.5)
+        T(sh["highlight"], min(0.9, d / 2), x=W / 2, y=hy, w=int(pw * 0.86), size=int(s * 0.04), weight=800, color="#16181D", line_height=1.45,
+          box={"color": acc, "pad": [14, 6], "radius": 5, "opacity": 0.95}, anim={"in": "pop", "out": "none", "dur": 0.25},
+          keys={"scale": [[0, 1.0, "out"], [d, 1.05, "linear"]]}, track="Graphics top")
     elif kind == "source":
         pw, ph = W * 0.7, H * 0.68
         S.shape(a, b, track="Graphics", x=W / 2, y=H * 0.4, w=pw, h=ph, radius=s * 0.012, fill="#F7F4EC",
@@ -1394,6 +1551,12 @@ def cmd_build(edit):
               and str((db.get(sp["key"]) or {}).get("file") or "").endswith(".jpg") and (edit / db[sp["key"]]["file"]).exists()]
     for sp in all_sp:
         sh, a, z, d = sp["shot"], sp["a"], sp["b"], sp["b"] - sp["a"]
+        if sh["kind"] == "chart3d":           # the 3D chart's clip (longvideo.py charts); with none, the same numbers as flat bars
+            clip = edit / "motion" / sp["key"] / "renders" / "clip.mp4"   # built from a fixed template, so it is used when it rendered
+            if clip.exists() and (edit / "motion" / sp["key"] / "chart.stamp").exists():
+                S.video(str(clip.relative_to(edit)), a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H)
+                continue
+            sh = {**sh, "kind": "bars", "items": sh["items"][:6]}
         if sh["kind"] in GRAPHICS or (sh["kind"] == "motion" and not studio.clip_of(edit, sp["key"])):
             bg = backdrop(edit, sp, all_sp, db)
             if bg:
@@ -1754,7 +1917,7 @@ def main(argv):
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("setkey")
     sub.add_parser("tools")
-    for name in ("check", "sheet", "build", "kit", "briefs", "qa"):
+    for name in ("check", "sheet", "build", "kit", "briefs", "qa", "charts"):
         sub.add_parser(name).add_argument("edit")
     sub.add_parser("bites").add_argument("edit")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
@@ -1768,7 +1931,8 @@ def main(argv):
             "sound": lambda: cmd_sound(a.edit, a.mood), "build": lambda: cmd_build(a.edit), "thumbs": lambda: cmd_thumbs(a.edit, a.title),
             "kit": lambda: cmd_kit(a.edit), "briefs": lambda: cmd_briefs(a.edit), "setkey": cmd_setkey,
             "voiceover": lambda: cmd_voiceover(a.edit, a.file), "shorts": lambda: cmd_shorts(a.edit, a.count, a.reveal),
-            "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo}[a.cmd]()
+            "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo,
+            "charts": lambda: cmd_charts(a.edit)}[a.cmd]()
 
 
 if __name__ == "__main__":

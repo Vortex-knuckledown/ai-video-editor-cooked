@@ -2,6 +2,42 @@
 
 What changed for every user, newest first.
 
+## studio 0.17.0 (this fork, 2026-11-19)
+
+- **The app is now Framewise.** A new name, a new icon (a blue tile, a white frame, a play head) and the same mark
+  in the sidebar and the browser tab. `plugins/studio/theme/brand.json` holds the name; the original's licence and
+  notices still ship inside the app.
+- **Library is a section, not a window.** Worlds, Characters and Props as tabs inside the app.
+- **A notification bell.** What needs you (a question about a video, a cut or edit that is ready, a job running)
+  sits behind a bell in the sidebar. A question opens as a panel beside it when you click, never as a sheet over the
+  whole window.
+- **Connect Claude inside the app.** Settings has a Claude account card (who is signed in, their plan, Switch
+  account, Sign out), and the first-run screen has Connect Claude: the browser opens on Claude's own sign-in page.
+  No Terminal.
+- **One icon set and a tidier sidebar.** Navigation icons redrawn on one grid; Home and Videos, then Styles, Brand,
+  Skills and Library, then Activity (the page that was called Claude). The original's updater and support ask are
+  not shown in this build.
+- **Fields.** Every text field is one height in the app's own font, and pages fade in.
+- **Settings, rebuilt.** Sections down the side (Account, Connections, Publishing, Storage, Appearance, General).
+  Every service is a connection card with its state and one button: Connect, then Manage. Claude signs in through
+  its own page in the browser; the others take the key that service gives you.
+- **A window that behaves like an app.** The page fills the window under the title bar, the window drags from its
+  top edge and has a minimum size, right-click no longer shows a browser menu, and there are real menus and keys:
+  New Video (Cmd N), Settings (Cmd ,), Go to Home, Videos, Styles, Library and Activity (Cmd 1 to 5). What needs you
+  shows as a number on the Dock icon.
+- **The sidebar cannot overlap itself.** The bell is one of the sidebar's own items, and the sidebar tightens on a
+  short window. Checked by measurement at 1040 by 680, 1280 by 800 and 1720 by 1000, in both sidebar widths.
+- **Home is one box.** A prompt, your clips (dropped on it or picked) or a link, with buttons that change to match.
+  Your videos and the styles shelves are no longer on Home.
+- **4K.** A Quality choice on Long video: footage is kept at up to 2160 lines and the render draws 3840 by 2160
+  (`studio.py render --4k` for any video).
+- **Three more graphics for long videos.** `tier` (a ranked tier list), `paper` (a study lifting off the page with
+  one sentence marked) and `chart3d` (a real 3D bar chart with a moving camera, rendered by `longvideo.py charts`
+  with no agent; flat bars if it does not render).
+- **AI images.** OpenAI is a connection: a photo shot with `make` is generated when no real picture is found.
+- **Split screen for Shorts.** `streamclips.py layout --mode split` stacks the two halves of an interview.
+
+
 ## studio 0.16.0 (this fork, 2026-11-19)
 
 - **cooked. as a Mac app.** `bash plugins/studio/app/build.sh` makes `dist/cooked.app` and a `.dmg` (15 MB, Apple

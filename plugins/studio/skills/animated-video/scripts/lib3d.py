@@ -366,6 +366,17 @@ def thumb(kind, iid):
     return None
 
 
+def data():
+    """The library for the app's own Library section."""
+    def pic(kind, iid):
+        return f"/studio/library/thumb?kind={kind}&id={iid}" if thumb(kind, iid) else ""
+    return {"worlds": [{"id": w["id"], "name": w["id"].replace("-", " "), "text": w.get("describe", ""), "pic": pic("worlds", w["id"])} for w in worlds()],
+            "characters": [{"id": c["id"], "name": c["id"], "text": c.get("describe", ""), "moves": list(c.get("clips") or []),
+                            "outfit": bool(c.get("atlas")), "pic": pic("characters", c["id"])} for c in characters()],
+            "props": [{"id": p["id"], "name": p.get("name", p["id"]), "text": ", ".join(p.get("tags", [])[:5]), "pic": pic("props", p["id"]),
+                       "textures": not p.get("file")} for p in props()]}
+
+
 def page():
     """The library as a page for the app: what every 3D video can reuse."""
     import html
