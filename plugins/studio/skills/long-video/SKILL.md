@@ -37,7 +37,7 @@ Say every step in the editor too: `python3 "$R" EDIT status "Researching"`. The 
 
 `EDIT/brief.json`: `{"prompt", "minutes", "aspect": "16:9"|"9:16", "voice": true, "text", "music",
 "footage": {"youtube": true|false, "photos": true|false}, "own": "<a folder of the user's clips>"|null,
-"voice_engine": "kokoro"|"eleven", "voice_id", "ai": true|false, "voiceover": "<the user's own recording>"|null}`.
+"voice_engine": "kokoro"|"eleven"|"edge"|"pocket", "voice_id", "ai": true|false, "voiceover": "<the user's own recording>"|null}`.
 `voice_engine` and `voice_id` are the narrator the user picked on the page: `voice` reads them itself.
 Asked in chat instead of the page: make the edit folder (`python3 "$E/lib/ai_editor/library.py" path`, then
 `edits/<name>/`), write brief.json (3 minutes, 16:9, everything on), and
@@ -96,8 +96,8 @@ than 5 sources or no beats; after approval `claims EDIT`, a fresh agent verifies
     `unit`, `source`): a comparison of 2 to 6 numbers. `list` (`title`, `items`): 2 to 6 points, each a few
     words. `quote` (`text`, `by`): someone's own words. `source` (`title`, `by`, `highlight`): the paper or article
     a claim comes from, with the sentence that matters, in its own words. `title` (`text`, `sub`): a section's
-    opening, or the close. More in `${CLAUDE_SKILL_DIR}/references/graphics.md`: `tier` (a ranked tier list), `paper`
-    (a study lifting off the page), `chart3d` (a real 3D chart), a photo's `make` (an AI image), and 4K.
+    opening, or the close. More in `${CLAUDE_SKILL_DIR}/references/graphics.md` (read it): `tier`, `paper`, `chart3d`,
+    `word`, `versus`, `timeline`, `place`, `line`, a `stamp` on footage, a photo's `make` (an AI image), and 4K.
   - `ai` (`prompt`, `fallback`): a shot generated on the user's own Runway, Higgsfield or Google account, only when
     brief.json `ai` is true: for what nobody filmed and no photo shows (a scene from before cameras, a thing too
     small or too far to film). `prompt`: one sentence of what is in the frame and how the camera moves, no text in
@@ -206,6 +206,7 @@ would be empty.
 ## 5. Sound, build, render
 
 ```bash
+python3 "$PY" "$L" sfx-setup; python3 "$PY" "$L" music EDIT --feel "Mysterious"   # lists real tracks; then --use "<title>"
 python3 "$PY" "$L" sound EDIT [--mood linear]      # the voice, a quiet bed that rests, a sound where something lands
 python3 "$PY" "$L" build EDIT
 python3 "$PY" "$L" charts EDIT && python3 "$PY" "$L" build EDIT   # only with chart3d shots: render them, then build again
@@ -220,15 +221,14 @@ EDIT`: `FIX` for a black or empty frame, `EDIT/sheets/qa-N.jpg` with every shot'
 
 ```bash
 python3 "$R" EDIT round --video EDIT/render.mp4 --stage edit
-python3 "$PY" "$L" thumbs EDIT --title "<3 to 5 words, the video's promise>"      # exports/thumbnail-1..3.jpg
+python3 "$PY" "$L" thumbs EDIT --title "<the title>"   # 3 composed thumbnails from EDIT/thumb.json (story.md step 0)
 ```
 
-Write `EDIT/kit.json`: `{"titles": [three options, under 60 characters, true to the video], "description": "<two
-short paragraphs: what the viewer learns, no hashtags>", "tags": [8 to 12]}`, then `python3 "$PY" "$L" kit EDIT`
-(`exports/publish.md`: the titles, the description with chapters from the sections, the sources, a credit line for
-every clip and picture, the tags). Then `status longvideo --result ... --done`, `python3 "$R" EDIT wait` in the
-background, and one line on the page: the video is in the editor, the thumbnails and the kit are in its exports
-folder.
+Write `EDIT/kit.json`: `{"titles": [3: search, browse, between; each under 60 characters], "description": "<two
+standalone opening lines under 150 characters, then what it covers>", "tags": [10 to 15]}`, then `python3 "$PY" "$L"
+kit EDIT` until it prints no `FIX` (`exports/publish.md`: titles, description, chapters, sources, credits, tags).
+Then `status longvideo --result ... --done`, `python3 "$R" EDIT wait` in the background, and one line on the page:
+the video is in the editor, the thumbnails and the kit are in its exports folder.
 
 On notes (`SEND`): each note has a time; `EDIT/timing.json` says which line it falls in, and that line's shots share
 its time in order. A shot: change it in scenes.json, `find --only <key>`, build, render. The words: change `say`,

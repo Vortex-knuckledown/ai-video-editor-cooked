@@ -386,6 +386,60 @@ def tts_edge(text, out, voice, speed=1.0):
     mp3.unlink()
 
 
+# Pocket TTS (Kyutai): a 100 M voice model on this computer's processor, about 1.3 GB of memory, several times faster
+# than real time. It lives in its own Python (~/.ai-video-editor/pocket, about 1 GB) so PyTorch stays out of the editor's.
+POCKET_VOICE = "george"
+POCKET_VOICES = [("george", "George", "British · man"), ("charles", "Charles", "British · man"), ("paul", "Paul", "British · man"),
+                 ("michael", "Michael", "American · man"), ("marius", "Marius", "American · man"), ("javert", "Javert", "American · man"),
+                 ("jean", "Jean", "American · man"), ("bill_boerst", "Bill", "American · man"), ("peter_yearsley", "Peter", "British · man"),
+                 ("stuart_bell", "Stuart", "British · man"),
+                 ("alba", "Alba", "British · woman"), ("anna", "Anna", "British · woman"), ("vera", "Vera", "British · woman"),
+                 ("fantine", "Fantine", "British · woman"), ("mary", "Mary", "American · woman"), ("jane", "Jane", "British · woman"),
+                 ("eve", "Eve", "American · woman"), ("cosette", "Cosette", "American · woman"), ("eponine", "Eponine", "British · woman"),
+                 ("azelma", "Azelma", "American · woman"), ("caro_davy", "Caro", "British · woman")]
+POCKET_CREDIT = "Voice: Pocket TTS by Kyutai (CC BY 4.0)"
+_POCKET = []
+
+
+def pocket_py():
+    import os
+    home = os.environ.get("AI_EDITOR_HOME", "").strip()
+    d = (Path(home) if home else Path.home() / ".ai-video-editor") / "pocket"
+    return d / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+
+
+def pocket_ready():
+    return pocket_py().is_file() and any(pocket_py().parents[1].glob("lib/python*/site-packages/pocket_tts")) or (
+        pocket_py().is_file() and (pocket_py().parents[1] / "Lib" / "site-packages" / "pocket_tts").is_dir())
+
+
+def cmd_pocket_setup():
+    """The studio voice, once: its own Python environment with Pocket TTS (about 1 GB), then its model on first use."""
+    if not pocket_ready():
+        import venv
+        venv.create(pocket_py().parents[1], with_pip=True)
+        subprocess.run([str(pocket_py()), "-m", "pip", "install", "-q", "pocket-tts"], check=True)
+    print("pocket ready" if pocket_ready() else "ERROR: the Pocket voice did not install")
+    return 0 if pocket_ready() else 1
+
+
+def tts_pocket(text, out, voice):
+    """One line in a Pocket voice. `voice`: a catalogue name, or a recording's path to copy the voice of."""
+    if not _POCKET or _POCKET[0].poll() is not None:
+        _POCKET[:] = [subprocess.Popen([str(pocket_py()), str(Path(__file__).with_name("pocket_say.py"))], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                       stderr=subprocess.DEVNULL, text=True)]
+        if not json.loads(_POCKET[0].stdout.readline() or "{}").get("ready"):
+            raise RuntimeError("the Pocket voice did not start")
+    raw = Path(out).with_suffix(".p.wav")
+    _POCKET[0].stdin.write(json.dumps({"text": text, "out": str(raw), "voice": voice}) + "\n")
+    _POCKET[0].stdin.flush()
+    got = json.loads(_POCKET[0].stdout.readline() or '{"error": "no answer"}')
+    if not got.get("ok"):
+        raise RuntimeError(got.get("error") or "the Pocket voice failed")
+    to_wav(raw, out)
+    raw.unlink()
+
+
 KOKORO_VOICES = ["am_michael", "am_fenrir", "am_adam", "am_echo", "am_eric", "am_liam", "am_onyx", "am_puck",
                  "af_heart", "af_bella", "af_nicole", "af_sarah", "af_sky", "af_nova", "af_river", "af_jessica", "af_kore", "af_alloy", "af_aoede",
                  "bm_george", "bm_daniel", "bm_fable", "bm_lewis", "bf_emma", "bf_alice", "bf_isabella", "bf_lily"]
@@ -397,6 +451,10 @@ def cmd_preview(engine, voice, out):
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     if engine == "edge" and voice in [v[0] for v in EDGE_VOICES] and edge_ready():
         tts_edge(PREVIEW_LINE, out, voice)
+        print(out)
+        return 0
+    if engine == "pocket" and voice in [v[0] for v in POCKET_VOICES] and pocket_ready():
+        tts_pocket(PREVIEW_LINE, out, voice)
         print(out)
         return 0
     if engine != "kokoro" or voice not in KOKORO_VOICES or not kokoro_ready():
@@ -451,6 +509,10 @@ def engine_for(want):
         return "edge", None
     if want == "edge":
         sys.exit("The Edge voices are not installed (pip install edge-tts into the editor's environment), or use --engine kokoro.")
+    if want == "pocket":
+        if pocket_ready():
+            return "pocket", None
+        sys.exit("The studio voice is not installed: studio.py pocket-setup (about 1 GB, once), or use --engine kokoro.")
     if want in ("auto", "kokoro") and kokoro_ready():
         return "kokoro", None
     if want == "kokoro":
@@ -482,7 +544,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
         sys.exit("ERROR: scenes.json: " + "; ".join(errs))
     b, scenes = brief_of(edit), jload(edit / "scenes.json")["scenes"]
     want = str(b.get("voice_engine") or "")       # the page's voice picker: "kokoro" or "eleven" with brief voice_id
-    if engine == "auto" and want in ("kokoro", "eleven", "edge"):
+    if engine == "auto" and want in ("kokoro", "eleven", "edge", "pocket"):
         try:
             eng, key = engine_for(want if b["voice"] else "none")
         except SystemExit:                         # that engine is not there any more (a removed key): the best there is
@@ -493,7 +555,7 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
     if not voice and str(b.get("voice_id") or "").strip():
         vid = str(b["voice_id"]).strip()
         if (eng == "kokoro" and vid in KOKORO_VOICES) or (eng == "eleven" and want == "eleven" and re.fullmatch(r"[A-Za-z0-9]{12,40}", vid)) \
-                or (eng == "edge" and vid in [v[0] for v in EDGE_VOICES]):
+                or (eng == "edge" and vid in [v[0] for v in EDGE_VOICES]) or (eng == "pocket" and vid in [v[0] for v in POCKET_VOICES]):
             voice = vid
     like = jload(edit / "like" / "like.json", {}) if b.get("like") else {}
     if fit is None and like:
@@ -524,6 +586,17 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
                         tts_kokoro(text, out, KOKORO_VOICE, (rate or 100) / 100.0)
                 elif eng == "kokoro":
                     tts_kokoro(text, out, voice or KOKORO_VOICE, (rate or 100) / 100.0)
+                elif eng == "pocket":       # brief "voice_sample": a recording in the edit folder to copy the voice of
+                    sample = edit / str(b.get("voice_sample") or "-")
+                    try:
+                        tts_pocket(text, out, str(sample) if sample.is_file() else (voice or POCKET_VOICE))
+                    except RuntimeError as e:
+                        if not sample.is_file():
+                            raise
+                        print(f"note: could not copy the voice in {sample.name} ({str(e)[:90]}); using {POCKET_VOICE}. Copying a voice needs the "
+                              "user's own Hugging Face login with the model's terms accepted (huggingface.co/kyutai/pocket-tts).")
+                        b["voice_sample"] = ""
+                        tts_pocket(text, out, voice or POCKET_VOICE)
                 else:
                     tts_mac(text, out, voice or MAC_VOICE, rate)
                 stamp.write_text(want, encoding="utf-8")
@@ -1185,6 +1258,17 @@ def cmd_music(edit, mood="linear"):
     bed = np.zeros((2, n))
     if b["music"]:
         bed, _ = sound.compose(mood, tm["length"], None, cuts, 0, sections)
+        real = next((x for x in (edit / "audio" / f"music.{e}" for e in ("mp3", "wav", "m4a")) if x.is_file()), None)
+        if real:                # a recorded track chosen for this video (longvideo.py music EDIT --use "<title>"): past its intro, looped, levelled
+            x = sound.read_audio(real)
+            x = x[:, min(x.shape[1] // 6, 4 * sound.SR):]
+            while x.shape[1] < n:
+                x = np.concatenate([x, x], axis=1)
+            x = x[:, :n] * (0.05 / (float(np.sqrt((x[:, :n] ** 2).mean())) or 1.0))
+            f_ = int(1.5 * sound.SR)
+            x[:, :f_] *= np.linspace(0, 1, f_)
+            x[:, -f_:] *= np.linspace(1, 0, f_)
+            bed = x * ((0.6 / 0.11) if tm["engine"] != "none" else 4.8)     # under a voice it lands where long videos keep it; alone, full
         bed = np.pad(bed, ((0, 0), (0, max(0, n - bed.shape[1]))))[:, :n] * (0.11 if tm["engine"] != "none" else 0.5)   # a quiet bed under a voice (measured: 0.5 buried it); full when the music is all there is
     mix = bed
     if vo:
@@ -1354,6 +1438,7 @@ def main(argv):
     sub.add_parser("root")
     sub.add_parser("demo")
     sub.add_parser("kokoro-setup")
+    sub.add_parser("pocket-setup")
     sub.add_parser("three-setup")
     sub.add_parser("kit-setup")
     sub.add_parser("lib").add_argument("args", nargs="*")
@@ -1389,6 +1474,8 @@ def main(argv):
         return cmd_like(a.edit, a.src, a.cookies_from_browser)
     if a.cmd == "kokoro-setup":
         return cmd_kokoro_setup()
+    if a.cmd == "pocket-setup":
+        return cmd_pocket_setup()
     if a.cmd == "three-setup":
         return cmd_three_setup()
     if a.cmd == "kit-setup":

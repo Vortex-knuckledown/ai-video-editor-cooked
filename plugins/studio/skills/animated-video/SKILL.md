@@ -155,6 +155,7 @@ full path of its `EDIT/motion/<id>/brief.md`. While they build, run the music (i
 
 ```bash
 python3 "$PY" "$T" music EDIT --mood <scenes.json mood>   # audio/mix.wav: music under the voice, -14 LUFS (skips what is off)
+# a recorded track instead of the generated bed: long-video's `longvideo.py music EDIT --feel "Uplifting"`, then `--use "<title>"`, then this again
 ```
 
 Each agent returns `{"clip", "pass", "render", "what", "failing"}`. Look at every passed clip's `renders/sheet.png`

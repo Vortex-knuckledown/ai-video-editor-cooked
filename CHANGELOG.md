@@ -13,6 +13,33 @@ What changed for every user, newest first.
   3 sites, the one question the video answers, a beat sheet before any script, a storyboard decided from the beats,
   and a draft preview in the editor before the final render. `check` refuses a script with fewer than 5 sources or no
   beats.
+- **Real music and recorded sound effects.** `music` searches Kevin MacLeod's Incompetech catalogue (about 1,400
+  tracks, CC BY 4.0) by feel, tempo and length and puts the chosen track under the voice; the publishing kit writes
+  its credit line. `sfx-setup` fetches about 30 CC0 recordings (whooshes, impacts, risers, clicks) that replace the
+  synthesised sounds. Animated videos use a chosen track too.
+- **A cleaned voice.** A recorded voiceover is denoised (DeepFilterNet), and its ums, false starts and long pauses
+  are cut without clipping a word; the report says what was removed.
+- **Studio voice.** Pocket TTS (Kyutai) as a fourth narrator choice: 21 voices that run on this computer, free and
+  offline, about 1.3 GB of memory while speaking. Settings > Connections > Voice installs it with one click (about
+  1 GB, in its own environment); the page's voice picker then shows a Studio tab. The kit credits it.
+- **Thumbnails that are composed, not a frame with a title.** The subject is cut out of its frame (IS-Net, run with
+  the editor's own onnxruntime) and set on a dark ground with a glow, with 1 to 5 words in heavy capitals and one
+  word in the accent; three layouts. The words are fixed before the script (`thumb.json`), as the title is.
+- **A publishing kit checked against YouTube's own limits.** Three titles under 60 characters (search, browse,
+  between), two standalone opening lines, chapters that YouTube will accept, 10 to 15 tags under 500 characters.
+- **Five more graphics.** `word` (one to three words filling the frame on the beat), `versus` (two numbers, two
+  bars), `timeline`, `place` (where and when, lower left) and `line` (a line chart drawn point by point); a paper's
+  `finding` (a glass KEY FINDING card beside it) and a `stamp` on footage.
+- **Shorts open on one word** over the picture for the first second, and their captions put numbers and the words
+  that carry the point in the accent.
+- **Every claim is checked by a fresh reader.** `claims` lists each spoken line that states a number, a date, a
+  name or a superlative; a new agent finds a page and the sentence that supports it; `claims --gate` must pass.
+- **Motion craft.** Fifteen MIT rule sets (GSAP, three.js lighting, materials, shaders and post-processing, animation
+  principles, shot composition, chart animation) are in every clip's brief with the HyperFrames block catalogue, and
+  the 3D kit has bloom, depth of field, ambient occlusion and crisp 3D text. The 3D chart is finished with them.
+- **An open-licence character.** `actor`: Quaternius' Universal Animation Library figure (CC0) with 45 motions
+  (sit, talk, push, pick up, jump, swim, drive, dance), free to pass on, now that Ready Player Me has closed.
+- **One look.** Near-black, white type and one electric blue accent across graphics, charts and thumbnails.
 
 ## studio 0.18.0 (this fork, 2026-11-19)
 

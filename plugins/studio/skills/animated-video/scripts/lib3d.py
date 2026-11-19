@@ -37,6 +37,10 @@ KIT_FIGURES = {   # the kit's three figures, with the clips inside each file
     "soldier": ("models/soldier.glb", "A soldier in armour and a helmet.", {"idle": "@Idle", "walk": "@Walk", "run": "@Run"}),
     "robot": ("models/robot.glb", "A small friendly cartoon robot.",
               {"idle": "@Idle", "walk": "@Walking", "run": "@Running", "jump": "@Jump", "wave": "@Wave", "dance": "@Dance"})}
+# Quaternius' Universal Animation Library (CC0: no credit owed, free to pass on, unlike the two bodies above): one neutral
+# figure with about 45 motions in its own file. The open choice now that Ready Player Me has closed.
+UAL_RAW = "https://raw.githubusercontent.com/J-Ponzo/gltf-universal-animation-library/main/glTF/"
+UAL_FILES = ("AnimationLibrary_Godot_Standard.gltf", "AnimationLibrary_Godot_Standard.bin")
 KIT_SCALE = {"robot": 0.35}   # the robot's file is about 4.5 m tall
 POLYHAVEN = "https://api.polyhaven.com/"
 PROP_MAX_MB = 40   # a whole scanned tree is close to 1 GB: nothing that size goes in the library or a browser
@@ -129,6 +133,23 @@ def setup_characters(kit=None):
         except Exception as e:   # noqa: BLE001
             bad.append(f"{cid} ({type(e).__name__})")
         jsave(d / "character.json", meta)
+    d = root() / "characters" / "actor"
+    try:
+        for f in UAL_FILES:
+            fetch(UAL_RAW + f, d / f)
+        names = [a.get("name") for a in json.loads((d / UAL_FILES[0]).read_text(encoding="utf-8")).get("animations", []) if a.get("name")]
+        clips = {}
+        for n in names:         # "Walk_Loop" -> walk, "Idle_Talking_Loop" -> idle_talking; the first of a name wins
+            clips.setdefault(re.sub(r"_(loop|rm)$", "", re.sub(r"[^a-z0-9]+", "_", n.lower()).strip("_")), "@" + n)
+        for short, like in (("idle", "idle"), ("walk", "walk"), ("run", "jog"), ("run", "sprint"), ("talk", "idle_talking")):
+            hit = next((k for k in clips if k == like or k.startswith(like)), None)
+            if hit and short not in clips:
+                clips[short] = clips[hit]
+        jsave(d / "character.json", {"id": "actor", "describe": "A neutral, featureless figure with a full set of motions (CC0): walk, jog, sprint, sit, talk, "
+                                     "jump, crouch, push, pick up, dance and more. Use it when the scene needs an action the man and woman do not have.",
+                                     "height": 1.8, "body": UAL_FILES[0], "clips": clips, "source": "Quaternius Universal Animation Library (CC0)"})
+    except Exception as e:   # noqa: BLE001
+        bad.append(f"actor ({type(e).__name__})")
     for cid, (rel, describe, clips) in KIT_FIGURES.items():
         src = (Path(kit) / rel) if kit else None
         d = root() / "characters" / cid

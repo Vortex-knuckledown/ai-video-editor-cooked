@@ -28,6 +28,7 @@ One scene is one spoken line. Its shots share its time equally. A shot is one of
     {"kind": "source", "title": "the paper or article", "by": "authors, journal, year", "highlight": "the line that matters"}
 """
 import argparse
+import math
 import html
 import json
 import re
@@ -52,7 +53,7 @@ import streamclips  # noqa: E402  (yt-dlp, the cover image)
 
 MEDIA = ("clip", "stock", "photo", "own", "ai", "bite")
 MAX_AI = 6                # AI-generated shots a video: each one is paid for on the user's own account
-GRAPHICS = ("title", "stat", "bars", "list", "quote", "source", "tier", "paper")
+GRAPHICS = ("title", "stat", "bars", "list", "quote", "source", "tier", "paper", "word", "versus", "timeline", "place", "line")
 TIER_COLOURS = {"S": "#FF5A5F", "A": "#FF9F43", "B": "#FFD24A", "C": "#5AD17E", "D": "#4D9FFF", "E": "#9B7BFF", "F": "#8B93A1"}
 MAXH = 1080               # the tallest footage fetched; 2160 for a 4K video (brief "quality": "4k")
 MAX_IMAGES = 8            # pictures made by the user's AI image tool a video: each is paid for on their own account
@@ -61,7 +62,8 @@ NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("
          "ai": ("prompt", "fallback"), "bite": (),
          "title": ("text",), "stat": ("value", "label"),
          "bars": ("items",), "list": ("items",), "quote": ("text",), "source": ("title", "highlight"),
-         "tier": ("tiers",), "paper": ("title", "highlight"), "chart3d": ("items",)}
+         "tier": ("tiers",), "paper": ("title", "highlight"), "chart3d": ("items",),
+         "word": ("text",), "versus": ("items",), "timeline": ("events",), "place": ("text",), "line": ("points",)}
 MIN_SHOT_S = 1.2          # a shot shorter than this is dropped: the line's other shots take its time
 PACE_S = 3.4              # more than this a shot on average reads as slow (edited channels change picture every 1.5 to 2.5 s)
 DISPLAY = "Anton"         # the condensed capitals of titles, numbers and labels; everything else is the renderer's sans
@@ -92,14 +94,25 @@ def check(edit):
                 errs.append(f"scene {s.get('id')} shot {k}: kind must be one of {', '.join(NEEDS)}")
                 continue
             ov = sh.get("over")
-            if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat", "ring", "clip"))):
-                errs.append(f"scene {s.get('id')} shot {k}: \"over\" goes on footage or a picture and has a label, a name, a stat, a ring or a clip")
+            if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat", "ring", "clip", "stamp"))):
+                errs.append(f"scene {s.get('id')} shot {k}: \"over\" goes on footage or a picture and has a label, a name, a stat, a ring, a clip or a stamp")
             for f in NEEDS[kind]:
                 if not sh.get(f):
                     errs.append(f"scene {s.get('id')} shot {k} ({kind}): no \"{f}\"")
             if kind == "tier" and not (isinstance(sh.get("tiers"), list) and 2 <= len(sh["tiers"]) <= 6 and all(
                     isinstance(t, list) and len(t) == 2 and isinstance(t[1], list) and 1 <= len(t[1]) <= 5 for t in sh["tiers"])):
                 errs.append(f"scene {s.get('id')} shot {k} (tier): \"tiers\" is 2 to 6 rows, each [\"S\", [\"name\", ...]] with 1 to 5 names")
+            if kind == "versus" and not (isinstance(sh.get("items"), list) and len(sh["items"]) == 2 and all(
+                    isinstance(i, list) and len(i) == 2 and isinstance(i[1], (int, float)) for i in sh["items"])):
+                errs.append(f"scene {s.get('id')} shot {k} (versus): \"items\" is exactly two [\"name\", number]")
+            if kind == "timeline" and not (isinstance(sh.get("events"), list) and 2 <= len(sh["events"]) <= 5 and all(
+                    isinstance(i, list) and len(i) == 2 for i in sh["events"])):
+                errs.append(f"scene {s.get('id')} shot {k} (timeline): \"events\" is 2 to 5 [\"when\", \"what\"]")
+            if kind == "line" and not (isinstance(sh.get("points"), list) and 3 <= len(sh["points"]) <= 12 and all(
+                    isinstance(i, list) and len(i) == 2 and isinstance(i[1], (int, float)) for i in sh["points"])):
+                errs.append(f"scene {s.get('id')} shot {k} (line): \"points\" is 3 to 12 [\"label\", number]")
+            if kind == "word" and len(str(sh.get("text") or "").split()) > 3:
+                errs.append(f"scene {s.get('id')} shot {k} (word): one to three words")
             if kind in ("bars", "list", "chart3d") and not (isinstance(sh.get("items"), list) and 2 <= len(sh["items"]) <= 6):
                 errs.append(f"scene {s.get('id')} shot {k} ({kind}): 2 to 6 items")
             if kind == "motion" and not (isinstance(sh.get("fallback"), dict) and sh["fallback"].get("kind") in GRAPHICS
@@ -133,6 +146,9 @@ def story_gaps(edit):
         out.append("no beats.md: write the story in 6 to 10 beats before the script (references/story.md)")
     elif beats is not None and not 5 <= len(beats) <= 12:
         out.append(f"beats.md has {len(beats)} beat(s): 6 to 10")
+    tj = jload(edit / "thumb.json", None)
+    if r and not (isinstance(tj, dict) and 1 <= len(str(tj.get("words") or "").split()) <= 5):
+        out.append('no thumb.json: fix the title and the thumbnail before the script: {"words": "1 to 5 words that add to the title", "mark": "the one word in the accent"}')
     return out
 
 
@@ -1750,24 +1766,118 @@ def graphic(S, sh, a, b, W, H, look):
                 S.shape(a + tj, b, track="Graphics", x=cx, y=y, w=cw_ * 0.92, h=rh * 0.62, radius=rh * 0.16, fill="#0B0C0F", opacity=0.55, anim=pop)
                 T(name, tj, x=cx, y=y, w=int(cw_ * 0.86), size=int(min(rh * 0.3, cw_ * 0.86 / max(4, len(str(name))) * 1.7)), weight=700, color=ink, anim=pop, track="Graphics top")
     elif kind == "paper":       # research that lifts off the page: the paper tilts up, its text greys, one line is marked
-        pw, ph = W * 0.6, H * 0.82
+        pw, ph = W * (0.54 if sh.get("finding") else 0.6), H * 0.82
+        px = W * (0.36 if sh.get("finding") else 0.5)      # the paper moves left when its finding sits beside it
         tilt = {"rotation": [[0, -9, "out"], [0.7, -3, "out"], [d, -1.5, "linear"]], "scale": [[0, 0.84, "out"], [0.7, 1.0, "out"], [d, 1.06, "linear"]],
                 "y": [[0, H * 0.6, "out"], [0.7, H * 0.44, "out"]]}
-        S.shape(a, b, track="Graphics", x=W / 2, y=H * 0.44, w=pw, h=ph, radius=s * 0.008, fill="#FBF9F3",
+        S.shape(a, b, track="Graphics", x=px, y=H * 0.44, w=pw, h=ph, radius=s * 0.008, fill="#FBF9F3",
                 shadow={"blur": 80, "y": 34, "opacity": 0.6}, anim={"in": "fade", "out": "none", "dur": 0.25}, keys=tilt)
         if sh.get("journal"):
-            T(str(sh["journal"]).upper(), 0.2, x=W / 2, y=H * 0.1, w=int(pw * 0.84), size=int(s * 0.02), weight=600, color="#8A8F99", anim=up, track="Graphics top")
-        T(sh["title"], 0.25, x=W / 2, y=H * 0.19, w=int(pw * 0.84), size=int(s * 0.042), weight=800, color="#16181D", line_height=1.16, anim=up, track="Graphics top")
+            T(str(sh["journal"]).upper(), 0.2, x=px, y=H * 0.1, w=int(pw * 0.84), size=int(s * 0.02), weight=600, color="#8A8F99", anim=up, track="Graphics top")
+        T(sh["title"], 0.25, x=px, y=H * 0.19, w=int(pw * 0.84), size=int(s * 0.042), weight=800, color="#16181D", line_height=1.16, anim=up, track="Graphics top")
         if sh.get("by"):
-            T(sh["by"], 0.3, x=W / 2, y=H * 0.3, w=int(pw * 0.84), size=int(s * 0.024), weight=500, color="#5B5F68", anim=up, track="Graphics top")
+            T(sh["by"], 0.3, x=px, y=H * 0.3, w=int(pw * 0.84), size=int(s * 0.024), weight=500, color="#5B5F68", anim=up, track="Graphics top")
         body = str(sh.get("abstract") or "")
         if body:
-            T(body[:420], 0.35, x=W / 2, y=H * 0.44, w=int(pw * 0.84), size=int(s * 0.023), weight=400, color="#3A3E47", opacity=0.55, line_height=1.5,
+            T(body[:420], 0.35, x=px, y=H * 0.44, w=int(pw * 0.84), size=int(s * 0.023), weight=400, color="#3A3E47", opacity=0.55, line_height=1.5,
               anim={"in": "fade", "out": "none", "dur": 0.4}, track="Graphics top")
         hy = H * (0.64 if body else 0.5)
-        T(sh["highlight"], min(0.9, d / 2), x=W / 2, y=hy, w=int(pw * 0.86), size=int(s * 0.04), weight=800, color="#16181D", line_height=1.45,
+        T(sh["highlight"], min(0.9, d / 2), x=px, y=hy, w=int(pw * 0.86), size=int(s * 0.04), weight=800, color="#16181D", line_height=1.45,
           box={"color": acc, "pad": [14, 6], "radius": 5, "opacity": 0.95}, anim={"in": "pop", "out": "none", "dur": 0.25},
           keys={"scale": [[0, 1.0, "out"], [d, 1.05, "linear"]]}, track="Graphics top")
+        if sh.get("finding"):   # the result in plain words on a glass card at the right, after the line is marked
+            fw, fh, fx, fy, t0 = W * 0.28, H * 0.32, W * 0.81, H * 0.36, min(1.3, d * 0.6)
+            S.shape(a + t0, b, track="Graphics top", x=fx, y=fy, w=fw, h=fh, radius=s * 0.02, fill="#0B0C0F", opacity=0.82, stroke={"color": "#FFFFFF2E", "width": 2},
+                    shadow={"blur": 44, "y": 16, "opacity": 0.45}, anim={"in": "slide-up", "out": "none", "dur": 0.25})
+            kk = " ".join("KEY FINDING")
+            T(kk, t0 + 0.05, x=fx - fw / 2 + s * 0.03 + tw(kk, s * 0.016, 600) / 2, y=fy - fh / 2 + s * 0.04, w=int(fw), size=int(s * 0.016), weight=600, color=acc, align="left",
+              anim={"in": "fade", "out": "none", "dur": 0.2}, track="Graphics top")
+            T(sh["finding"], t0 + 0.12, x=fx, y=fy + s * 0.015, w=int(fw * 0.82), size=int(s * 0.034), weight=700, color=ink, line_height=1.25, align="left",
+              anim={"in": "fade", "out": "none", "dur": 0.25}, track="Graphics top")
+    elif kind == "word":        # one to three words filling the frame, one after another on the beat
+        ws = str(sh["text"]).upper().split()[:3]
+        step = min(0.42, d / (len(ws) + 1))
+        size = min(s * 0.4, W * 0.84 / max(anton_w(w, 1.0) for w in ws))
+        for i, w in enumerate(ws):
+            last = i == len(ws) - 1
+            S.text(w, a + i * step, b if last else a + (i + 1) * step, track="Graphics", x=W / 2, y=H * 0.4, w=int(W * 0.94), size=int(size), font=DISPLAY, weight=400,
+                   color=acc if last and len(ws) > 1 or sh.get("accent") else ink, anim={"in": "pop", "out": "none", "dur": 0.12},
+                   keys={"scale": [[0, 1.12, "out"], [0.18, 1.0, "out"], [max(0.3, d), 1.05, "linear"]]})
+        if sh.get("sub"):
+            T(sh["sub"], step * len(ws), x=W / 2, y=H * 0.66, w=int(W * 0.7), size=int(s * 0.045), weight=600, color=ink, opacity=0.8, anim=up)
+    elif kind == "versus":      # two numbers side by side, the larger in the accent, each with its own bar rising
+        (n1, v1), (n2, v2) = sh["items"]
+        top_v = max(abs(float(v1)), abs(float(v2))) or 1.0
+        if sh.get("title"):
+            T(str(sh["title"]).upper(), 0, x=W / 2, y=H * 0.1, w=int(W * 0.86), size=int(s * 0.085), font=DISPLAY, weight=400, color=ink, anim=up)
+        base, full, bw_ = H * 0.72, H * 0.4, W * 0.16
+        for i, (name, v) in enumerate(((n1, v1), (n2, v2))):
+            cx, on, t0 = W * (0.34 if i == 0 else 0.66), float(v) == max(float(v1), float(v2)), 0.15 + i * 0.25
+            bh_ = max(10.0, full * abs(float(v)) / top_v)
+            grow = min(0.8, max(0.35, d * 0.3))
+            S.shape(a + t0, b, track="Graphics", x=cx, y=base - bh_ / 2, w=bw_, h=bh_, radius=s * 0.012, fill=acc if on else ink, opacity=1 if on else 0.3,
+                    keys={"h": [[0, 6, "out"], [grow, bh_, "out"]], "y": [[0, base - 3, "out"], [grow, base - bh_ / 2, "out"]]})
+            T(f"{v:g}{sh.get('unit') or ''}", t0 + grow * 0.7, x=cx, y=base - bh_ - s * 0.07, w=int(W * 0.3), size=int(s * 0.1), font=DISPLAY, weight=400,
+              color=acc if on else ink, anim=pop)
+            T(str(name).upper(), t0, x=cx, y=base + s * 0.05, w=int(W * 0.3), size=int(s * 0.036), weight=700, color=ink, anim=up)
+        if sh.get("source"):
+            T("Source: " + sh["source"], 0.3, x=W / 2, y=H * 0.835, w=int(W * 0.8), size=int(s * 0.024), weight=500, color=ink, opacity=0.55)
+    elif kind == "timeline":    # a line drawn left to right, each date arriving on it in turn
+        ev = sh["events"][:5]
+        if sh.get("title"):
+            T(str(sh["title"]).upper(), 0, x=W / 2, y=H * 0.13, w=int(W * 0.86), size=int(s * 0.085), font=DISPLAY, weight=400, color=ink, anim=up)
+        x0, x1, y = W * 0.12, W * 0.88, H * 0.45
+        draw = min(1.2, d * 0.5)
+        S.shape(a + 0.1, b, track="Graphics bg", x=(x0 + x1) / 2, y=y, w=x1 - x0, h=max(3, s * 0.004), radius=2, fill=ink, opacity=0.35,
+                keys={"w": [[0, 2, "out"], [draw, x1 - x0, "out"]], "x": [[0, x0, "out"], [draw, (x0 + x1) / 2, "out"]]})
+        for i, (when, what) in enumerate(ev):
+            cx = x0 + (x1 - x0) * (i / (len(ev) - 1))
+            t0 = min(max(0.0, d - 0.4), 0.2 + draw * i / (len(ev) - 1) if len(ev) > 1 else 0.2)
+            last = i == len(ev) - 1
+            dot = s * (0.03 if last else 0.02)
+            S.shape(a + t0, b, track="Graphics", x=cx, y=y, w=dot, h=dot, radius=dot / 2, fill=acc if last else ink, anim=pop)
+            T(str(when).upper(), t0, x=cx, y=y - s * 0.075, w=int((x1 - x0) / len(ev) * 1.1), size=int(s * 0.06), font=DISPLAY, weight=400, color=acc if last else ink, anim=pop)
+            T(what, t0 + 0.08, x=cx, y=y + s * 0.085, w=int((x1 - x0) / len(ev) * 0.95), size=int(s * 0.028), weight=600, color=ink, opacity=0.85, line_height=1.25, anim=up)
+    elif kind == "place":       # where and when, lower left, the way a documentary opens a chapter
+        size = min(s * 0.13, W * 0.8 / max(1.0, anton_w(str(sh["text"]).upper(), 1.0)))
+        x0, y = W * 0.06, H * 0.62
+        S.shape(a + 0.05, b, track="Graphics", x=x0 + s * 0.004, y=y + (s * 0.03 if sh.get("sub") else 0), w=max(4, s * 0.007), h=size * (1.5 if sh.get("sub") else 1.0), fill=acc,
+                keys={"h": [[0, 2, "out"], [0.35, size * (1.5 if sh.get("sub") else 1.0), "out"]]})
+        tx = str(sh["text"]).upper()
+        T(tx, 0.12, x=x0 + s * 0.03 + anton_w(tx, size) / 2, y=y, w=int(W * 0.86), size=int(size), font=DISPLAY, weight=400, color=ink, align="left", anim=up)
+        if sh.get("sub"):
+            sb = " ".join(str(sh["sub"]).upper())
+            T(sb, 0.3, x=x0 + s * 0.03 + tw(sb, s * 0.026, 600) / 2, y=y + size * 0.72, w=int(W * 0.8), size=int(s * 0.026), weight=600, color=acc, align="left",
+              anim={"in": "fade", "out": "none", "dur": 0.3})
+    elif kind == "line":        # a line chart drawn point by point, the last value named in the accent
+        pts = sh["points"][:12]
+        vals = [float(v) for _, v in pts]
+        lo, hi = min(vals), max(vals)
+        lo = 0.0 if lo >= 0 and lo < hi * 0.5 else lo
+        if sh.get("title"):
+            T(str(sh["title"]).upper(), 0, x=W / 2, y=H * 0.1, w=int(W * 0.86), size=int(s * 0.085), font=DISPLAY, weight=400, color=ink, anim=up)
+        x0, x1, y0, y1 = W * 0.16, W * 0.8, H * 0.7, H * 0.26
+        panel(W / 2, (y0 + y1) / 2, W * 0.84, (y0 - y1) + H * 0.2)
+        S.shape(a + 0.1, b, track="Graphics", x=(x0 + x1) / 2, y=y0 + s * 0.012, w=x1 - x0, h=2, fill=ink, opacity=0.25)
+        P = [(x0 + (x1 - x0) * i / (len(pts) - 1), y0 - (y0 - y1) * ((v - lo) / ((hi - lo) or 1.0))) for i, v in enumerate(vals)]
+        draw = min(1.6, d * 0.55)
+        th = max(4, s * 0.007)
+        for i in range(len(P) - 1):
+            (xa, ya), (xb, yb) = P[i], P[i + 1]
+            ln, ang = math.hypot(xb - xa, yb - ya), math.degrees(math.atan2(yb - ya, xb - xa))
+            S.shape(a + 0.25 + draw * i / (len(P) - 1), b, track="Graphics", x=(xa + xb) / 2, y=(ya + yb) / 2, w=ln + th * 0.6, h=th, radius=th / 2, rotation=ang, fill=acc,
+                    anim={"in": "fade", "out": "none", "dur": 0.12})
+        for i in (0, len(P) - 1):
+            t0 = 0.25 + (draw if i else 0)
+            S.shape(a + t0, b, track="Graphics top", x=P[i][0], y=P[i][1], w=th * 2.6, h=th * 2.6, radius=th * 1.3, fill=ink if i == 0 else acc, anim=pop)
+            lab = f"{vals[i]:g}{sh.get('unit') or ''}"
+            if i:
+                left(lab, t0, P[i][0] + s * 0.02, P[i][1], s * 0.06, W * 0.2, weight=800, color=acc, anim=pop)
+            else:
+                right(lab, t0, P[i][0] - s * 0.02, P[i][1], s * 0.04, W * 0.14, weight=700, color=ink, anim=pop)
+            T(str(pts[i][0]), 0.2, x=P[i][0], y=y0 + s * 0.05, w=int(W * 0.2), size=int(s * 0.03), weight=600, color=ink, opacity=0.7)
+        if sh.get("source"):
+            T("Source: " + sh["source"], 0.3, x=W / 2, y=H * 0.79, w=int(W * 0.8), size=int(s * 0.026), weight=500, color=ink, opacity=0.6)
     elif kind == "source":
         pw, ph = W * 0.7, H * 0.68
         S.shape(a, b, track="Graphics", x=W / 2, y=H * 0.4, w=pw, h=ph, radius=s * 0.012, fill="#F7F4EC",
@@ -1836,6 +1946,16 @@ def overlay(S, ov, a, z, W, H, look):
             nt = s * 0.019
             S.text(mono(ov["note"]), a + 0.26, hold, track="Graphics", x=x0 + min(cw * 0.9, tw(mono(ov["note"]), nt, 600)) / 2, y=cy + chh / 2 - s * 0.045, w=int(cw * 0.92),
                    size=int(nt), weight=600, color="#FFFFFF", opacity=0.6, align="left", anim={"in": "fade", "out": "fade", "dur": 0.2})
+    if ov.get("stamp"):         # a verdict stamped on the picture, a little turned: SOLVED, FALSE, CONFIRMED
+        st = str(ov["stamp"]).upper()[:14]
+        size = min(s * 0.11, W * 0.34 / max(1.0, anton_w(st, 1.0)))
+        sw, shh = anton_w(st, size) + s * 0.07, size * 1.5
+        cx, cy = W * 0.74, H * 0.64
+        k = {"scale": [[0, 1.7, "out"], [0.16, 1.0, "out"], [d, 1.02, "linear"]]}
+        S.shape(a + 0.3, hold, track="Graphics", x=cx, y=cy, w=sw, h=shh, radius=s * 0.012, rotation=-7, fill="#0B0C0F99", stroke={"color": look["accent"], "width": max(4, int(s * 0.007))},
+                anim={"in": "pop", "out": "fade", "dur": 0.14}, keys=k)
+        S.text(st, a + 0.3, hold, track="Graphics top", x=cx, y=cy, w=int(sw), size=int(size), font=DISPLAY, weight=400, color=look["accent"], rotation=-7,
+               anim={"in": "pop", "out": "fade", "dur": 0.14}, keys=k)
     if isinstance(ov.get("ring"), dict):       # a thin circle drawn on the footage round the thing being talked about, with its measure beside it
         r = ov["ring"]
         cx, cy, rad = W * float(r.get("x", 50)) / 100, H * float(r.get("y", 45)) / 100, s * float(r.get("r", 16)) / 100
@@ -2010,10 +2130,15 @@ def cmd_build(edit):
 
 # ---------------------------------------------------------------- thumbnails and the publishing kit
 def cmd_thumbs(edit, title):
-    """Three thumbnail options, 1280x720: the sharpest frames of three different shots with the title on them."""
+    """Three thumbnail options, 1280x720, composed by thumbs.py: one subject cut out on a dark ground, 1 to 5 words in
+    heavy capitals, one word in the accent. The words come from EDIT/thumb.json ({"words", "mark", "frame"}: written with
+    the title, before the script), else the title's first words. `frame` names a shot file to use first."""
     import cv2
     from PIL import Image
+    import thumbs
     edit = Path(edit)
+    tj = jload(edit / "thumb.json", {}) or {}
+    words = " ".join(str(tj.get("words") or title).split()[:5])
     db = jload(edit / "shots.json", {}) or {}
     files = [edit / g["file"] for g in db.values() if g.get("file") and (edit / g["file"]).exists()]
     if not files:
@@ -2023,23 +2148,18 @@ def cmd_thumbs(edit, title):
         fr = cv2.imread(str(f)) if f.suffix == ".jpg" else streamclips.best_frame(f, 3)
         if fr is not None:
             g = cv2.cvtColor(cv2.resize(fr, (320, 180)), cv2.COLOR_BGR2GRAY)
-            scored.append((min(1.0, cv2.Laplacian(g, cv2.CV_64F).var() / 600.0) + 0.5 * (1 - abs(float(g.mean()) - 125) / 125), f))
+            first = 2.0 if tj.get("frame") and Path(str(tj["frame"])).name == f.name else 0.0
+            scored.append((first + min(1.0, cv2.Laplacian(g, cv2.CV_64F).var() / 600.0) + 0.5 * (1 - abs(float(g.mean()) - 125) / 125), fr))
     out = edit / "exports"
     out.mkdir(exist_ok=True)
-    made = []
-    with tempfile.TemporaryDirectory() as td:
-        for i, (_, f) in enumerate(sorted(scored, key=lambda x: -x[0])[:3], 1):
-            src = Path(td) / f"{i}.mp4"
-            if f.suffix == ".jpg":      # a still as a one-frame clip, so one function draws every thumbnail
-                Image.open(f).convert("RGB").resize((1280, 720)).save(Path(td) / f"{i}.jpg")
-                subprocess.run(["ffmpeg", "-v", "error", "-y", "-loop", "1", "-i", str(Path(td) / f"{i}.jpg"), "-t", "1", "-r", "10",
-                                "-pix_fmt", "yuv420p", str(src)], check=True)
-            else:
-                subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(f), "-vf", "scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720",
-                                "-an", str(src)], check=True)
-            if streamclips.thumb(src, title, out / f"thumbnail-{i}.jpg"):
-                made.append(f"thumbnail-{i}.jpg")
-    print(f"THUMBS {len(made)} in {out}: " + " ".join(made))
+    made, used = [], []
+    for i, (_, fr) in enumerate(sorted(scored, key=lambda x: -x[0])[:3], 1):
+        im = Image.fromarray(cv2.cvtColor(fr, cv2.COLOR_BGR2RGB))
+        used.append(thumbs.make(im, words, out / f"thumbnail-{i}.jpg", layout=thumbs.LAYOUTS[(i - 1) % 3], accent=LOOK["accent"], mark=tj.get("mark")))
+        made.append(f"thumbnail-{i}.jpg")
+    print(f"THUMBS {len(made)} in {out}: " + " ".join(made) + f"   words: {words.upper()}   layouts: {' '.join(used)}")
+    if len(words.split()) > 5 or not tj.get("words"):
+        print("  no thumb.json words: used the title's first words. Write 1 to 5 words that add to the title, not repeat it.")
     return 0 if made else 1
 
 
@@ -2074,9 +2194,37 @@ def kit_text(kit, sc, tm, db):
         out += ["Footage and pictures", *[f"- {c}" for c in credits], ""]
     if kit.get("music_credit"):
         out += ["Music", str(kit["music_credit"]), ""]
+    if kit.get("voice_credit"):
+        out += ["Voice", str(kit["voice_credit"]), ""]
     if kit.get("tags"):
         out += ["## Tags", ", ".join(str(t) for t in kit["tags"]), ""]
     return "\n".join(out)
+
+
+def kit_gaps(kit, chapters):
+    """What a publishing kit still lacks, by YouTube's own limits and how the page shows it. chapters: ["0:00 Name", ...]."""
+    out = []
+    titles = [str(t) for t in kit.get("titles") or []]
+    if len(titles) != 3:
+        out.append("3 titles: one for search (the words people type), one for browse (curiosity), one between")
+    out += [f'title over 60 characters ({len(t)}), it is cut off on a phone: "{t[:40]}..."' for t in titles if len(t) > 60]
+    if len(set(t.lower() for t in titles)) < len(titles):
+        out.append("two titles are the same")
+    lines = [x for x in str(kit.get("description") or "").splitlines() if x.strip()]
+    if len(lines) < 3:
+        out.append("description: two opening lines that stand alone (they show above 'more'), then what the video covers")
+    elif any(len(x) > 150 for x in lines[:2]):
+        out.append("description: each of the first two lines under 150 characters (the page shows only those)")
+    tags = [str(t) for t in kit.get("tags") or []]
+    if not 10 <= len(tags) <= 15:
+        out.append(f"{len(tags)} tags: 10 to 15, the exact topic first")
+    if len(", ".join(tags)) > 500:
+        out.append("tags are over 500 characters together: YouTube drops the rest")
+    if chapters:
+        ts = [int(c.split()[0].split(":")[0]) * 60 + int(c.split()[0].split(":")[1]) for c in chapters]
+        if len(ts) < 3 or ts[0] != 0 or any(z - a < 10 for a, z in zip(ts, ts[1:])):
+            out.append("chapters: YouTube needs 3 or more, the first at 0:00, each 10 s or longer (merge the short sections)")
+    return out
 
 
 def cmd_kit(edit):
@@ -2084,13 +2232,23 @@ def cmd_kit(edit):
     kit, sc, tm = jload(edit / "kit.json"), jload(edit / "scenes.json"), jload(edit / "timing.json")
     if not isinstance(kit, dict) or not kit.get("description"):
         sys.exit('ERROR: write EDIT/kit.json first: {"titles": [3 options], "description": "...", "tags": [...]}')
+    rows_, ch, seen_ = {r["id"]: r for r in tm["scenes"]}, [], None
+    for s_ in sc["scenes"]:
+        if s_.get("section") and s_["section"] != seen_ and s_["id"] in rows_:
+            seen_ = s_["section"]
+            ch.append(f"{mmss(0 if not ch else rows_[s_['id']]['start'])} {seen_}")
+    gaps = kit_gaps(kit, ch)
+    if gaps:
+        print("\n".join("FIX  " + g for g in gaps))
     (edit / "exports").mkdir(exist_ok=True)
     credit = (jload(edit / "audio" / "music.json") or {}).get("credit")     # a real track's licence asks for this line
     if credit and (edit / "audio" / "music.mp3").exists():
         kit = {**kit, "music_credit": credit}
+    if (tm or {}).get("engine") == "pocket":        # the voice model's licence asks for a credit
+        kit = {**kit, "voice_credit": studio.POCKET_CREDIT}
     (edit / "exports" / "publish.md").write_text(kit_text(kit, sc, tm, jload(edit / "shots.json", {}) or {}), encoding="utf-8")
     print(f"KIT {edit / 'exports' / 'publish.md'}")
-    return 0
+    return 1 if gaps else 0
 
 
 # ---------------------------------------------------------------- the render, checked at every cut
@@ -2135,7 +2293,27 @@ def cmd_qa(edit):
 
 # ---------------------------------------------------------------- Shorts from the finished video
 # measured on published Shorts of this kind: three or four words in capitals a little below the middle, the said word white and the rest grey
-SHORT_CAPTIONS = {"size_pct": 4.6, "case": "upper", "effect": "karaoke", "weight": 800, "stroke": True, "words_per_caption": 3, "y_pct": 61, "inactive_opacity": 0.55}
+SHORT_CAPTIONS = {"size_pct": 4.6, "case": "upper", "effect": "karaoke", "weight": 800, "stroke": True, "words_per_caption": 3, "y_pct": 61, "inactive_opacity": 0.55,
+                  "emphasis_color": LOOK["accent"]}
+PLAIN = set("about after again because before being could every first other their there these thing things think those through under where which while would".split())
+
+
+def key_words(words):
+    """Marks the words a Short's captions put in the accent: numbers, and the long words that carry the point (at most one in four)."""
+    out, since = [], 9
+    for x in words:
+        w = re.sub(r"[^\w%$]", "", str(x["w"]))
+        hit = bool(re.search(r"\d", w)) or (len(w) >= 8 and w.lower() not in PLAIN and since >= 3)
+        since = 0 if hit else since + 1
+        out.append({**x, "emph": True} if hit else x)
+    return out
+
+
+def hook_word(title, words):
+    """One word for the card a Short opens on: the title's longest word, or the first long word said."""
+    c = [w for w in re.findall(r"[A-Za-z0-9%$']+", str(title)) if w.lower() not in PLAIN and len(w) > 2]
+    c = c or [re.sub(r"[^\w]", "", str(x["w"])) for x in words[:12] if len(str(x["w"])) > 4]
+    return max(c, key=len).upper() if c else ""
 
 
 def short_ranges(sc, tm, count=3, lo=14.0, hi=58.0):
@@ -2206,8 +2384,14 @@ def cmd_shorts(edit, count=3, reveal=False):
                weight=400, color="#FFFFFF", line_height=1.04, anim={"in": "pop", "out": "none", "dur": 0.2})
         mine = [{"w": x["w"], "start": round(x["start"] - p["a"], 3), "end": round(min(x["end"], p["b"]) - p["a"], 3)}
                 for x in words if p["a"] <= x["start"] < p["b"]]
+        hook = str(p.get("hook") or hook_word(p["title"], mine))
+        if hook:                # the first second: one word over the picture, then it is gone
+            hs = min(W * 0.36, W * 0.88 / max(1.0, anton_w(hook, 1.0)))
+            S.shape(0, 0.9, track="Hook bg", x=W / 2, y=H * 0.43, w=W, h=bh, fill="#0A0C12", opacity=0.72, anim={"in": "none", "out": "fade", "dur": 0.2})
+            S.text(hook, 0, 0.9, track="Hook", x=W / 2, y=H * 0.43, w=int(W * 0.94), size=int(hs), font=DISPLAY, weight=400, color=LOOK["accent"],
+                   anim={"in": "pop", "out": "fade", "dur": 0.14}, keys={"scale": [[0, 1.15, "out"], [0.2, 1.0, "out"], [0.9, 1.06, "linear"]]})
         if mine:
-            S.captions(mine, style=SHORT_CAPTIONS, start=0, end=d, track="Captions")
+            S.captions(key_words(mine), style=SHORT_CAPTIONS, start=0, end=d, track="Captions")
         S.sc["duration"] = d
         name = f"studio.short{n}.scene.json"
         jsave(edit / name, S.done())
@@ -2266,6 +2450,24 @@ def demo():
                         {"hook-2": {"file": "shots/hook-2.mp4", "from": "https://www.youtube.com/watch?v=abc", "title": "City", "by": "Chan"}})
         assert "0:00 Intro" in text and "- https://www.example.org/a" in text and "City by Chan: https://www.youtube.com/watch?v=abc" in text, text
         assert domain("https://www.nature.com/articles/x") == "nature.com" and mmss(125) == "2:05"
+        kg = kit_gaps({"titles": ["A", "B", "C" * 61], "description": "One.\nTwo.\nThree.", "tags": ["x"] * 12}, ["0:00 a", "0:05 b", "0:40 c"])
+        assert len(kg) == 2 and "60 characters" in kg[0] and "chapters" in kg[1], kg
+        kw = key_words([{"w": "The"}, {"w": "satellite"}, {"w": "gains"}, {"w": "38"}, {"w": "microseconds"}])
+        assert [bool(x.get("emph")) for x in kw] == [False, True, False, True, False], kw
+        assert hook_word("Why time slows down", []) == "SLOWS"
+        more = json.loads(json.dumps(good))
+        more["scenes"][0]["shots"] = [{"kind": "word", "text": "time is elastic"}, {"kind": "versus", "items": [["Earth", 24], ["Orbit", 38]], "unit": " h"},
+                                      {"kind": "place", "text": "Bern, 1905", "sub": "Swiss patent office"}]
+        more["scenes"][2]["shots"] = [{"kind": "timeline", "events": [["1905", "Special relativity"], ["1971", "Clocks on jets"], ["1977", "GPS test"]]},
+                                      {"kind": "line", "points": [["0", 1.0], ["0.5c", 1.15], ["0.9c", 2.29], ["0.99c", 7.09]], "unit": "x"},
+                                      {"kind": "paper", "title": "A paper", "highlight": "The line.", "finding": "Moving clocks run slow."}]
+        jsave(e / "scenes.json", more)
+        assert check(e) == [], check(e)
+        assert cmd_build(e) == 0
+        more["scenes"][0]["shots"][1]["items"].append(["Moon", 3])
+        jsave(e / "scenes.json", more)
+        assert any("exactly two" in x for x in check(e)), check(e)
+        jsave(e / "scenes.json", good)
         subs = [(0.0, 3.0, "we started the company in a garage"), (3.0, 6.0, "and then the board decided"), (6.0, 9.5, "to fire me from my own company."), (40.0, 43.0, "later on")]
         win = best_window(subs, ["board", "fire"])
         assert win and win[0] <= 3.0 and "fire me" in win[2] and best_window(subs, ["rocket", "moon"]) is None, win

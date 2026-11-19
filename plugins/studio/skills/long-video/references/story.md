@@ -4,10 +4,14 @@ A generated video shows itself in four ways: facts nobody checked, a script that
 that are near the words instead of on them, and sound that never stops. Each step below removes one. Do them in
 order, and do not start a step until the one before is on the page for the user.
 
-## 0. The title and the thumbnail idea come first (`EDIT/package.md`)
+## 0. The title and the thumbnail come first (`EDIT/thumb.json`)
 
-Before any research is written up: three working titles and one thumbnail idea in a line (what is in the picture, the
-three words on it). The first 30 seconds of the script must show what the title and thumbnail promised, so they are
+Before any research is written up: three working titles, and `EDIT/thumb.json`: `{"words": "1 to 5 words", "mark":
+"the one word drawn in the accent", "frame": "optional: the shot file to cut the subject from"}`. The words add to the
+title, they never repeat it (title "Why time slows down near light speed", thumbnail "TIME STOPS HERE"). `check`
+refuses a script without it, and `thumbs` composes three thumbnails from it at the end: one subject cut out of its
+frame on a dark ground, the words in heavy white capitals, one word in the accent (measured on ten published
+thumbnails of this kind: 1 to 5 words, one subject, one accent, no arrows). The first 30 seconds of the script must show what the title and thumbnail promised, so they are
 fixed before the script, not invented after it. (From the leaked MrBeast production memo: the first minute loses the
 most viewers and has to confirm the title and thumbnail.)
 

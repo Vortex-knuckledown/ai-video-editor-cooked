@@ -116,6 +116,8 @@ def voice_of(b):
         return {"voice_engine": "eleven", "voice_id": vid}
     if eng == "edge" and re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]{3,40}Neural", vid):
         return {"voice_engine": "edge", "voice_id": vid}
+    if eng == "pocket" and re.fullmatch(r"[a-z_]{3,20}", vid):       # studio: the Pocket TTS voices
+        return {"voice_engine": "pocket", "voice_id": vid}
     return {}
 
 
@@ -133,7 +135,10 @@ def studio_voices():
         edge_ok = bool(edge) and subprocess.run([str(run.venv_python()), "-c", "import edge_tts"], capture_output=True, timeout=20).returncode == 0
     except Exception:   # noqa: BLE001
         edge_ok = False
-    out = {"edge": {"ready": edge_ok, "voices": [{"id": i, "name": n, "desc": d} for i, n, d in edge]},
+    pocket = re.findall(r'\("([a-z_]+)", "(\w+)", "([^"]+)"\)', src.split("POCKET_VOICES = [", 1)[1].split("]\n", 1)[0]) if "POCKET_VOICES = [" in src else []
+    pk = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor") / "pocket"
+    out = {"pocket": {"ready": any(pk.glob("lib/python*/site-packages/pocket_tts")), "voices": [{"id": i, "name": n, "desc": d} for i, n, d in pocket]},   # studio
+           "edge": {"ready": edge_ok, "voices": [{"id": i, "name": n, "desc": d} for i, n, d in edge]},
            "kokoro": {"ready": ready, "voices": [{"id": v, "name": v[3:].title(), "desc": kind[v[:2]]} for v in ids]},
            "eleven": {"ready": False, "voices": []}}
     key = keys.get("elevenlabs")[0]
@@ -187,6 +192,22 @@ def studio_claude_do(what):
         subprocess.run([exe, "auth", "logout"], capture_output=True, timeout=30)
         return {"ok": True}
     return {"ok": False, "msg": "unknown"}
+
+
+# studio: the Studio voice (Pocket TTS in its own Python environment), installed in the background for the user's click.
+_POCKET_SETUP = {"p": None}
+
+
+def studio_pocket(do=None):
+    pk = home() / "pocket"
+    ready = any(pk.glob("lib/python*/site-packages/pocket_tts"))
+    p = _POCKET_SETUP["p"]
+    t = studio_script("animated-video", "studio.py")
+    if do == "install" and not ready and t and not (p and p.poll() is None):
+        _POCKET_SETUP["p"] = p = subprocess.Popen([sys.executable, str(Path(__file__).with_name("run.py")), str(t), "pocket-setup"],
+                                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        VOICE_CACHE.clear()
+    return {"ready": ready, "busy": bool(p and p.poll() is None) and not ready}
 
 
 # studio: Export all. The studio plugin sits beside this one in the repo, or in Claude Code's plugin cache.
@@ -2332,6 +2353,8 @@ def make_handler(token):
                 except Exception:   # noqa: BLE001
                     ok = False
                 return self.send(200, f.read_bytes(), "image/jpeg", cache="private, max-age=86400") if ok else self.send(404, {})
+            if path == "/studio/pocket":   # studio: is the Studio voice installed
+                return self.send(200, studio_pocket())
             if path == "/studio/claude":   # studio: whose Claude account does the editing (claude auth status), for Settings
                 return self.send(200, studio_claude())
             if path in ("/studio/library", "/studio/library/thumb"):   # studio: the shared 3D library (characters, worlds, props), as a page
@@ -2354,7 +2377,9 @@ def make_handler(token):
                 vid, eng = q.get("id", [""])[0], q.get("engine", ["kokoro"])[0]
                 t = studio_script("animated-video", "studio.py")
                 okid = re.fullmatch(r"[a-z]{2}-[A-Z]{2}-[A-Za-z]{3,40}Neural", vid) if eng == "edge" else re.fullmatch(r"[ab][fm]_[a-z]{2,12}", vid)
-                if not t or eng not in ("kokoro", "edge") or not okid:
+                if eng == "pocket":     # studio
+                    okid = re.fullmatch(r"[a-z_]{3,20}", vid)
+                if not t or eng not in ("kokoro", "edge", "pocket") or not okid:
                     return self.send(404, {})
                 f = home() / "voice-previews" / f"{eng}-{vid}.wav"
                 if not f.is_file():
@@ -2537,6 +2562,8 @@ def make_handler(token):
                     return self.send(400, {})
                 subprocess.Popen(library.reveal_cmd(p), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return self.send(200, {})
+            if path == "/studio/pocket":   # studio: install the Studio voice in the background
+                return self.send(200, studio_pocket("install"))
             if path == "/studio/claude":   # studio: sign in to Claude (the browser opens) or sign out
                 return self.send(200, studio_claude_do((body or {}).get("do") if isinstance(body, dict) else None))
             if path == "/studio/shorts":   # studio: Shorts from a finished Long video, rendered in the background into its exports folder

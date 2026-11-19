@@ -59,8 +59,10 @@ Characters, worlds and props are kept in one library outside any video (`~/.ai-v
   `f.pose(seconds, {walk: 0.3, run: 0.7})`. `man` and `woman` are clothed people with idle, walk, run, jog and talk, and
   any of about 130 more movements on request (`studio.py lib clip woman "dance"`). Their shirt and trousers take any colour
   (`loadFigure({..., outfit: {shirt: "#2f6fdd", trousers: "#3b4a6b"}})`), so two bodies give a whole cast: give the
-  story's person one outfit and keep it for the whole video; dress passers-by differently. `mannequin`, `soldier` and
-  `robot` have only the clips in their files. A figure moves well only with clips made for its own skeleton: never load one
+  story's person one outfit and keep it for the whole video; dress passers-by differently. `actor` is a neutral, faceless
+  figure (CC0, free to pass on) with 45 motions in its own file: sit, talk sitting, push, pick up, jump, crouch, swim,
+  drive, dance, interact (`studio.py lib` lists them); use it when the scene needs an action the man and woman lack, or
+  when the video will be handed to others as files. `mannequin`, `soldier` and `robot` have only the clips in their files. A figure moves well only with clips made for its own skeleton: never load one
   character's clip onto another (tested: it folds up). A world takes `cast = ["woman"]` and exposes `world.cast.<id>`,
   so the same place works with anyone in it.
 - **Props.** A thing the world needs (a bench, a tree, a rock, a sofa, a lamp): `studio.py lib prop "<what>"` lists

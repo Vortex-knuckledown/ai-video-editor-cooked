@@ -243,6 +243,18 @@
       '<div class="fw-int-foot">' + pill + '<button class="' + (m.ready || open ? 'b2' : 'b1') + ' s" onclick="studioConn(\'modal\', ' + (!open) + ')">' + (open ? 'Done' : m.ready ? 'Manage' : 'Connect') + '</button></div>' +
       (open ? '<div class="fw-int-body">' + stModal() + '</div>' : '') + '</div>';
   }
+  // the Studio voice: a voice model that runs on this computer, installed with one click
+  var pocket = { d: null, at: 0 };
+  function pocketLoad() { pocket.at = Date.now(); get('/studio/pocket').then(function (d) { var was = JSON.stringify(pocket.d); pocket.d = d; if (was !== JSON.stringify(d)) { if (d.ready && typeof VO !== 'undefined') VO = null; redraw(); } if (d.busy) setTimeout(pocketLoad, 4000); }).catch(function () {}); }
+  window.studioPocket = function () { pocket.d = { ready: false, busy: true }; redraw(); send('/studio/pocket', {}).then(function () { setTimeout(pocketLoad, 3000); }); };
+  function pocketConn() {
+    if (!pocket.d || Date.now() - pocket.at > 30000) pocketLoad();
+    var d = pocket.d || {};
+    var pill = d.ready ? '<span class="fw-pill ok">Installed</span>' : d.busy ? '<span class="fw-pill">Installing…</span>' : '<span class="fw-pill">Not installed</span>';
+    return '<div class="fw-int' + (d.ready ? ' is-on' : '') + '"><div class="fw-int-top"><span class="fw-int-logo"><b>S</b></span>' +
+      '<div class="fw-int-tx"><b>Studio voice</b><span>21 natural narrators that run on this computer: free, offline, nothing sent anywhere. About 1 GB, once.</span></div></div>' +
+      '<div class="fw-int-foot">' + pill + (d.ready || d.busy ? '' : '<button class="b1 s" onclick="studioPocket()">Install</button>') + '</div></div>';
+  }
   window.studioSettingsView = function () {
     var by = {}; KEYS.concat(STUDIO_KEYS).forEach(function (k) { by[k.id] = k; });
     var pick = function (ids) { return ids.filter(function (i) { return by[i]; }).map(function (i) { return conn(by[i]); }).join(''); };
@@ -254,7 +266,7 @@
       },
       connections: function () {
         return '<div class="fw-sec-h"><h2>Connections</h2><p>Optional services that make videos better. Each is your own account with that service; keys stay on this computer.</p></div>' +
-          group('Voice', 'The narrator', pick(['elevenlabs'])) +
+          group('Voice', 'The narrator', pocketConn() + pick(['elevenlabs'])) +
           group('Footage and pictures', 'For long videos', pick(['pixabay', 'pexels'])) +
           group('AI video', 'Generated shots, charged by each service', pick(['gemini', 'runway', 'higgsfield'])) +
           group('Rendering', 'Where the video is made', modalConn());

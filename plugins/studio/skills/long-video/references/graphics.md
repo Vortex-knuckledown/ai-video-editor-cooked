@@ -54,3 +54,24 @@ The shape of a video that holds attention, from the same measurements: open on a
 moment the video is about (10 to 20 seconds, their name on screen), then the narrator. A new picture every 2 to 3.5
 seconds. Words on screen are the caption line at the bottom, small, with the said word lit; everything else is a
 number or a name, never a sentence. No yellow headline cards one after another.
+
+## Five more graphics, and two additions
+
+- **`word`**: one to three words filling the frame, one after another on the beat, the last in the accent.
+  `{"kind": "word", "text": "time is elastic", "sub": "optional small line"}`. For the idea a section turns on. At
+  most three a video: it is the loudest thing there is.
+- **`versus`**: exactly two numbers side by side, each on its own rising bar, the larger in the accent.
+  `{"kind": "versus", "title": "A day, measured twice", "items": [["Earth", 24], ["Orbit", 38]], "unit": " h",
+  "source": "NASA"}`. Use it instead of `bars` when the point is the gap between two things.
+- **`timeline`**: 2 to 5 dates on a line that draws left to right. `{"kind": "timeline", "title": "A century of
+  tests", "events": [["1905", "Special relativity"], ["1971", "Clocks on jets"]]}`. Each "what" is 2 to 4 words.
+- **`place`**: where and when, lower left, the way a documentary opens a chapter. `{"kind": "place", "text": "Bern,
+  1905", "sub": "Swiss patent office"}`. It sits on the nearest shot's footage, darkened.
+- **`line`**: a line chart drawn point by point, 3 to 12 points, the last value named in the accent. `{"kind":
+  "line", "title": "Time stretch by speed", "points": [["0", 1.0], ["0.5c", 1.15], ["0.99c", 7.09]], "unit": "x",
+  "source": "Lorentz factor"}`. Only real numbers from a source; only the first and last points are labelled.
+- **`paper` with `finding`**: add `"finding": "the result in plain words"` and the paper moves left while a glass
+  KEY FINDING card arrives beside it, after the line is marked.
+- **`over: {"stamp": "CONFIRMED"}`**: a verdict stamped on footage or a picture, a little turned, in the accent.
+  One or two words. For the moment a question in the video is settled, not for decoration.
+
