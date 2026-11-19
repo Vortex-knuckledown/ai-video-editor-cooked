@@ -1986,7 +1986,7 @@ function vClaude(){
   const row=c=>{const on=c.state!=='off',b=ui.clBusy===c.dir?'disabled':'',d=J(c.dir);
     return `<div class="clr"><span class="th" style="${c.video?`background-image:url('/thumb?p=${encodeURIComponent(c.video)}')`:''}"></span>
       <div class="nm"><b title="${esc(c.name)}">${esc(c.name)}</b><div class="st ${c.state}"><i></i>${CLS[c.state]||''}${!on&&c.last?' · last used '+clWhen(c.last):''}</div></div>
-      <div class="acts">${c.resume?`<button title="${esc(c.resume)}" onclick="copyText(${esc(JSON.stringify(c.resume))},this)">Copy command</button>`:''}${on?`${c.show?`<button ${b} onclick="clAct(${d},'show')">Show Claude</button>`:''}<button ${b} onclick="clAct(${d},'stop')">Stop</button>`:`<button class="go" ${b} onclick="clAct(${d},'start')">Start Claude</button>`}</div></div>`};
+      <div class="acts">${c.resume?`<button title="${esc(c.resume)}" onclick="copyText(${esc(JSON.stringify(c.resume))},this)">Copy command</button>`:''}${on?`${c.show?`<button ${b} onclick="clAct(${d},'show')">Open assistant</button>`:''}<button ${b} onclick="clAct(${d},'stop')">Stop</button>`:`<button class="go" ${b} onclick="clAct(${d},'start')">Start Claude</button>`}</div></div>`};
   return `<div class="clp"><div><h1>Activity</h1><p class="lede">Each video being made has an assistant working on it in the background. Stop one here, or start it again to carry on where it left off.</p></div>
     ${CL==null?'<p class="muted">Loading...</p>':CL.length?`<div class="cll">${CL.map(row).join('')}</div>`:'<p class="muted">No video has had a Claude yet. One starts with each new video.</p>'}
     ${CL&&CL.length?'<p class="clh">Stopping closes that Claude. Your video, notes and drafts stay. Start carries on from them.</p>':''}</div>`;

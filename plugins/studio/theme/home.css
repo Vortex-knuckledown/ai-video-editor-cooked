@@ -336,9 +336,9 @@ body.fw-ask #askq.on { display: flex !important; }
 #side { overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 #side::-webkit-scrollbar { display: none; }
 .rl-it, .sb-row { flex-shrink: 0; }
-@media (max-height: 880px) { .rl-it { gap: 2px; font-size: 10.5px; } .rl-it .ic { height: 28px; } .rl-it[onclick*="'mystyle'"], .rl-it[onclick*="'claude'"] { margin-top: 6px; }
+@media (max-height: 1000px) { .rl-it { gap: 2px; font-size: 10.5px; } .rl-it .ic { height: 28px; } .rl-it[onclick*="'mystyle'"], .rl-it[onclick*="'claude'"] { margin-top: 6px; }
   .sb-row { height: 33px; } .sb-nav { padding-top: 10px; } .sb-fold { padding-top: 12px; } .sb-row[onclick*="'mystyle'"], .sb-row[onclick*="'claude'"] { margin-top: 8px; } }
-@media (max-height: 780px) { .rl-it { font-size: 0; gap: 0; padding-top: 1px; padding-bottom: 1px; min-height: 0; height: auto; } .rl-it .ic { height: 30px; width: 38px; }
+@media (max-height: 820px) { .rl-it { font-size: 0; gap: 0; padding-top: 1px; padding-bottom: 1px; min-height: 0; height: auto; } .rl-it .ic { height: 30px; width: 38px; }
   .rl-it[onclick*="'mystyle'"], .rl-it[onclick*="'claude'"] { margin-top: 4px; } body.fw-app #side { padding-top: 32px; }
   .sb-row { height: 30px; } .sb-fold { display: none; } .sb-brand { height: 40px; padding-bottom: 6px; } }
 
@@ -391,9 +391,15 @@ body.fw-app a, body.fw-app button { cursor: default; }
 .fw-int-logo b { font-size: 18px; font-weight: 700; color: var(--accent-hi); }
 
 /* the rail's items have a fixed height of their own: on a short window it has to be said outright */
-@media (max-height: 880px) { .rl-it { height: 48px !important; } #side { gap: 4px !important; } }
-@media (max-height: 780px) { .rl-it { height: 34px !important; } #side { gap: 3px !important; padding-bottom: 10px !important; } .rl-new { height: 40px !important; } }
+@media (max-height: 1000px) { .rl-it { height: 48px !important; } #side { gap: 4px !important; } }
+@media (max-height: 820px) { .rl-it { height: 34px !important; } #side { gap: 3px !important; padding-bottom: 10px !important; } .rl-new { height: 40px !important; } }
 
 /* Activity: the app starts and stops the work; the Terminal tools behind it are not shown */
-.clr .acts button[onclick^="copyText"], .clr .acts button[onclick*="'show'"] { display: none; }
+.clr .acts button[onclick^="copyText"] { display: none; }
 .rl-new .ic { height: 34px !important; }
+
+
+/* nothing sits on top of the page: what Claude is waiting for goes to the bell (home.js), not a banner across the heading */
+#askterm, #askbar { display: none !important; }
+/* the theme lives in Settings, Appearance: one less thing at the foot of the sidebar */
+#side .sb-theme { display: none !important; }

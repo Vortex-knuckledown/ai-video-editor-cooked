@@ -128,6 +128,8 @@
   function items() {
     var out = [];
     if (asking()) out.push({ id: 'ask', kind: 'ask', t: 'A question about your video', s: 'Answer it to carry on', js: "studioAsk()" });
+    var wt = document.getElementById('askterm');   // the assistant is waiting on something only it can show: Activity has the way in
+    if (wt && wt.classList.contains('on')) { var sp = wt.querySelector('span'); out.push({ id: 'wait|' + (sp ? sp.textContent : ''), kind: 'ask', t: 'A video is waiting for you', s: sp ? sp.textContent.replace(/^Claude asked: /, '') : 'Open Activity to carry on', js: "studioBell(false);rgo('claude')" }); }
     try {
       (L && L.videos || []).forEach(function (v) {
         var ph = vPh(v), words = { cut: 'The cut is ready to check', approve: 'The preview is ready to approve', edit: 'The edit is ready to watch' }[ph];
