@@ -1314,14 +1314,77 @@ def cmd_music(edit, mood="linear"):
             x[:, -f_:] *= np.linspace(1, 0, f_)
             bed = x * ((0.6 / 0.11) if tm["engine"] != "none" else 4.8)     # under a voice it lands where long videos keep it; alone, full
         bed = np.pad(bed, ((0, 0), (0, max(0, n - bed.shape[1]))))[:, :n] * (0.11 if tm["engine"] != "none" else 0.5)   # a quiet bed under a voice (measured: 0.5 buried it); full when the music is all there is
-    mix = bed
+    mix, v, dg = bed, None, np.ones(n)
     if vo:
         v = sound.read_audio(vo, tm["length"] + 0.05)[:, :n]
-        mix = (sound.duck(bed, v) if b["music"] else bed) + v
+        dg = sound.duck(np.ones((1, n)), v)[0] if b["music"] else dg
+        mix = bed * dg + v
     lufs, tp = sound.master(mix, out)
+    write_stems(edit, tm, sound, mix, bed if b["music"] else None, v, [], dg)
     print(json.dumps({"file": str(out), "lufs": lufs, "true_peak": tp, "mood": mood if b["music"] else None,
                       "music": b["music"], "voice": bool(vo)}))
     return 0
+
+
+# ---------------------------------------------------------------- the sound as layers
+def write_stems(edit, tm, sound, mix, bed, v, landed, dg):
+    """The same sound as separate pieces, so one can be changed without the others: each narration line, the music, each
+    effect (audio/stems/, listed in audio/stems.json). Together they are the mix: the same levels, the same ducking."""
+    import numpy as np
+    sr, n = sound.SR, mix.shape[1]
+    d = edit / "audio" / "stems"
+    shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True)
+    done = sound.read_audio(edit / "audio" / "mix.wav", tm["length"] + 0.05)[:, :n]
+    g = float(np.sqrt((done ** 2).mean()) / max(1e-9, np.sqrt((mix ** 2).mean())))       # the gain the master gave the whole mix (its limiter shifts it in time, so by level)
+    out = {"gain": round(g, 4), "voice": [], "music": None, "fx": []}
+    soft = lambda x: np.where(np.abs(x) > 0.6, np.sign(x) * (0.6 + 0.15 * np.tanh((np.abs(x) - 0.6) / 0.15)), x)   # noqa: E731  (the master's limiter is not on a single piece: its peaks are rounded off under -1 dB)
+    if v is not None:
+        rows = tm["scenes"]
+        for i, r in enumerate(rows):                     # cut where each line begins, so nothing between two lines is lost
+            a = 0 if i == 0 else int(r["start"] * sr)
+            z = n if i == len(rows) - 1 else int(rows[i + 1]["start"] * sr)
+            if z - a < sr // 10 or float(np.abs(v[:, a:z]).max()) < 1e-4:
+                continue
+            f = d / f"voice-{i + 1:02d}-{r['id']}.wav"
+            sound.write_wav(f, soft(v[:, a:z] * g))
+            out["voice"].append({"id": r["id"], "file": f"audio/stems/{f.name}", "at": round(a / sr, 3), "dur": round((z - a) / sr, 3)})
+    if bed is not None and float(np.abs(bed).max()) > 1e-5:
+        sound.write_wav(d / "music.wav", bed * dg * g)
+        out["music"] = {"file": "audio/stems/music.wav", "at": 0, "dur": round(n / sr, 3)}
+    for k, (kind, x, at, gain) in enumerate(landed, 1):
+        x = np.stack([x, x]) if x.ndim == 1 else x
+        a = int(round(at * sr))
+        if a >= n or a + x.shape[1] <= 0:
+            continue
+        x, a = (x[:, -a:], 0) if a < 0 else (x, a)
+        x = x[:, :n - a] * gain * dg[a:a + x.shape[1]][: x.shape[1]] * g
+        f = d / f"fx-{k:02d}-{kind}.wav"
+        sound.write_wav(f, x)
+        out["fx"].append({"kind": kind, "file": f"audio/stems/{f.name}", "at": round(a / sr, 3), "dur": round(x.shape[1] / sr, 3)})
+    jsave(edit / "audio" / "stems.json", out)
+    return out
+
+
+def add_sound(S, edit, tm, scenes=None):
+    """The sound on the timeline: Narration, Music and Sound effects as their own tracks when the stems are there and
+    as new as the mix, else the mix as one piece."""
+    mixf, st = edit / "audio" / "mix.wav", jload(edit / "audio" / "stems.json", None)
+    if not mixf.exists():
+        return 0
+    ok = isinstance(st, dict) and (edit / "audio" / "stems.json").stat().st_mtime >= mixf.stat().st_mtime - 2 and all(
+        (edit / x["file"]).exists() for x in (st.get("voice") or []) + (st.get("fx") or []) + ([st["music"]] if st.get("music") else []))
+    if not ok:
+        S.audio("audio/mix.wav", 0, tm["length"], track="Sound")
+        return 1
+    say = {str(x.get("id")): " ".join(str(x.get("say") or "").split()[:6]) for x in (scenes or []) if isinstance(x, dict)}
+    for x in st.get("voice") or []:
+        S.audio(x["file"], x["at"], x["at"] + x["dur"], track="Narration", name=("Narration: " + say.get(str(x["id"]), str(x["id"])))[:60])
+    if st.get("music"):
+        S.audio(st["music"]["file"], 0, st["music"]["dur"], track="Music", name="Music")
+    for x in st.get("fx") or []:
+        S.audio(x["file"], x["at"], x["at"] + x["dur"], track="Sound effects", name=str(x["kind"]).title())
+    return len(st.get("voice") or []) + len(st.get("fx") or []) + bool(st.get("music"))
 
 
 # ---------------------------------------------------------------- the scene, render, stills
@@ -1359,8 +1422,7 @@ def cmd_build(edit):
                     if r["start"] <= x["start"] < r["start"] + r["dur"]]
             if mine:
                 S.captions(mine, style=style, start=r["start"], end=r["start"] + r["dur"], track="Captions")
-    if (edit / "audio" / "mix.wav").exists():
-        S.audio("audio/mix.wav", 0, tm["length"], track="Sound")
+    add_sound(S, edit, tm, jload(edit / "scenes.json")["scenes"])
     S.sc["duration"] = tm["length"]
     jsave(edit / SCENE_FILE, S.done())
     print(f"{SCENE_FILE}: {len(tm['scenes'])} scenes, {tm['length']:.1f} s" + (f", captions {len(words)} words" if b["text"] and words else "") +

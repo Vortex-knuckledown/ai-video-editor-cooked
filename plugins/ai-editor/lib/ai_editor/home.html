@@ -1631,6 +1631,8 @@ function longSide(){
     <div class="sec"><div class="h">Length</div><div class="row">${[2,3,5,8].map(n=>`<button class="pill ${P.minutes===n?'on':''}" onclick="nv.long.minutes=${n};render()">${n} min</button>`).join('')}</div>
       <div class="muted faint" style="line-height:18px">About ${P.minutes*4} minutes to make and ${P.minutes*2} to render.</div></div>
     <div class="sec"><div class="h">Shape</div><div class="row">${[['16:9','Wide · 16:9'],['9:16','Tall · 9:16']].map(([a,t])=>`<button class="pill ${P.shape===a?'on':''}" onclick="nv.long.shape='${a}';render()">${t}</button>`).join('')}</div></div>
+    <div class="sec"><div class="h">Look</div><div class="row">${[['mixed','Mixed'],['real','Real footage'],['animated','Fully animated']].map(([a,t])=>`<button class="pill ${(P.visuals||'mixed')===a?'on':''}" onclick="nv.long.visuals='${a}';render()">${t}</button>`).join('')}</div>
+      <div class="muted faint" style="line-height:18px">${{mixed:'Real footage and photos of what is talked about, with animated graphics for the ideas and numbers.',real:'Only real footage and photographs of the people and things named. Numbers appear on the footage. Nothing animated.',animated:'Every shot is animated for this video. No found footage and no stock photos.'}[P.visuals||'mixed']}</div></div>
     <div class="sec"><div class="h">Quality</div><div class="row">${[['1080','1080p'],['4k','4K']].map(([a,t])=>`<button class="pill ${(P.quality||'1080')===a?'on':''}" onclick="nv.long.quality='${a}';render()">${t}</button>`).join('')}</div>${P.quality==='4k'?'<div class="sub" style="font-size:13px">4K takes about four times as long to render. Text and graphics are sharp; footage is as sharp as what is found.</div>':''}</div>
     <div class="sec"><div class="h">What it shows</div><div style="display:flex;flex-direction:column;gap:8px">
       ${tick('youtube','Footage found on YouTube','A few seconds each from other people\'s videos, listed in your publishing kit. Publishing them is your call.')}
@@ -1657,7 +1659,7 @@ const AIK=['runway','higgsfield','gemini'],aiOn=()=>AIK.some(k=>(S.keys[k]||{}).
 function longReady(){const b=$('#make');if(b)b.disabled=nv.long.text.trim().length<8&&!nv.long.voiceover.trim()}
 async function makeLong(){
   const P=nv.long,b=$('#make');if(b)b.disabled=true;
-  const r=await post('/job',{type:'longvideo',quality:P.quality||'1080',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,licensed:!!P.licensed,text:!!P.caption,music:!!P.music,own:P.own.trim(),ai:!!P.ai&&aiOn(),voiceover:P.voiceover.trim(),...voiceBody()});
+  const r=await post('/job',{type:'longvideo',quality:P.quality||'1080',prompt:P.text.trim(),minutes:P.minutes,aspect:P.shape,youtube:!!P.youtube,photos:!!P.photos,licensed:!!P.licensed,visuals:P.visuals||'mixed',text:!!P.caption,music:!!P.music,own:P.own.trim(),ai:!!P.ai&&aiOn(),voiceover:P.voiceover.trim(),...voiceBody()});
   if(!r._ok){nv.long.msg=r.msg||r.error||'That did not work.';render();return}
   nv.long=null;await load();toEditor(r);
 }

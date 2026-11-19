@@ -4,6 +4,21 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **A video is layers, not one file.** A Long or animated video opens in the editor as a timeline of its parts: every
+  clip, every graphic, the captions, each narration line, the music and each sound effect, on their own tracks. Any
+  one can be moved, muted, replaced or re-voiced, by hand or by Claude from a note, without touching the rest. The
+  pieces together measure the same loudness as the single mix did (-14 LUFS).
+- **The look is chosen, and kept.** Long video has a Look: Mixed, Real footage, or Fully animated. `check` refuses a
+  stock photo in an animated video and an animation in a real-footage one.
+- **A video about someone shows them.** Before the script, the people, companies, places and events it is about are
+  named and their real material is gathered: Wikipedia's paragraph, their photographs on Wikimedia Commons, the
+  interviews, speeches and official videos they are in. A line that names a subject must show that subject.
+- **Scripts written to what people watched.** `models` measures the most-watched videos on the topic (how they open,
+  pace, sentence length, questions, "you") and the draft beside them; a fresh agent reads the script as a viewer
+  against a six-point rubric and it is rewritten until it passes, before the user sees it.
+- **YouTube says no sometimes.** After about 60 downloads in half an hour YouTube stops answering a computer for a
+  while. `find` now runs two searches at a time instead of four, says so plainly when it is refused, and falls back
+  to stock footage and photographs.
 - **Sound that leaves room for the voice.** Measured against two published documentaries: their quiet moments sit
   11 to 12 dB below the loud ones, ours sat 4.4 dB below, a wall of sound. The music is now a quiet bed that rests
   (out under a sound bite, before a new section and for the first words), a sound marks a section, a number or a

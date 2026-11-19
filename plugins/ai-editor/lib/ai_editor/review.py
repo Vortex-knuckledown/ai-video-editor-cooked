@@ -1617,6 +1617,15 @@ def main_scene(folder, d):
             sc = scene.from_plan(folder, p, sounds=placed_raw(folder), library=sfx_mod().library_dir())
         except Exception as e:   # noqa: BLE001  any refusal (split, board, cover, cutouts) or failure: the draft's MP4
             print(f"scene: from-plan: {e}; the draft as a video instead", file=sys.stderr)
+    if sc is None:   # studio: a Long or animated video is built as layers (studio.scene.json): the page opens those, not its flat render
+        try:
+            st = folder / "studio.scene.json"
+            rv = folder / "render.mp4"
+            if st.is_file() and rv.is_file() and st.stat().st_mtime <= rv.stat().st_mtime + 5:
+                sc = scene.validate(scene.normalise(scene.jload(st)))
+        except Exception as e:   # noqa: BLE001
+            print(f"scene: the studio layers could not be read ({e}); the draft as a video instead", file=sys.stderr)
+            sc = None
     sc = sc or video_scene(folder, d)
     sc["built"] = {"video": str(d.get("video") or ""), "round": [d.get("stage"), d.get("round")]}
     return sc

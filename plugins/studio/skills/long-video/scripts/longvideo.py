@@ -50,6 +50,7 @@ for d in ("animated-video", "stream-clips"):
 import studio  # noqa: E402  (the voice, the words, the render; finding the editor)
 from studio import jload, jsave, duration  # noqa: E402
 import streamclips  # noqa: E402  (yt-dlp, the cover image)
+import storytools  # noqa: E402  (the subjects' real material, the watched videos measured)
 
 MEDIA = ("clip", "stock", "photo", "own", "ai", "bite")
 MAX_AI = 6                # AI-generated shots a video: each one is paid for on the user's own account
@@ -58,6 +59,7 @@ TIER_COLOURS = {"S": "#FF5A5F", "A": "#FF9F43", "B": "#FFD24A", "C": "#5AD17E", 
 MAXH = 1080               # the tallest footage fetched; 2160 for a 4K video (brief "quality": "4k")
 MAX_IMAGES = 8            # pictures made by the user's AI image tool a video: each is paid for on their own account
 MAX_MOTION = 12           # animated hero graphics a video: each is built by its own agent, a few minutes apiece
+MAX_MOTION_ANIMATED = 40  # a fully animated video (brief "visuals": "animated"): one animation a line, each running the whole line
 NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("file",), "motion": ("visual", "fallback"),
          "ai": ("prompt", "fallback"), "bite": (),
          "title": ("text",), "stat": ("value", "label"),
@@ -79,8 +81,21 @@ def scenes_of(edit):
     return (jload(Path(edit) / "scenes.json") or {}).get("scenes") or []
 
 
+VISUALS = ("mixed", "animated", "real")
+
+
+def visuals_of(edit):
+    v = str(studio.brief_of(edit).get("visuals") or "mixed").lower()
+    return v if v in VISUALS else "mixed"
+
+
 def check(edit):
     errs = list(studio.check_scenes(edit))
+    mode = visuals_of(edit)
+    rows = (jload(Path(edit) / "subjects.json", {}) or {}).get("subjects") or []
+    if rows and mode != "animated":
+        errs += [f"scene {sid}: the line names {sl} and never shows them: give it a photo (\"subject\": \"{sl}\", \"pick\": N) or a clip (\"video\": \"<id>\") from subjects.md"
+                 for sid, sl in storytools.subject_gaps(scenes_of(edit), rows)]
     for s in scenes_of(edit):
         if not isinstance(s, dict):
             continue
@@ -93,6 +108,14 @@ def check(edit):
             if kind not in NEEDS:
                 errs.append(f"scene {s.get('id')} shot {k}: kind must be one of {', '.join(NEEDS)}")
                 continue
+            if mode == "animated" and kind in MEDIA:
+                errs.append(f"scene {s.get('id')} shot {k} ({kind}): this video is fully animated: no footage and no photographs. Make it a motion shot or a graphic")
+                continue
+            if mode == "real" and kind in ("motion", "chart3d"):
+                errs.append(f"scene {s.get('id')} shot {k} ({kind}): this video is real footage and photographs: no animated shots. Put the number on the footage with \"over\"")
+                continue
+            if kind == "photo" and sh.get("subject") and not sh.get("query"):
+                sh["query"] = str(sh["subject"])
             ov = sh.get("over")
             if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat", "ring", "clip", "stamp", "count"))):
                 errs.append(f"scene {s.get('id')} shot {k}: \"over\" goes on footage or a picture and has a label, a name, a stat, a ring, a clip or a stamp")
@@ -152,6 +175,10 @@ def story_gaps(edit):
         out.append("no beats.md: write the story in 6 to 10 beats before the script (references/story.md)")
     elif beats is not None and not 5 <= len(beats) <= 12:
         out.append(f"beats.md has {len(beats)} beat(s): 6 to 10")
+    if r and not isinstance(jload(edit / "subjects.json", None), dict):
+        out.append('no subjects.json: name who and what the video is about, then run `subjects EDIT`: {"subjects": [{"name": "...", "kind": "person|company|place|event|thing"}]} (an empty list when it names none)')
+    if r and not (edit / "models.md").is_file():
+        out.append("no models.md: run `models EDIT \"<the topic as people search it>\"` and write the script to its TARGET column")
     tj = jload(edit / "thumb.json", None)
     if r and not (isinstance(tj, dict) and 1 <= len(str(tj.get("words") or "").split()) <= 5):
         out.append('no thumb.json: fix the title and the thumbnail before the script: {"words": "1 to 5 words that add to the title", "mark": "the one word in the accent"}')
@@ -189,8 +216,60 @@ def cmd_claims(edit, gate=False):
     return 0
 
 
+def cmd_subjects(edit):
+    """Gathers each subject's real material (subjects.json names them): Wikipedia's paragraph, their photographs on
+    Wikimedia Commons, the videos they are in. Writes it back into subjects.json and, to read, subjects.md."""
+    edit = Path(edit)
+    d = jload(edit / "subjects.json", None)
+    if not isinstance(d, dict) or not isinstance(d.get("subjects"), list):
+        sys.exit('ERROR: write EDIT/subjects.json first: {"subjects": [{"name": "Elon Musk", "kind": "person"}, {"name": "SpaceX", "kind": "company"}]} (kinds: ' + ", ".join(storytools.KINDS) + ")")
+    rows = storytools.gather(d["subjects"][:8], search_commons, search_youtube)
+    jsave(edit / "subjects.json", {"subjects": rows})
+    (edit / "subjects.md").write_text(storytools.catalog_md(rows), encoding="utf-8")
+    for r in rows:
+        print(f"{r['name']} ({r['kind']}): {len(r.get('photos') or [])} photographs, {len(r.get('videos') or [])} videos")
+    print(f"SUBJECTS {edit / 'subjects.md'}" if rows else "SUBJECTS none named: the video is about an idea, shots are searched by what they show")
+    return 0
+
+
+def script_text(edit):
+    return " ".join(str(s.get("say") or "") for s in scenes_of(edit) if isinstance(s, dict))
+
+
+def cmd_models(edit, topic=""):
+    """models.md: the most-watched videos on the topic, measured (pace, sentence length, questions, how they open), and
+    the draft beside them once there is one. Run before the script, and again after it."""
+    edit = Path(edit)
+    keep = edit / "models.json"
+    d = jload(keep, None)
+    if topic or not isinstance(d, dict):
+        topic = topic or str(studio.brief_of(edit).get("prompt") or "")
+        d = {"topic": topic, "models": storytools.find_models(topic, search_youtube, subs_of, lambda v: (video_info(v) or {}).get("views") or 0)}
+        jsave(keep, d)
+    rows = [{**r, "outline": [tuple(x) for x in r["outline"]]} for r in d["models"]]
+    text = script_text(edit)
+    mine = storytools.measure(text, (jload(edit / "timing.json", {}) or {}).get("length")) if len(text.split()) > 40 else None
+    (edit / "models.md").write_text(storytools.models_md(d["topic"], rows, mine), encoding="utf-8")
+    print(f"MODELS {edit / 'models.md'}: {len(rows)} video(s) measured" + ("" if rows else " (none could be read: YouTube may have stopped answering this computer for a while; "
+                                                                               "run `models` again later, the script can be written to story.md's defaults meanwhile)"))
+    if not rows:
+        keep.unlink(missing_ok=True)        # asked again next time
+    for g in (storytools.draft_gaps(mine, rows) if mine else []):
+        print("FIX  " + g)
+    return 0
+
+
 def cmd_check(edit):
     errs = story_gaps(edit) + check(edit)
+    mj = jload(Path(edit) / "models.json", {}) or {}
+    text = script_text(edit)
+    if not errs and mj.get("models") and len(text.split()) > 40:      # the draft beside the videos people watched
+        errs += storytools.draft_gaps(storytools.measure(text), mj["models"])
+    cr = Path(edit) / "critique.md"
+    if not errs and (Path(edit) / "research.md").is_file() and not (cr.is_file() and re.search(r"^verdict:\s*pass\b", cr.read_text(encoding="utf-8"), re.I | re.M)
+                                                                 and cr.stat().st_mtime >= (Path(edit) / "scenes.json").stat().st_mtime - 2):
+        errs.append("no passing critique.md for this draft: a fresh agent reads the script aloud in its head against models.md and story.md's "
+                    "critic rubric, writes critique.md ending `verdict: pass` or `verdict: rewrite` with the lines to change; rewrite until it passes")
     if errs:
         print("\n".join("FIX  " + e for e in errs))
         return 1
@@ -211,8 +290,12 @@ def cmd_check(edit):
         print(f"ai   {kinds['ai']} shots of {AI_SECONDS} s on {prov[0].title()}: " +
               (f"about ${kinds['ai'] * AI_SECONDS * rate:.2f} on the user's account" if rate else "priced by Higgsfield, from the user's balance") +
               ". Ask before `find`.")
-    if kinds["motion"] > MAX_MOTION:
-        print(f"FIX  {kinds['motion']} motion shots: {MAX_MOTION} at most. Keep them for the ideas a flat graphic cannot show")
+    mode = visuals_of(edit)
+    if kinds["motion"] > (MAX_MOTION_ANIMATED if mode == "animated" else MAX_MOTION):
+        print(f"FIX  {kinds['motion']} motion shots: {MAX_MOTION_ANIMATED if mode == 'animated' else MAX_MOTION} at most. Keep them for the ideas a flat graphic cannot show")
+        return 1
+    if mode == "animated" and kinds["motion"] < 0.4 * len(sc):
+        print(f"FIX  a fully animated video, but only {kinds['motion']} of {len(sc)} lines have an animated shot: give most lines one motion shot that runs the whole line")
         return 1
     words = sum(len(studio.words_in(s.get("say"))) for s in sc)
     print(f"ok   {len(sc)} lines, {words} words, about {est // 60:.0f}:{est % 60:02.0f}, {len(shots)} shots "
@@ -222,14 +305,17 @@ def cmd_check(edit):
         print(f"FIX  about {est:.0f} s for {want:.0f} s asked: {'add' if est < want else 'cut'} about "
               f"{abs(want - est) * 2.4:.0f} words")
         return 1
-    if est / len(shots) > PACE_S:
+    if mode != "animated" and est / len(shots) > PACE_S:
         print(f"FIX  a shot every {est / len(shots):.1f} s is slow: add shots to the long lines (a new picture every 1.5 to 3 s)")
         return 1
     if kinds["photo"] > 20:
         print(f"FIX  {kinds['photo']} photo shots: 20 at most (the picture sites are slow). Make the others clips or graphics")
         return 1
     g = sum(kinds[k] for k in GRAPHICS) + kinds["motion"]
-    if g > 0.6 * len(shots):
+    if mode == "real" and g > 0.2 * len(shots):
+        print(f"FIX  {g} of {len(shots)} shots are graphics in a real-footage video: 1 in 5 at most; say the rest with \"over\" on the footage")
+        return 1
+    if mode == "mixed" and g > 0.6 * len(shots):
         print(f"FIX  {g} of {len(shots)} shots are graphics: real footage and pictures carry a video, graphics make the points")
         return 1
     return 0
@@ -259,7 +345,7 @@ def spans(edit):
 
 
 # ---------------------------------------------------------------- finding footage and pictures
-def search_youtube(query, n=6):
+def search_youtube(query, n=6, raw=False):
     v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
     rows, ws = [], query.split()
     # some searches come back empty for no reason one can see ("honey dripping close up"): fewer words, then fewer
@@ -276,6 +362,8 @@ def search_youtube(query, n=6):
         if rows:
             break
         time.sleep(1)
+    if raw:                     # as YouTube ranks them: for a subject's own interviews and for the most-watched videos on a topic
+        return [c for c in rows if 20 <= c["duration"] <= 7200]
     good = [c for c in rows if 20 <= c["duration"] <= 2400]       # not a Short's 10 s, not a 3 hour stream
     return sorted(good or [c for c in rows if 8 <= c["duration"] <= 7200], key=lambda c: -title_score(c))
 
@@ -454,11 +542,29 @@ def best_moment(vid, text, taken=()):
     return times[i], float(s[i])
 
 
+def video_info(vid):
+    """One YouTube video by its id: {"id", "duration", "title", "channel", "views"}, or None."""
+    v4 = [] if __import__("os").environ.get("STUDIO_IPV6") else ["--force-ipv4"]
+    r = subprocess.run(streamclips.ytdlp() + ["--no-warnings", "--no-playlist", *v4, "--skip-download", "--print", "%(id)s\t%(duration)s\t%(title)s\t%(channel)s\t%(view_count)s",
+                                             "https://www.youtube.com/watch?v=" + str(vid)], capture_output=True, text=True, timeout=90)
+    p = (r.stdout.strip().splitlines() or [""])[-1].split("\t")
+    try:
+        return {"id": p[0], "duration": float(p[1]), "title": p[2], "channel": p[3], "views": int(p[4]) if p[4].isdigit() else 0}
+    except (IndexError, ValueError):
+        return None
+
+
 def fetch_clip(edit, key, sh, need, w, h, used):
-    cands = search_youtube(sh["query"])
+    if sh.get("video"):          # a moment of one named video (the subject's own interview, from subjects.md): no search, no passing over
+        one_ = video_info(re.sub(r"^.*(?:v=|youtu\.be/)", "", str(sh["video"]))[:11])
+        if not one_:
+            return {"missing": f"the video {sh['video']} could not be read"}
+        cands, sh = [one_], {**sh, "pick": 0, "query": sh.get("query") or sh.get("see") or one_["title"]}
+    else:
+        cands = search_youtube(sh["query"])
     if not cands:
         return {"missing": "nothing found on YouTube for this search"}
-    if not GAME.search(str(sh["query"])):       # unless a game is what was asked for
+    if not sh.get("video") and not GAME.search(str(sh["query"])):       # unless a game is what was asked for
         plain = [c for c in cands if not GAME.search(f"{c.get('title', '')} {c.get('channel', '')}")]
         cands = plain or cands
     first = min(len(cands) - 1, max(0, int(sh.get("pick") or 0)))
@@ -491,7 +597,12 @@ def fetch_clip(edit, key, sh, need, w, h, used):
                                                  "--download-sections", f"*{a:.1f}-{a + need + 2.5:.1f}", "--merge-output-format", "mp4",
                                                  "-o", str(raw), url], capture_output=True, text=True, timeout=300)
         if r.returncode or not raw.exists():
-            why = (r.stderr.strip().splitlines() or ["the download failed"])[-1][:160]
+            # YouTube's "Sign in to confirm you're not a bot": it has stopped answering this computer for a while (measured: after
+            # about 60 downloads in half an hour). Nothing here works round that; the shot becomes stock footage or a photograph.
+            why = "YouTube has stopped answering this computer for now (too many requests in a short time): wait an hour, or use stock footage and photographs" \
+                if "confirm you" in r.stderr else (r.stderr.strip().splitlines() or ["the download failed"])[-1][:160]
+            if "confirm you" in r.stderr:
+                break
             continue
         got = duration(raw)
         tmp = edit / "shots" / f"{key}.try.mp4"
@@ -947,6 +1058,14 @@ PHOTO_GAP_S = 1.2                  # between two pictures: one at a time and unh
 COOL = {}                          # site -> the time it may be asked again, after it said "too many requests"
 
 
+def subject_photos(edit, sl):
+    """The photographs gathered for one subject (subjects.json), in the catalogue's own order."""
+    for r in (jload(Path(edit) / "subjects.json", {}) or {}).get("subjects") or []:
+        if r.get("slug") == sl:
+            return list(r.get("photos") or [])
+    return []
+
+
 def fetch_photo(edit, key, sh, w, h):
     """One picture at a time. A site that says "too many requests" rests for as long as it asks (2 minutes for
     Wikimedia); while both rest, this waits for the first to come back rather than give the shot up."""
@@ -959,11 +1078,11 @@ def fetch_photo(edit, key, sh, w, h):
                     continue
                 asked = True
                 try:
-                    cands = search(sh["query"])
+                    cands = subject_photos(edit, sh.get("subject")) if sh.get("subject") and search is search_commons else search(sh["query"])
                     if not cands:
                         continue
                     wide = [x for x in cands if (x["w"] >= x["h"]) == (w >= h)] or cands
-                    order = (wide + [x for x in cands if x not in wide])
+                    order = cands if sh.get("subject") else (wide + [x for x in cands if x not in wide])
                     c = order[min(len(order) - 1, max(0, int(sh.get("pick") or 0)))]
                     import net
                     with net.urlopen(urllib.request.Request(c["url"], headers={"User-Agent": UA}), 60) as r:
@@ -1076,7 +1195,7 @@ def cmd_find(edit, only=None):
                 if not alt.get("missing"):
                     got = {**alt, "instead": "a picture (no footage: " + why + ")"}
         return key, {**got, "kind": sh["kind"], "query": sh.get("query"), "stamp": stamp_of(sh, need)}
-    with ThreadPoolExecutor(4) as ex:
+    with ThreadPoolExecutor(2) as ex:        # two at a time: four got this computer refused by YouTube half way through a video
         for key, got in ex.map(one, todo):
             db[key] = got
             jsave(edit / "shots.json", db)
@@ -1617,17 +1736,24 @@ def cmd_sound(edit, mood="linear"):
     import audio_lib
     rec = lambda kind, k: audio_lib.sfx(kind, k, sound.read_audio)    # noqa: E731  (a recorded effect when the library is fetched)
 
+    landed = []                                        # every effect by itself too: (kind, sound, when, gain), for the layers
+
     def land(kind, k, at, gain, synth):
         x = rec(kind, k)
-        sound.place(fx, x if x is not None else synth(), at, gain * (0.5 if x is not None else 1.0))
+        y, g_ = (x if x is not None else synth()), gain * (0.5 if x is not None else 1.0)
+        sound.place(fx, y, at, g_)
+        landed.append((kind, y, at, g_))
     for k, s in enumerate(sp[1:], 1):                    # a sound where something lands; a plain change of footage is silent
         kind = s["shot"]["kind"]
         if s["a"] in starts:                              # a new section: a riser into it
             x = rec("riser", k)
             if x is not None:
                 sound.place(fx, x, s["a"] - x.shape[1] / sr, 0.05)
+                landed.append(("riser", x, s["a"] - x.shape[1] / sr, 0.05))
             else:
-                sound.place(fx, sound.sfx_swell(1.2, root, k), s["a"] - 1.2, 0.07)
+                y = sound.sfx_swell(1.2, root, k)
+                sound.place(fx, y, s["a"] - 1.2, 0.07)
+                landed.append(("riser", y, s["a"] - 1.2, 0.07))
         if kind in ("stat", "title", "motion", "chart3d", "tier", "paper"):
             land("impact", k, s["a"], 0.11, lambda: sound.sfx_hit(root, k))
         elif kind in GRAPHICS:
@@ -1635,11 +1761,13 @@ def cmd_sound(edit, mood="linear"):
         elif isinstance(s["shot"].get("over"), dict) and any(s["shot"]["over"].get(x) for x in ("stat", "ring", "clip", "label")):
             land("swipe", k, s["a"] + 0.12, 0.07, lambda: sound.sfx_tick(k))      # a number or a mark arriving on the footage
     vo = edit / "audio" / "vo.wav"
-    mix = bed + fx
+    mix, v, dg = bed + fx, None, np.ones(n)
     if tm["engine"] != "none" and vo.exists():
         v = sound.read_audio(vo, tm["length"] + 0.05)[:, :n]
-        mix = sound.duck(mix, v) + v
+        dg = sound.duck(np.ones((1, n)), v)[0]          # how far everything else steps down while the voice speaks
+        mix = mix * dg + v
     lufs, tp = sound.master(mix, edit / "audio" / "mix.wav")
+    studio.write_stems(edit, tm, sound, mix, bed if b["music"] else None, v, landed, dg)
     rng = mix_range(sound.read_audio(edit / "audio" / "mix.wav", tm["length"] + 0.05), sr)
     print(json.dumps({"file": str(edit / "audio" / "mix.wav"), "lufs": lufs, "true_peak": tp, "music": b["music"], "cuts": len(sp) - 1,
                       "range_db": round(rng, 1)}))
@@ -2223,8 +2351,7 @@ def cmd_build(edit):
             mine = [{"w": x["w"], "start": x["start"], "end": x["end"]} for x in words if r["start"] <= x["start"] < r["start"] + r["dur"]]
             if mine:
                 S.captions(mine, style=style, start=r["start"], end=r["start"] + r["dur"], track="Captions")
-    if (edit / "audio" / "mix.wav").exists():
-        S.audio("audio/mix.wav", 0, tm["length"], track="Sound")
+    studio.add_sound(S, edit, tm, sc["scenes"])
     S.sc["duration"] = tm["length"]
     jsave(edit / studio.SCENE_FILE, S.done())
     n = len(spans(edit))
@@ -2623,6 +2750,7 @@ def demo():
         jsave(e / "scenes.json", good)
         assert title_score({"title": "Tokyo 4K drone footage", "duration": 300}) > title_score({"title": "Tokyo explained | podcast", "duration": 300})
         assert fit_cmd("a", "b", 1920, 1080)[-1] == "b" and "-t" in fit_cmd("a", "b", 1920, 1080, 3.0)
+    assert storytools.demo() == 0
     print("longvideo demo ok")
     return 0
 
@@ -2635,6 +2763,8 @@ def main(argv):
     for name in ("check", "sheet", "build", "kit", "briefs", "qa", "charts"):
         sub.add_parser(name).add_argument("edit")
     sub.add_parser("bites").add_argument("edit")
+    sub.add_parser("subjects").add_argument("edit")
+    p = sub.add_parser("models"); p.add_argument("edit"); p.add_argument("topic", nargs="?", default="")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
     p = sub.add_parser("claims"); p.add_argument("edit"); p.add_argument("--gate", action="store_true")
     p = sub.add_parser("music"); p.add_argument("edit"); p.add_argument("--feel", default=""); p.add_argument("--bpm", default=""); p.add_argument("--use")
@@ -2651,6 +2781,7 @@ def main(argv):
             "voiceover": lambda: cmd_voiceover(a.edit, a.file), "shorts": lambda: cmd_shorts(a.edit, a.count, a.reveal),
             "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo,
             "charts": lambda: cmd_charts(a.edit), "claims": lambda: cmd_claims(a.edit, a.gate),
+            "subjects": lambda: cmd_subjects(a.edit), "models": lambda: cmd_models(a.edit, a.topic),
             "music": lambda: cmd_music(a.edit, a.feel, a.bpm, a.use), "sfx-setup": cmd_sfx_setup}[a.cmd]()
 
 

@@ -3279,7 +3279,8 @@ def make_handler(token):
                      "footage": {"youtube": b.get("youtube") is not False, "photos": b.get("photos") is not False, "licensed_first": bool(b.get("licensed"))},   # fork: licensed_first
                      "own": os.path.expanduser(own) if own else None, **voice_of(b),
                      "ai": bool(b.get("ai")) and any(keys.get(n)[0] for n in ("runway", "gemini", "higgsfield", "openai")),   # AI-generated shots: only with a connection
-                     "voiceover": vo or None, "quality": "4k" if str(b.get("quality") or "").lower() == "4k" else "1080"}   # fork: 4K output
+                     "voiceover": vo or None, "quality": "4k" if str(b.get("quality") or "").lower() == "4k" else "1080",   # fork: 4K output
+                     "visuals": b.get("visuals") if b.get("visuals") in ("mixed", "real", "animated") else "mixed"}   # fork: the look the user chose
             edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or "my voiceover")
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             self.placeholder(edit, aspect, prompt[:60] or "From your voiceover")

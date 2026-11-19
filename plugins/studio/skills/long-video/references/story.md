@@ -85,6 +85,48 @@ list; these rules when they are not). None of these may be in the script:
 Score the draft 1 to 10 on each of directness, rhythm, trust, authenticity and density (stop-slop's rubric) and
 rewrite until it totals 35 or more.
 
+## 1b. Who and what it is about (`EDIT/subjects.json`, then `subjects EDIT`)
+
+Before the beats, name every person, company, place, event and thing the video is ABOUT (not everything it mentions):
+`{"subjects": [{"name": "Elon Musk", "kind": "person"}, {"name": "SpaceX", "kind": "company"}]}`; an empty list when it
+is about an idea. `subjects EDIT` gathers what is real of each: Wikipedia's paragraph, their photographs on Wikimedia
+Commons, and the interviews, speeches and official videos they are in. Read `subjects.md`. Then:
+
+- A line that names a subject shows that subject: a photograph of them (`"subject": "<slug>", "pick": N`) or a moment
+  of a video they are in (`"video": "<id>", "see": "what is on screen"`). `check` refuses the line otherwise. A stock
+  photo of a rocket is not SpaceX; a stranger at a desk is not the person.
+- Write the story round what there is. Six photographs and two interviews of a person is a video told over their
+  face and their own words (use `bite` for a sentence they say); nothing found means the video is about the idea
+  and says so in its pictures.
+- The look the user chose decides the rest (brief `visuals`). `animated`: no footage or photographs at all, every
+  line one `motion` shot written as a full scene (what is on screen, what moves, what the camera does), graphics
+  between. `real`: only footage and photographs, numbers on the footage with `over`. `mixed`: real material for what
+  is named, animation for what cannot be filmed (a mechanism, a scale, a comparison).
+
+## 1c. How the videos people watched are written (`models EDIT "<topic>"`)
+
+`models.md` measures the most-watched videos on the topic: how they open, where they are at each point, words a
+minute, sentence length, how often they ask a question or say "you". Write to the TARGET column. Take the shape,
+never a sentence: their words are theirs. Run `models EDIT` again once the script exists: the draft is measured
+beside them and `check` prints a `FIX` for each measure that is far off.
+
+## 3a. A critic reads it before the user does (`EDIT/critique.md`)
+
+Give a fresh agent only `scenes.json` (the `say` lines in order), `models.md` and this rubric; it has not seen the
+research, so it reads as a viewer. It writes `critique.md`: a mark out of 5 for each line of the rubric with the
+weakest lines quoted and a better version of each, ending `verdict: pass` (every mark 4 or 5) or `verdict: rewrite`.
+Rewrite and run it again until it passes; `check` refuses a script without a passing critique newer than the script.
+
+1. **The first 15 seconds.** Does the first sentence make a person want the second? A fact that sounds wrong, a
+   question they now need answered, or a stake. Not a greeting, not "in this video", not the topic restated.
+2. **One question.** Can the whole video be said as one question, and does every section move toward its answer?
+3. **Told, not listed.** Does each section set something up, raise a doubt and pay it off ("but", "so", "which
+   means"), or is it fact, fact, fact?
+4. **Said, not written.** Read it aloud: short sentences, one idea each, the important word last, numbers a person
+   can picture ("six and a half miles", not "10,668 metres").
+5. **Something to remember.** Is there one line a viewer would repeat to someone else?
+6. **The ending.** Does it answer the opening question in a sentence and stop, with no summary of what was said?
+
 ## 3b. Every claim is checked before the voice is recorded (`EDIT/claims.md`)
 
 After the user approves the script, `longvideo.py claims EDIT` lists every line that states a number, a date, a

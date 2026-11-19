@@ -38,7 +38,9 @@ Say every step in the editor too: `python3 "$R" EDIT status "Researching"`. The 
 `EDIT/brief.json`: `{"prompt", "minutes", "aspect": "16:9"|"9:16", "voice": true, "text", "music",
 "footage": {"youtube": true|false, "photos": true|false}, "own": "<a folder of the user's clips>"|null,
 "voice_engine": "kokoro"|"eleven"|"edge"|"pocket", "voice_id", "ai": true|false, "voiceover": "<the user's own recording>"|null}`.
-`voice_engine` and `voice_id` are the narrator the user picked on the page: `voice` reads them itself.
+`voice_engine` and `voice_id` are the narrator the user picked on the page: `voice` reads them itself. `visuals` is the
+look they chose and `check` enforces it: `animated` (no footage or photos at all: one `motion` shot a line, graphics
+between), `real` (only footage and photographs, numbers as `over`, nothing animated), `mixed`.
 Asked in chat instead of the page: make the edit folder (`python3 "$E/lib/ai_editor/library.py" path`, then
 `edits/<name>/`), write brief.json (3 minutes, 16:9, everything on), and
 `python3 "$R" EDIT start --raw --video <any 2 s clip> --stage edit` so the editor has the video.
@@ -55,8 +57,10 @@ run. Read `${CLAUDE_SKILL_DIR}/references/voiceover.md` and follow it, then go o
 ## 1. Research, then the story (read `${CLAUDE_SKILL_DIR}/references/story.md` and `~/.ai-video-editor/taste.md` first)
 
 WebSearch, then WebFetch 5 to 8 pages from at least 3 sites. `EDIT/research.md`: the angle, the one question the
-video answers, every fact as `- <fact> [Source](url)`. Then `EDIT/beats.md`: 6 to 10 beats. `check` refuses fewer
-than 5 sources or no beats; after approval `claims EDIT`, a fresh agent verifies it, `claims EDIT --gate` must pass.
+video answers, every fact as `- <fact> [Source](url)`. Then `subjects EDIT` (who it is about: their real photos and
+videos, `subjects.md`), `models EDIT "<topic>"` (the most-watched videos measured, `models.md`), `EDIT/beats.md`, the
+script, and a fresh agent's `critique.md` (story.md, step 3a). `check` refuses a script without them; after approval
+`claims EDIT`, a fresh agent verifies it, `claims EDIT --gate` must pass.
 
 ## 2. The script: `EDIT/scenes.json`
 
@@ -143,13 +147,10 @@ python3 "$PY" "$T" voice EDIT --fit <minutes x 60>     # ElevenLabs with a saved
 python3 "$PY" "$T" words EDIT
 ```
 
-The voice, best first: ElevenLabs (the user's key, billed to their plan); the Edge voices (Microsoft's neural
-voices, free, no key: the script's words are sent to Microsoft to be spoken, so say so once on the page); Kokoro, a
-free neural voice that runs on this computer, offline; the macOS voice, which is robotic. brief.json
-`voice_engine` and `voice_id` are the user's pick and are used as given. The last line says which it used. On the macOS voice: run
-`python3 "$PY" "$T" kokoro-setup` (a 350 MB download, once; say so on the page) and `voice` again.
-Write every `say` line for the ear: numbers as they are spoken ("twenty-one thousand"), no brackets, a comma where
-a breath falls.
+The voice, best first: ElevenLabs (the user's key and plan), Edge (free; the words go to Microsoft: say so once),
+the Studio and Kokoro voices (free, on this computer), the robotic macOS voice (then run `kokoro-setup`, 350 MB,
+once, and `voice` again). brief.json `voice_engine` and `voice_id` are the user's pick, used as given. Write every
+`say` line for the ear: numbers as spoken ("twenty-one thousand"), no brackets, a comma where a breath falls.
 
 `--fit` brings a voice that reads fast up to the length asked: it slows a little (never under 80%) and each line
 gets a short pause. A `FIT` line that says it is still more than a tenth short or long: add or cut that many words
