@@ -430,3 +430,6 @@ body.fw-app a, body.fw-app button { cursor: default; }
 .rl-job .ic svg { position: absolute !important; left: 50% !important; top: 50% !important; width: 24px; height: 24px; margin: -12px 0 0 -12px; }
 .rl-job .ic svg circle:last-child { stroke: var(--accent-hi); }
 @media (max-height: 1000px) { .rl-job .ic { height: 30px !important; } .rl-job .ic svg { width: 22px; height: 22px; margin: -11px 0 0 -11px; } }
+.rl-job { height: auto !important; min-height: 34px; }
+.rl-job .ic { flex-shrink: 0; min-height: 30px; }
+.rl-it .ic { flex-shrink: 0; }
