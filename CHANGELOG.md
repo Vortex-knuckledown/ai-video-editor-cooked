@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.14.0 (this fork, 2026-11-19)
 - Create from a prompt makes videos up to 10 minutes, with 3 and 5 minute options. It was capped at 3 minutes. A long video's scenes are animated six at a time, so a laptop is not asked to render 40 at once. A 5-minute video in 3D (67 scenes) was made this way.
 - Captions no longer split a number or a hyphenated word in two ("384. ,000", "light -years", "3 %").
 
