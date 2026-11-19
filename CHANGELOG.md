@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.17.0 (this fork, 2026-11-19)
 
 - **The app is now Framewise.** A new name, a new icon (a blue tile, a white frame, a play head) and the same mark
   in the sidebar and the browser tab. `plugins/studio/theme/brand.json` holds the name; the original's licence and
