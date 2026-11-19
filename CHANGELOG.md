@@ -2,7 +2,7 @@
 
 What changed for every user, newest first.
 
-## Unreleased (studio)
+## studio 0.18.0 (this fork, 2026-11-19)
 
 - **Graphics that sit on the footage, the way edited channels do it.** New `over` kinds for long videos: a glass
   data card (`stat` with `unit`, `kicker`, `note`), a `ring` drawn round the thing on screen with its measure, and
