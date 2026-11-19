@@ -95,6 +95,17 @@ def slug(s, n=24):
     return re.sub(r"[^a-z0-9]+", "-", str(s).lower()).strip("-")[:n] or "scene"
 
 
+DARK_LUMA = 28   # of 255. Measured on a rendered video: a daylight street is about 100, Earth from orbit 35 to 55, a shot that reads as black 23
+
+
+def luma_of(f):
+    """How bright a clip is: the middle value of its frames' mean brightness (0 to 255), two frames a second. None when it cannot be read."""
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(f), "-vf", "fps=2,scale=160:-2,signalstats,metadata=print:file=-", "-f", "null", "-"],
+                       capture_output=True, text=True)
+    ys = sorted(float(x) for x in re.findall(r"YAVG=([\d.]+)", r.stdout))
+    return ys[len(ys) // 2] if ys else None
+
+
 def duration(f):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(f)],
                        capture_output=True, text=True)
@@ -734,7 +745,16 @@ KIT_FILES = {   # where it lands in the kit -> where it comes from. NASA imagery
 }
 KIT_SKIES = {"sky/day.hdr": "kloofendal_48d_partly_cloudy_puresky", "sky/sunset.hdr": "belfast_sunset_puresky"}
 KIT_PBR = {"brick": "red_brick_03", "asphalt": "asphalt_02", "concrete": "brushed_concrete", "sand": "coast_sand_01", "rock": "aerial_rocks_02"}
-KIT_JSM = ["loaders/GLTFLoader.js", "loaders/RGBELoader.js", "loaders/HDRLoader.js", "utils/BufferGeometryUtils.js", "utils/SkeletonUtils.js"]
+KIT_JSM = ["loaders/GLTFLoader.js", "loaders/RGBELoader.js", "loaders/HDRLoader.js", "utils/BufferGeometryUtils.js", "utils/SkeletonUtils.js",
+           "loaders/FBXLoader.js", "libs/fflate.module.js", "curves/NURBSCurve.js", "curves/NURBSUtils.js"]   # FBX: what Mixamo exports
+OWN_FIGURES = "models/own"   # the user's own figures (.glb or .fbx, each with its own animation clips) go in this kit folder
+
+
+def own_figures():
+    """The user's own figures in the kit, as paths under the kit. A figure only moves well with clips made for its own
+    skeleton (tested: one figure's walk put on another's bones folds it up), so each file brings its own."""
+    d = kit_dir() / OWN_FIGURES
+    return sorted(f"{OWN_FIGURES}/{f.name}" for f in d.iterdir() if f.suffix.lower() in (".glb", ".gltf", ".fbx")) if d.is_dir() else []
 
 
 def kit_dir():
@@ -768,6 +788,7 @@ def cmd_kit_setup():
             f.with_suffix(f.suffix + ".part").rename(f)
         except Exception as e:   # noqa: BLE001
             bad.append(f"{dest} ({type(e).__name__})")
+    (k / OWN_FIGURES).mkdir(parents=True, exist_ok=True)
     jsm = motion.home() / "motion" / "node_modules" / "three" / "examples" / "jsm"
     for rel in KIT_JSM:
         if (jsm / rel).is_file():
@@ -859,7 +880,9 @@ The shots that will use it (their cameras and actions; the world must make each 
 What makes it look produced and not generated, in order: real surfaces from the kit on everything large; a sky that
 lights the scene; shadows; depth (haze or fall-off into the distance); detail in the mid-ground (windows, lamps, cars,
 kerbs, craters, clouds); one figure with a believable gait if the world has a person; nothing floating, nothing
-intersecting. The look is realistic, not a diagram.
+intersecting. The look is realistic, not a diagram. Light it so the subject reads: a night side or deep space still
+needs a rim light or glow, never a frame that is mostly black.
+{own}
 
 Then prove it in the demo clip `{demo}`: its `index.html` imports the world and, over {dur} s, moves the camera
 through three framings the shots above need (a wide establishing view, a medium one, a close one on the action).
@@ -910,7 +933,10 @@ def cmd_worlds(edit):
             wid=wid, title=sc.get("title") or "", ref=ref, examples=ref.parents[1] / "worlds", js=edit / "worlds" / f"{wid}.js", n=len(shots),
             wdesc=wd.get("describe") or "", prompt=b.get("prompt") or "", shots="\n".join(shots) or "  (none yet)", demo=demo, dur=6,
             env=f'AI_EDITOR_HOME="{os.environ["AI_EDITOR_HOME"]}" ' if os.environ.get("AI_EDITOR_HOME") else "",
-            run=root / "lib" / "ai_editor" / "run.py", motion=root / "skills" / "motion" / "scripts" / "motion.py"), encoding="utf-8")
+            run=root / "lib" / "ai_editor" / "run.py", motion=root / "skills" / "motion" / "scripts" / "motion.py",
+            own=("The user's own figures are in the kit: " + ", ".join(f"`./assets/kit/{x}`" for x in own_figures()) + ". If this world has "
+                 "a person, use one of these in place of `models/person.glb`, with the clips inside that same file (`.fbx` loads with "
+                 "`three/addons/loaders/FBXLoader.js`, and is usually in centimetres: scale it to 1.7 m).") if own_figures() else ""), encoding="utf-8")
         print(f"{wid:<16} {len(shots):3d} shots  {edit / 'worlds' / (wid + '.md')}")
     if missing:
         print("NOTE: three.js or the 3D kit is not installed: studio.py three-setup, then studio.py kit-setup, then worlds again")
@@ -1053,6 +1079,8 @@ def cmd_music(edit, mood="linear"):
 
 # ---------------------------------------------------------------- the scene, render, stills
 CAPTION_STYLE = {"y_pct": 72, "size_pct": 5.6, "case": "sentence", "effect": "pop", "stroke": True}
+# a 3D video: the picture is the subject, so the words sit small at the bottom and light up as they are said
+CAPTION_3D = {"y_pct": 91, "size_pct": 2.9, "case": "sentence", "effect": "karaoke", "weight": 600, "stroke": True, "inactive_opacity": 0.5}
 
 
 def cmd_build(edit):
@@ -1065,14 +1093,18 @@ def cmd_build(edit):
     look = look_of(sc)
     w, h = size_of(edit)
     S = scene.Scene(w, h, FPS, background=look.get("ground") or "#000000", edit=edit)
-    fell = []
+    fell, dark = [], []
     for r in tm["scenes"]:
         f = clip_of(edit, r["id"])
         if not f:
             f, _ = fallback_clip(edit, r, look), fell.append(r["id"])
+        elif sc.get("style3d"):
+            y = luma_of(f)
+            if y is not None and y < DARK_LUMA:
+                dark.append(f"{r['id']} ({y:.0f})")
         S.video(str(f.relative_to(edit)), r["start"], r["start"] + r["dur"], track="Scenes", volume=0)
     if b["text"] and words:   # one captions item per scene: a caption page never runs across a cut
-        style = {**CAPTION_STYLE, **(sc.get("captions") or {})}
+        style = {**(CAPTION_3D if sc.get("style3d") else CAPTION_STYLE), **(sc.get("captions") or {})}
         for r in tm["scenes"]:
             mine = [{"w": x["w"], "start": x["start"], "end": x["end"]} for x in words
                     if r["start"] <= x["start"] < r["start"] + r["dur"]]
@@ -1086,6 +1118,9 @@ def cmd_build(edit):
           (", sound" if (edit / "audio" / "mix.wav").exists() else ", silent"))
     if fell:
         print("FELL BACK (no passed clip, a plain moving ground instead): " + ", ".join(fell))
+    if dark:
+        print(f"DARK (reads as nearly black; brightness out of 255, under {DARK_LUMA}): " + ", ".join(dark) +
+              ". Send each scene's agent a note to light the subject (a rim light, a brighter key, a closer camera), then build again.")
     return 0
 
 

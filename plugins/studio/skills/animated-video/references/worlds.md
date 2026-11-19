@@ -36,7 +36,15 @@ data display in the same two corners for ten minutes.
 | `sky/day.hdr`, `sky/sunset.hdr` | skies to light a world and fill its background |
 | `pbr/<brick|asphalt|concrete|sand|rock>_<diff|nor|rough>.jpg` | tiling surfaces: colour, normal, roughness |
 | `models/person.glb` (clips: idle, walk, run, sneak_pose, sad_pose, agree, headShake), `models/soldier.glb` (Idle, Walk, Run), `models/robot.glb` (Idle, Walking, Running, Jump, Wave, ...) | animated figures |
-| `jsm/loaders/GLTFLoader.js`, `RGBELoader.js`, `jsm/utils/SkeletonUtils.js` | three.js loaders, imported as `three/addons/...` |
+| `models/own/*.glb`, `*.fbx` | the user's own figures, when there are any (the world brief lists them) |
+| `jsm/loaders/GLTFLoader.js`, `FBXLoader.js`, `RGBELoader.js`, `jsm/utils/SkeletonUtils.js` | three.js loaders, imported as `three/addons/...` |
+
+**Figures.** The built-in person is a plain grey figure and the soldier is in armour: neither is a realistic civilian.
+A figure moves well only with animation made for its own skeleton (tested: the person's walk put on two other clothed
+models folded them up), so never put one model's clips on another. For a realistic clothed person the user downloads
+one from mixamo.com (free with an Adobe login: pick a character, then the Walking and Running animations, format FBX,
+"with skin") into the kit's `models/own/` folder; the world brief then names those files and the world uses them. Tell
+the user this once when a video has a person and `models/own/` is empty; do not stop the video for it.
 
 The clip's `index.html` already has the import map: `import * as THREE from "three"` and
 `import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js"` work.
@@ -54,6 +62,8 @@ The clip's `index.html` already has the import map: `import * as THREE from "thr
    `ACESFilmicToneMapping`, shadows on (`PCFShadowMap`) with the light's shadow box following the subject.
 5. A custom shader's `#include <tonemapping_fragment>` and `#include <colorspace_fragment>` each go on their own line.
 6. Numbers and labels are HTML over the canvas, updated in `draw()`.
+7. No shot may read as black. Space and night still need the subject lit (a rim light, city lights, a glow);
+   `studio.py build` prints `DARK <scene>` for a shot whose brightness is under 28 of 255, and that scene gets a note.
 
 Two worlds that rendered as written are beside this file: `../worlds/earth-orbit.html` (day and night maps blended by
 the Sun's direction, a specular ocean, clouds, an atmosphere shell, stars, an orbiting point with a trail) and

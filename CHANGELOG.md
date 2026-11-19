@@ -2,6 +2,19 @@
 
 What changed for every user, newest first.
 
+## Unreleased (studio)
+
+- **3D videos are built from a few worlds.** A 3D video now has 2 to 6 worlds (a street, Earth from orbit), each
+  built once in detail and reused by every shot with a new camera, in place of dozens of small scenes built from
+  scratch. A kit of photographic textures, skies, surfaces and animated figures (`studio.py kit-setup`, about 23 MB), a
+  data display that stays in the same corners, and `studio.py worlds EDIT` for the world briefs.
+- **Small captions in 3D videos.** The words sit small at the bottom and light up as they are said, so the picture
+  stays the subject.
+- **Dim shots are caught.** `studio.py build` prints `DARK <scene>` for a 3D shot that reads as nearly black.
+- **Your own figure.** A `.glb` or `.fbx` figure with its own walk and run (for example from Mixamo) dropped into the
+  kit's `models/own/` folder is used as the video's person. The built-in figures are a plain grey figure, a soldier
+  and a robot; a realistic clothed person is not included.
+
 ## studio 0.14.0 (this fork, 2026-11-19)
 - Create from a prompt makes videos up to 10 minutes, with 3 and 5 minute options. It was capped at 3 minutes. A long video's scenes are animated six at a time, so a laptop is not asked to render 40 at once. A 5-minute video in 3D (67 scenes) was made this way.
 - Captions no longer split a number or a hyphenated word in two ("384. ,000", "light -years", "3 %").

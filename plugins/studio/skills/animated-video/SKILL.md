@@ -162,6 +162,7 @@ plain moving ground in `build`; say which ones.
 
 ```bash
 python3 "$PY" "$T" build EDIT          # studio.scene.json: the clips back to back, captions per scene, the mix
+                                       # 3D: prints DARK <scene> for a shot that reads as black; note that scene, build again
 python3 "$PY" "$T" render EDIT         # EDIT/render.mp4 (Remotion, the editor's Scene composition)
 python3 "$PY" "$T" stills EDIT         # EDIT/stills/sheet.jpg|png: the middle of every scene
 ```
