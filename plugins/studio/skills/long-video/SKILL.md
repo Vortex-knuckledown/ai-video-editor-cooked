@@ -54,15 +54,14 @@ run. Read `${CLAUDE_SKILL_DIR}/references/voiceover.md` and follow it, then go o
 
 ## 1. Research, then the story (read `${CLAUDE_SKILL_DIR}/references/story.md` first: it is the method)
 
-WebSearch, then WebFetch 5 to 8 pages from at least 3 sites (a study, an official number, a reputable outlet).
-`EDIT/research.md`: the angle, the one question the video answers, every usable fact as `- <fact> (<url>)`, and who
-said something on camera. Then `EDIT/beats.md`: the story in 6 to 10 beats, before any script. `check` refuses fewer
-than 5 sources or no beats. No web tool: say so on the page and state no statistic you cannot source.
+WebSearch, then WebFetch 5 to 8 pages from at least 3 sites. `EDIT/research.md`: the angle, the one question the
+video answers, every fact as `- <fact> [Source](url)`. Then `EDIT/beats.md`: 6 to 10 beats. `check` refuses fewer
+than 5 sources or no beats; after approval `claims EDIT`, a fresh agent verifies it, `claims EDIT --gate` must pass.
 
 ## 2. The script: `EDIT/scenes.json`
 
 ```json
-{"title": "Why honey never spoils", "look": {"ground": "#0E0F12", "ink": "#FFFFFF", "accent": "#FFD24A"},
+{"title": "Why honey never spoils", "look": {"ground": "#0A0C12", "ink": "#FFFFFF", "accent": "#4D8DFF"},
  "scenes": [{"id": "hook", "section": "The tomb", "say": "one spoken line", "visual": "-",
              "source": "https://... (only on a line that states a researched fact)", "source_label": "Smithsonian",
              "shots": [{"kind": "photo", "query": "Egyptian tomb wall painting"}, {"kind": "stat", "value": "3,000", "label": "years old, and still edible"}]}]}

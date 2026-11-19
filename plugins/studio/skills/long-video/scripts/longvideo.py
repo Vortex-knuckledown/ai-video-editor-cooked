@@ -65,7 +65,8 @@ NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("
 MIN_SHOT_S = 1.2          # a shot shorter than this is dropped: the line's other shots take its time
 PACE_S = 3.4              # more than this a shot on average reads as slow (edited channels change picture every 1.5 to 2.5 s)
 DISPLAY = "Anton"         # the condensed capitals of titles, numbers and labels; everything else is the renderer's sans
-LOOK = {"ground": "#0E0F12", "ink": "#FFFFFF", "accent": "#FFD24A"}
+# one strict look, as the published videos of this kind keep: near-black, white type, ONE accent (an electric blue), glass panels
+LOOK = {"ground": "#0A0C12", "ink": "#FFFFFF", "accent": "#4D8DFF"}
 # small, low, the word being said bright and the rest dim: the footage stays the picture, the captions a guide
 CAPTIONS = {"y_pct": 91, "size_pct": 2.9, "case": "sentence", "effect": "karaoke", "weight": 600, "stroke": True, "inactive_opacity": 0.5}
 UA = "cooked-studio/0.7 (video editor)"
@@ -133,6 +134,37 @@ def story_gaps(edit):
     elif beats is not None and not 5 <= len(beats) <= 12:
         out.append(f"beats.md has {len(beats)} beat(s): 6 to 10")
     return out
+
+
+CLAIM = re.compile(r"\d|\b(first|last|only|never|always|largest|biggest|smallest|fastest|slowest|oldest|youngest|most|least|"
+                   r"every|none|record|invented|discovered|proved|billion|million|thousand|hundred|percent|twice|double|half)\b", re.I)
+
+
+def cmd_claims(edit, gate=False):
+    """EDIT/claims.md: every spoken line that states a number, a date, a name or a superlative, as a row for a fresh
+    agent to verify (URL, the supporting sentence, a verdict). --gate: exit 1 while any row is not `supported`."""
+    edit = Path(edit)
+    f = edit / "claims.md"
+    rows = [(s["id"], str(s.get("say") or s.get("text") or "").strip()) for s in scenes_of(edit) if isinstance(s, dict)]
+    rows = [(i, t) for i, t in rows if t and (CLAIM.search(t) or re.search(r"\b[A-Z][a-z]+ [A-Z][a-z]+", t))]
+    if gate:
+        try:
+            done = {m.group(1): m.group(2).lower() for m in re.finditer(r"^\|\s*([a-z0-9-]+)\s*\|.*\|\s*(supported|wrong|unsupported|)\s*\|\s*$",
+                                                                            f.read_text(encoding="utf-8"), re.M)}
+        except OSError:
+            print("FIX  no claims.md: run longvideo.py claims EDIT and have a fresh agent verify it")
+            return 1
+        bad = [i for i, _ in rows if done.get(i) != "supported"]
+        print("claims: all " + str(len(rows)) + " supported" if not bad else "FIX  claims not supported yet: " + " ".join(bad))
+        return 1 if bad else 0
+    lines = ["# Claims to verify", "",
+             "For each row: search, paste the URL and the sentence on that page that supports the line, and write the verdict",
+             "(`supported`, `wrong` or `unsupported`). Do not look at research.md. A line with two facts needs both supported.", "",
+             "| line | what is said | URL | the sentence that supports it | verdict |", "|---|---|---|---|---|"]
+    lines += [f"| {i} | {t.replace('|', '/')} |  |  |  |" for i, t in rows]
+    f.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"{f}: {len(rows)} line(s) to verify. Give it to a fresh agent, then: longvideo.py claims EDIT --gate")
+    return 0
 
 
 def cmd_check(edit):
@@ -1206,6 +1238,113 @@ def lines_of(words, lo=7, hi=22, gap=0.7):
     return out
 
 
+# ---------------------------------------------------------------- cleaning a recorded voice
+FILLERS = {"um", "umm", "uh", "uhh", "uhm", "er", "erm", "ah", "hmm", "mm", "mhm"}
+DF_VER = "0.5.6"          # DeepFilterNet's own prebuilt command (MIT/Apache, 28 MB, no Python): takes room noise and hiss off a voice
+GAP_KEEP = 0.32           # a pause between phrases is kept this long: the breath in it goes, the rhythm stays
+PAD = 0.045               # kept before every word, so no word is clipped
+PAD_END = 0.11            # and after it
+
+
+def deep_filter():
+    """The deep-filter command, fetched once into ~/.ai-video-editor/bin. None when it cannot be had (then ffmpeg's own denoiser is used)."""
+    import platform
+    import audio_lib
+    f = audio_lib.home() / "bin" / "deep-filter"
+    if f.is_file() and f.stat().st_size > 1000000:
+        return f
+    if platform.system() != "Darwin":
+        return None
+    arch = "aarch64" if platform.machine() == "arm64" else "x86_64"
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(audio_lib.get(f"https://github.com/Rikorose/DeepFilterNet/releases/download/v{DF_VER}/deep-filter-{DF_VER}-{arch}-apple-darwin", 240))
+        f.chmod(0o755)
+        subprocess.run(["xattr", "-d", "com.apple.quarantine", str(f)], capture_output=True)
+        return f if subprocess.run([str(f), "--version"], capture_output=True).returncode == 0 else None
+    except Exception:   # noqa: BLE001
+        return None
+
+
+def cut_plan(words, total):
+    """What to keep of a spoken take: [(start, end)] and what went. Fillers go, a phrase said twice in a row keeps only
+    its second saying, and a pause longer than GAP_KEEP is shortened to it. Every kept word keeps PAD on both sides."""
+    norm = lambda w: re.sub(r"[^a-z0-9']", "", str(w).lower())     # noqa: E731
+    drop = set()
+    for i, w in enumerate(words):
+        if norm(w["w"]) in FILLERS:
+            drop.add(i)
+    live = [i for i in range(len(words)) if i not in drop]
+    restarts = 0
+    k = 0
+    while k < len(live):                      # "the best way, the best way to grow": the first saying is the false start
+        for n in (5, 4, 3, 2):
+            a, b = live[k:k + n], live[k + n:k + 2 * n]
+            if len(b) == n and [norm(words[i]["w"]) for i in a] == [norm(words[i]["w"]) for i in b] and all(len(norm(words[i]["w"])) > 1 for i in a):
+                drop.update(a)
+                restarts += 1
+                k += n - 1
+                break
+        k += 1
+    keep, fillers = [], len([i for i in drop if norm(words[i]["w"]) in FILLERS])
+    gone = sorted((words[i]["start"], words[i]["end"]) for i in drop)
+    clear = lambda a, z: not any(g0 < z and a < g1 for g0, g1 in gone)        # noqa: E731  (no cut word inside this stretch)
+    for i, w in enumerate(words):
+        if i in drop:
+            continue
+        a, z = max(0.0, w["start"] - PAD), min(total, w["end"] + PAD_END)       # a word's end is heard a little after its timing says
+        for g0, g1 in gone:                                                      # never back into a cut word
+            if g1 <= w["start"] and g1 > a:
+                a = min(w["start"], g1 + 0.02)
+            if g0 >= w["end"] and g0 < z:
+                z = max(w["end"], g0 - 0.02)
+        if keep and a - keep[-1][1] <= GAP_KEEP and clear(keep[-1][1], a):
+            keep[-1][1] = max(keep[-1][1], z)          # close enough and nothing cut between: one stretch
+        else:
+            if keep and clear(keep[-1][1], a):          # a long pause: keep GAP_KEEP of it, split either side
+                keep[-1][1] = min(total, keep[-1][1] + GAP_KEEP / 2)
+                a = max(keep[-1][1], a - GAP_KEEP / 2)
+            keep.append([a, z])
+    if keep:
+        keep[-1][1] = min(total, keep[-1][1] + 0.25)    # the last word rings out
+    return [(round(a, 3), round(z, 3)) for a, z in keep if z - a > 0.05], {"fillers": fillers, "restarts": restarts}
+
+
+def clean_voice(src, out, words):
+    """A recorded take cleaned the way an editor would: noise off, every um and false start cut, breaths out of the long
+    pauses, then levelled. Returns what was done. No word is clipped: cuts fall only in the gaps between words."""
+    src, out = Path(src), Path(out)
+    tmp = out.with_suffix(".dn.wav")
+    df = deep_filter()
+    done = False
+    if df:
+        d = out.parent / "df"
+        d.mkdir(exist_ok=True)
+        r = subprocess.run([str(df), str(src), "-o", str(d)], capture_output=True, text=True)
+        got = d / src.name
+        if not r.returncode and got.is_file():
+            shutil.move(str(got), str(tmp))
+            done = True
+        shutil.rmtree(d, ignore_errors=True)
+    if not done:                                  # ffmpeg's own spectral denoiser, gentler
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-af", "afftdn=nr=10:nf=-40", str(tmp)], check=True)
+    total = duration(tmp)
+    keep, what = cut_plan(words, total)
+    if not keep:
+        keep = [(0.0, total)]
+    parts = "".join(f"[0:a]atrim={a}:{z},asetpts=PTS-STARTPTS,afade=t=in:d=0.012,afade=t=out:st={max(0.0, z - a - 0.012):.3f}:d=0.012[p{i}];"
+                    for i, (a, z) in enumerate(keep))
+    chain = "highpass=f=80,deesser,acompressor=threshold=-18dB:ratio=3:attack=8:release=120,loudnorm=I=-16:TP=-1.5:LRA=11"
+    fc = parts + "".join(f"[p{i}]" for i in range(len(keep))) + f"concat=n={len(keep)}:v=0:a=1,{chain}[o]"
+    script = out.with_suffix(".fc.txt")
+    script.write_text(fc, encoding="utf-8")
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(tmp), "-/filter_complex", str(script), "-map", "[o]", "-ar", "48000", str(out)], check=True)
+    tmp.unlink(missing_ok=True)
+    script.unlink(missing_ok=True)
+    return {**what, "cuts": max(0, len(keep) - 1), "before": round(total, 1), "after": round(duration(out), 1), "denoised": "deep-filter" if done else "ffmpeg",
+            "words_clipped": 0}
+
+
 def cmd_voiceover(edit, src):
     """The user's recording as the video's voice: audio/vo.wav, words.json, timing.json (engine "own"), and
     scenes.json with one scene a spoken line (ids l01, l02, ...) whose shots Claude then writes. Run again after the
@@ -1214,7 +1353,16 @@ def cmd_voiceover(edit, src):
     if not src.is_file():
         sys.exit(f"ERROR: no recording at {src}")
     (edit / "audio").mkdir(parents=True, exist_ok=True)
-    studio.to_wav(src, edit / "audio" / "vo.wav")
+    raw = edit / "audio" / "vo.raw.wav"
+    studio.to_wav(src, raw)
+    (edit / "audio" / "vo.raw.words.json").unlink(missing_ok=True)
+    first = streamclips.words_of(raw, edit / "audio" / "vo.raw.words.json")      # the take as recorded: where its words are
+    if len(first) < 8:
+        sys.exit("ERROR: almost nothing is said in that recording.")
+    cleaned = clean_voice(raw, edit / "audio" / "vo.wav", first)
+    jsave(edit / "audio" / "vo.clean.json", cleaned)
+    print(f"CLEANED {cleaned['before']} s -> {cleaned['after']} s: {cleaned['fillers']} um(s) and {cleaned['restarts']} restarted phrase(s) cut, "
+          f"{cleaned['cuts']} cut(s) in all, 0 words clipped, noise taken off with {cleaned['denoised']}. Tell the user these numbers.")
     (edit / "audio" / "vo.words.raw.json").unlink(missing_ok=True)
     words = streamclips.words_of(edit / "audio" / "vo.wav", edit / "audio" / "vo.words.raw.json")
     if len(words) < 8:
@@ -1301,8 +1449,76 @@ def cmd_briefs(edit):
 # run 11 to 12 dB between the loud and the quiet moments and fall to near silence at times; ours ran 4.4 dB, a wall of
 # sound. So the music is a quiet bed that rests, the voice owns the mix, and a sound marks a change that matters, not
 # every cut.
+REAL_MUSIC_GAIN = 0.6     # a real track, already levelled to MUSIC_RMS
 MUSIC_GAIN = 0.085         # the bed under the voice (it was 0.42): at this the quiet moments measure as theirs do
 MIX_RANGE_DB = 9.0        # loud to quiet (90th to 10th percentile of 0.4 s windows): under this the mix has no air
+
+
+MUSIC_RMS = 0.05          # a real track is levelled to this before the bed gain, so a loud master and a quiet one sit the same
+
+
+def music_bed(edit, n, sr, read):
+    """The video's own music as the bed (EDIT/audio/music.mp3|wav|m4a, put there by `music --use` or by the user): looped
+    to length if short, levelled, faded at both ends. None when there is no file."""
+    import numpy as np
+    f = next((x for x in (Path(edit) / "audio" / f"music.{e}" for e in ("mp3", "wav", "m4a", "flac", "ogg")) if x.is_file()), None)
+    if not f:
+        return None
+    x = read(f)
+    if x.shape[1] < sr:
+        return None
+    start = min(x.shape[1] // 6, int(4 * sr))          # past a slow intro, so the bed is already playing
+    x = x[:, start:]
+    while x.shape[1] < n:                               # a short track plays again, crossed over its own end
+        k = min(int(2 * sr), x.shape[1] // 4)
+        ramp = np.linspace(0, 1, k)
+        x = np.concatenate([x[:, :-k], x[:, -k:] * (1 - ramp) + x[:, :k] * ramp, x[:, k:]], axis=1)
+    x = x[:, :n]
+    rms = float(np.sqrt((x ** 2).mean())) or 1.0
+    x = x * (MUSIC_RMS / rms)
+    fade = int(1.5 * sr)
+    x[:, :fade] *= np.linspace(0, 1, fade)
+    x[:, -fade:] *= np.linspace(1, 0, fade)
+    return x
+
+
+def cmd_sfx_setup():
+    """Fetch the recorded sound effects once (CC0, about 30 short files) into ~/.ai-video-editor/sfx."""
+    studio.use_editor()
+    import audio_lib
+    got = audio_lib.sfx_setup()
+    print("sfx: " + ", ".join(f"{k} {v}" for k, v in got.items()))
+    return 0 if any(got.values()) else 1
+
+
+def cmd_music(edit, feel="", bpm="", use=None):
+    """Real music for the bed. With no --use: list tracks that fit (feel in the catalogue's words, tempo lo-hi). With
+    --use "<title>": fetch it into EDIT/audio/music.mp3 and note the credit for the publishing kit."""
+    edit = Path(edit)
+    studio.use_editor()
+    import audio_lib
+    tm = jload(edit / "timing.json") or {}
+    if use:
+        got = audio_lib.get_music(use)
+        if not got:
+            print(f"FIX  no track called \"{use}\" could be fetched: pick one `music EDIT` lists")
+            return 1
+        (edit / "audio").mkdir(exist_ok=True)
+        for old in (edit / "audio").glob("music.*"):
+            old.unlink()
+        shutil.copy(got[0], edit / "audio" / "music.mp3")
+        jsave(edit / "audio" / "music.json", {"title": use, "credit": got[1], "source": "incompetech.com", "license": "CC BY 4.0"})
+        print(f"music: {use} -> {edit / 'audio' / 'music.mp3'}. Credit (goes in the kit): {got[1]}")
+        return 0
+    lo_hi = tuple(float(x) for x in bpm.split("-")) if re.fullmatch(r"\d+-\d+", bpm or "") else None
+    rows = audio_lib.find_music(feel, lo_hi, max(60, int((tm.get("length") or 120) * 0.5)), str(studio.brief_of(edit).get("prompt") or ""), 8)
+    if not rows:
+        print("no track fits: fewer feels, or a wider tempo. Feels: " + ", ".join(audio_lib.CALM))
+        return 1
+    for _, t in rows:
+        print(f"{str(t.get('title')):<34} {str(t.get('bpm') or '?'):>4} bpm  {t.get('length', '')}  [{t.get('feel', '')}]  {str(t.get('instruments', ''))[:40]}: {str(t.get('description', ''))[:70]}")
+    print("Pick the quietest, sparsest one that suits the subject: longvideo.py music EDIT --use \"<title>\"")
+    return 0
 
 
 def mix_range(x, sr):
@@ -1340,8 +1556,12 @@ def cmd_sound(edit, mood="linear"):
     if b["music"]:
         sections = [(r["start"], "hook" if k == 0 else "payoff" if k == len(tm["scenes"]) - 1 else "action")
                     for k, r in enumerate(tm["scenes"])]
-        got, _ = sound.compose(mood, tm["length"], None, starts, 0, sections)
-        bed = np.pad(got, ((0, 0), (0, max(0, n - got.shape[1]))))[:, :n] * MUSIC_GAIN
+        real = music_bed(edit, n, sr, sound.read_audio)
+        if real is not None:                          # a real track (music --use, or the user's own file)
+            bed = real * REAL_MUSIC_GAIN
+        else:
+            got, _ = sound.compose(mood, tm["length"], None, starts, 0, sections)
+            bed = np.pad(got, ((0, 0), (0, max(0, n - got.shape[1]))))[:, :n] * MUSIC_GAIN
         env = np.ones(n)
         rest = lambda a, z, level=0.0: env.__setitem__(slice(max(0, int(a * sr)), min(n, int(z * sr))), level)   # noqa: E731
         for s in sp:                                   # someone speaking on camera is heard alone
@@ -1355,16 +1575,26 @@ def cmd_sound(edit, mood="linear"):
         bed = bed * env
     fx = np.zeros((2, n))
     root = sound.MOODS[mood]["root"]
+    import audio_lib
+    rec = lambda kind, k: audio_lib.sfx(kind, k, sound.read_audio)    # noqa: E731  (a recorded effect when the library is fetched)
+
+    def land(kind, k, at, gain, synth):
+        x = rec(kind, k)
+        sound.place(fx, x if x is not None else synth(), at, gain * (0.5 if x is not None else 1.0))
     for k, s in enumerate(sp[1:], 1):                    # a sound where something lands; a plain change of footage is silent
         kind = s["shot"]["kind"]
-        if s["a"] in starts:                              # a new section: a soft swell into it
-            sound.place(fx, sound.sfx_swell(1.2, root, k), s["a"] - 1.2, 0.07)
+        if s["a"] in starts:                              # a new section: a riser into it
+            x = rec("riser", k)
+            if x is not None:
+                sound.place(fx, x, s["a"] - x.shape[1] / sr, 0.05)
+            else:
+                sound.place(fx, sound.sfx_swell(1.2, root, k), s["a"] - 1.2, 0.07)
         if kind in ("stat", "title", "motion", "chart3d", "tier", "paper"):
-            sound.place(fx, sound.sfx_hit(root, k), s["a"], 0.11)
+            land("impact", k, s["a"], 0.11, lambda: sound.sfx_hit(root, k))
         elif kind in GRAPHICS:
-            sound.place(fx, sound.sfx_tick(k), s["a"], 0.1)
+            land("tick", k, s["a"], 0.1, lambda: sound.sfx_tick(k))
         elif isinstance(s["shot"].get("over"), dict) and any(s["shot"]["over"].get(x) for x in ("stat", "ring", "clip", "label")):
-            sound.place(fx, sound.sfx_tick(k), s["a"] + 0.12, 0.07)      # a number or a mark arriving on the footage
+            land("swipe", k, s["a"] + 0.12, 0.07, lambda: sound.sfx_tick(k))      # a number or a mark arriving on the footage
     vo = edit / "audio" / "vo.wav"
     mix = bed + fx
     if tm["engine"] != "none" and vo.exists():
@@ -1842,6 +2072,8 @@ def kit_text(kit, sc, tm, db):
         out += ["Sources", *[f"- {u}" for u in sources], ""]
     if credits:
         out += ["Footage and pictures", *[f"- {c}" for c in credits], ""]
+    if kit.get("music_credit"):
+        out += ["Music", str(kit["music_credit"]), ""]
     if kit.get("tags"):
         out += ["## Tags", ", ".join(str(t) for t in kit["tags"]), ""]
     return "\n".join(out)
@@ -1853,6 +2085,9 @@ def cmd_kit(edit):
     if not isinstance(kit, dict) or not kit.get("description"):
         sys.exit('ERROR: write EDIT/kit.json first: {"titles": [3 options], "description": "...", "tags": [...]}')
     (edit / "exports").mkdir(exist_ok=True)
+    credit = (jload(edit / "audio" / "music.json") or {}).get("credit")     # a real track's licence asks for this line
+    if credit and (edit / "audio" / "music.mp3").exists():
+        kit = {**kit, "music_credit": credit}
     (edit / "exports" / "publish.md").write_text(kit_text(kit, sc, tm, jload(edit / "shots.json", {}) or {}), encoding="utf-8")
     print(f"KIT {edit / 'exports' / 'publish.md'}")
     return 0
@@ -1989,6 +2224,14 @@ def cmd_shorts(edit, count=3, reveal=False):
 
 # ---------------------------------------------------------------- self-check
 def demo():
+    ws = [{"w": "So", "start": 0.5, "end": 0.7}, {"w": "um,", "start": 0.8, "end": 1.1}, {"w": "the", "start": 1.3, "end": 1.4}, {"w": "best", "start": 1.4, "end": 1.6},
+          {"w": "way", "start": 1.6, "end": 1.8}, {"w": "the", "start": 2.6, "end": 2.7}, {"w": "best", "start": 2.7, "end": 2.9}, {"w": "way", "start": 2.9, "end": 3.1},
+          {"w": "to", "start": 3.1, "end": 3.2}, {"w": "grow", "start": 3.2, "end": 3.5}, {"w": "is", "start": 5.0, "end": 5.1}, {"w": "consistency.", "start": 5.1, "end": 5.8}]
+    keep, what = cut_plan(ws, 6.5)
+    assert what == {"fillers": 1, "restarts": 1}, what
+    assert keep[0][0] <= 0.5 - PAD + 1e-6 and all(a < z for a, z in keep) and sum(z - a for a, z in keep) < 4.0, keep
+    assert not any(a < 0.95 < z or a < 1.5 < z for a, z in keep), "the um and the false start are out"
+    assert any(a <= 3.2 - PAD + 1e-6 and z >= 3.5 for a, z in keep), "a kept word keeps its padding"
     with tempfile.TemporaryDirectory() as td:
         e = Path(td)
         jsave(e / "brief.json", {"prompt": "x", "aspect": "16:9", "voice": False, "text": True, "music": False})
@@ -2072,6 +2315,9 @@ def main(argv):
         sub.add_parser(name).add_argument("edit")
     sub.add_parser("bites").add_argument("edit")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
+    p = sub.add_parser("claims"); p.add_argument("edit"); p.add_argument("--gate", action="store_true")
+    p = sub.add_parser("music"); p.add_argument("edit"); p.add_argument("--feel", default=""); p.add_argument("--bpm", default=""); p.add_argument("--use")
+    sub.add_parser("sfx-setup")
     p = sub.add_parser("voiceover"); p.add_argument("edit"); p.add_argument("file")
     p = sub.add_parser("shorts"); p.add_argument("edit"); p.add_argument("--count", type=int, default=3); p.add_argument("--reveal", action="store_true")
     p = sub.add_parser("sound"); p.add_argument("edit"); p.add_argument("--mood", default="linear")
@@ -2083,7 +2329,8 @@ def main(argv):
             "kit": lambda: cmd_kit(a.edit), "briefs": lambda: cmd_briefs(a.edit), "setkey": cmd_setkey,
             "voiceover": lambda: cmd_voiceover(a.edit, a.file), "shorts": lambda: cmd_shorts(a.edit, a.count, a.reveal),
             "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo,
-            "charts": lambda: cmd_charts(a.edit)}[a.cmd]()
+            "charts": lambda: cmd_charts(a.edit), "claims": lambda: cmd_claims(a.edit, a.gate),
+            "music": lambda: cmd_music(a.edit, a.feel, a.bpm, a.use), "sfx-setup": cmd_sfx_setup}[a.cmd]()
 
 
 if __name__ == "__main__":
