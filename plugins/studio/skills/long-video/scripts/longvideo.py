@@ -1672,6 +1672,14 @@ def music_bed(edit, n, sr, read):
     x = x[:, :n]
     rms = float(np.sqrt((x ** 2).mean())) or 1.0
     x = x * (MUSIC_RMS / rms)
+    # a piece has its own quiet intro and loud middle (measured on one track: 10 dB between them), which under a voice is
+    # heard as the music coming and going. Its level is ridden slowly, so it sits within about 3 dB the whole way.
+    hop = int(0.5 * sr)
+    lv = np.array([np.sqrt((x[:, i:i + 4 * hop] ** 2).mean()) for i in range(0, max(1, x.shape[1] - hop), hop)]) + 1e-6
+    gain = np.clip(MUSIC_RMS / lv, 0.6, 2.4) ** 0.8
+    k = 9
+    gain = np.convolve(np.pad(gain, k, mode="edge"), np.ones(k) / k, mode="same")[k:-k]
+    x = x * np.interp(np.arange(x.shape[1]), np.arange(len(gain)) * hop + 2 * hop, gain)
     fade = int(1.5 * sr)
     x[:, :fade] *= np.linspace(0, 1, fade)
     x[:, -fade:] *= np.linspace(1, 0, fade)
@@ -1758,16 +1766,15 @@ def cmd_sound(edit, mood="linear"):
         else:
             got, _ = sound.compose(mood, tm["length"], None, starts, 0, sections)
             bed = np.pad(got, ((0, 0), (0, max(0, n - got.shape[1]))))[:, :n] * MUSIC_GAIN
+        # One steady bed from the first second to the last. It used to rest before every section and for the first words,
+        # and to dip under every sentence: the user heard the music "start, go, drop, start again" with each clip. It now
+        # only steps back, slowly, while someone is speaking on camera.
         env = np.ones(n)
-        rest = lambda a, z, level=0.0: env.__setitem__(slice(max(0, int(a * sr)), min(n, int(z * sr))), level)   # noqa: E731
-        for s in sp:                                   # someone speaking on camera is heard alone
+        for s in sp:
             if s["shot"]["kind"] == "bite":
-                rest(s["a"] - 0.2, s["b"] + 0.15)
-        for t in starts:                               # a breath before a new section, then the music comes back in
-            rest(t - 0.9, t + 0.1)
-        rest(0, min(0.6, tm["length"]))                # the first words land in silence
-        k = max(1, int(0.35 * sr))
-        env = np.convolve(env, np.ones(k) / k, mode="same")   # every rest fades, none cuts
+                env[max(0, int((s["a"] - 0.5) * sr)):min(n, int((s["b"] + 0.5) * sr))] = 0.25
+        k = max(1, int(1.2 * sr))
+        env = np.convolve(np.pad(env, k, mode="edge"), np.ones(k) / k, mode="same")[k:-k]
         bed = bed * env
     fx = np.zeros((2, n))
     root = sound.MOODS[mood]["root"]
@@ -1792,7 +1799,7 @@ def cmd_sound(edit, mood="linear"):
                 y = sound.sfx_swell(1.2, root, k)
                 sound.place(fx, y, s["a"] - 1.2, 0.07)
                 landed.append(("riser", y, s["a"] - 1.2, 0.07))
-        if kind in ("stat", "title", "motion", "chart3d", "tier", "paper"):
+        if kind in ("stat", "title", "chart3d", "tier", "paper") or (kind == "motion" and visuals_of(edit) != "animated"):   # in one flowing film a new scene is not an event
             land("impact", k, s["a"], 0.11, lambda: sound.sfx_hit(root, k))
         elif kind in GRAPHICS:
             land("tick", k, s["a"], 0.1, lambda: sound.sfx_tick(k))
@@ -1802,8 +1809,8 @@ def cmd_sound(edit, mood="linear"):
     mix, v, dg = bed + fx, None, np.ones(n)
     if tm["engine"] != "none" and vo.exists():
         v = sound.read_audio(vo, tm["length"] + 0.05)[:, :n]
-        dg = sound.duck(np.ones((1, n)), v)[0]          # how far everything else steps down while the voice speaks
-        mix = mix * dg + v
+        dg = np.full(n, 10 ** (-9 / 20))                # the bed sits at one level under the whole narration: no dip a sentence, no swell a pause
+        mix = (bed + fx) * dg + v
     lufs, tp = sound.master(mix, edit / "audio" / "mix.wav")
     studio.write_stems(edit, tm, sound, mix, bed if b["music"] else None, v, landed, dg)
     rng = mix_range(sound.read_audio(edit / "audio" / "mix.wav", tm["length"] + 0.05), sr)
@@ -2321,6 +2328,12 @@ def cmd_build(edit):
     miss, fell, all_sp = [], [], spans(edit)
     stills = [(sp["n"], db[sp["key"]]["file"]) for sp in all_sp if sp["shot"]["kind"] in MEDIA
               and str((db.get(sp["key"]) or {}).get("file") or "").endswith(".jpg") and (edit / db[sp["key"]]["file"]).exists()]
+    film = None
+    if flow and all_sp and all(sp["shot"]["kind"] == "motion" and studio.clip_of(edit, sp["key"]) for sp in all_sp):
+        # a fully animated video's picture is ONE file: the scenes joined, each melting into the next
+        film = studio.film_of(edit, [(studio.clip_of(edit, sp["key"]), sp["b"] - sp["a"]) for sp in all_sp], W, H, DISSOLVE_S)
+        if film:
+            S.video(film.name, 0, tm["length"], track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H, name="Film")
     for sp in all_sp:
         sh, a, z, d = sp["shot"], sp["a"], sp["b"], sp["b"] - sp["a"]
         if sh["kind"] == "chart3d":           # the 3D chart's clip (longvideo.py charts); with none, the same numbers as flat bars
@@ -2340,7 +2353,9 @@ def cmd_build(edit):
         if sh["kind"] == "motion":
             clip = studio.clip_of(edit, sp["key"])
             if clip:
-                if flow:        # one animation melts into the next: this one stays to its own end underneath while the next fades in over it
+                if film:
+                    pass
+                elif flow:        # one animation melts into the next: this one stays to its own end underneath while the next fades in over it
                     # two rows, in turn. The upper one fades in over the lower clip's last moments and fades out over the next
                     # lower clip's first: so every join is a dissolve, whichever row the clip is on
                     tail = max(0.0, min(DISSOLVE_S, duration(clip) - d))
@@ -2405,6 +2420,7 @@ def cmd_build(edit):
             if mine:
                 S.captions(mine, style=style, start=r["start"], end=r["start"] + r["dur"], track="Captions")
     studio.add_sound(S, edit, tm, sc["scenes"])
+    S.sc["tracks"] = [t for t in S.sc["tracks"] if t.get("items")]      # no empty rows on the timeline
     S.sc["duration"] = tm["length"]
     jsave(edit / studio.SCENE_FILE, S.done())
     n = len(spans(edit))

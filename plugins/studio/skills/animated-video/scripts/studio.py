@@ -1456,7 +1456,12 @@ def cmd_music(edit, mood="linear"):
     mix, v, dg = bed, None, np.ones(n)
     if vo:
         v = sound.read_audio(vo, tm["length"] + 0.05)[:, :n]
-        dg = sound.duck(np.ones((1, n)), v)[0] if b["music"] else dg
+        # one steady level under the whole narration. It used to dip under every sentence and come back in every pause, which
+        # the user heard as the music starting and dropping with each clip
+        dg = np.full(n, 10 ** (-9 / 20)) if b["music"] else dg
+        k = min(n // 2, int(1.5 * sound.SR))
+        if b["music"] and k > 0:
+            dg[:k] = np.linspace(1.0, dg[0], k)             # it opens at its own level, then settles under the first words
         mix = bed * dg + v
     lufs, tp = sound.master(mix, out)
     write_stems(edit, tm, sound, mix, bed if b["music"] else None, v, [], dg)
@@ -1551,6 +1556,55 @@ CAPTION_3D_TALL = {"y_pct": 61, "size_pct": 4.6, "case": "upper", "effect": "kar
 CAPTION_3D = {"y_pct": 91, "size_pct": 2.9, "case": "sentence", "effect": "karaoke", "weight": 600, "stroke": True, "inactive_opacity": 0.5}
 
 
+FILM_DISSOLVE_S = 0.3     # how long one generated scene takes to melt into the next inside the film
+
+
+def film_of(edit, parts, w, h, dissolve=FILM_DISSOLVE_S, name="film.mp4"):
+    """The generated picture as ONE file: every scene's clip in order, each melting into the next (its last frame is
+    held under the dissolve, so nothing moves off its words). parts: [(file, seconds)]. The user's words for why
+    (November 2026): "when you're generating, it needs to generate a single file", with only what is added on top
+    (captions, graphics, voice, music) as its own layer. Returns the file, or None when it could not be made."""
+    import hashlib
+    edit = Path(edit)
+    out = edit / name
+    parts = [(Path(f), float(d)) for f, d in parts if d > 0.05]
+    if not parts:
+        return None
+    key = hashlib.sha256(json.dumps([[str(f), f.stat().st_mtime_ns, round(d, 3)] for f, d in parts] + [w, h, dissolve]).encode()).hexdigest()[:16]
+    st = out.with_suffix(".stamp")
+    if out.is_file() and st.is_file() and st.read_text(encoding="utf-8") == key:
+        return out
+    D = dissolve if len(parts) > 1 and all(d > dissolve * 3 for _, d in parts) else 0.0
+    ins, filt, total = [], [], sum(d for _, d in parts)
+    for i, (f, d) in enumerate(parts):
+        ins += ["-i", str(f)]
+        hold = D if i < len(parts) - 1 else 0.0
+        filt.append(f"[{i}:v]trim=0:{d:.3f},setpts=PTS-STARTPTS,fps={FPS},scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},setsar=1,"
+                    f"tpad=stop_mode=clone:stop_duration={hold + 0.2:.3f},trim=0:{d + hold:.3f},setpts=PTS-STARTPTS,format=yuv420p[v{i}]")
+    if D:
+        last, at = "v0", 0.0
+        for i in range(1, len(parts)):
+            at += parts[i - 1][1]
+            filt.append(f"[{last}][v{i}]xfade=transition=fade:duration={D:.3f}:offset={at:.3f}[x{i}]")
+            last = f"x{i}"
+    else:
+        filt.append("".join(f"[v{i}]" for i in range(len(parts))) + f"concat=n={len(parts)}:v=1:a=0[x]")
+        last = "x"
+    script = edit / "film.filter"
+    script.write_text(";\n".join(filt), encoding="utf-8")
+    tmp = out.with_name(out.stem + ".part.mp4")
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", *ins, "-/filter_complex", str(script), "-map", f"[{last}]", "-t", f"{total:.3f}", "-an",
+                        "-c:v", "libx264", "-crf", "15", "-preset", "medium", "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(tmp)], capture_output=True, text=True)
+    script.unlink(missing_ok=True)
+    if r.returncode or not tmp.is_file():
+        tmp.unlink(missing_ok=True)
+        print("note: the scenes could not be joined into one film (" + (r.stderr.strip().splitlines() or ["ffmpeg failed"])[-1][:140] + "); they stay as clips")
+        return None
+    tmp.replace(out)
+    st.write_text(key, encoding="utf-8")
+    return out
+
+
 def cmd_build(edit):
     edit = Path(edit).resolve()
     use_editor()
@@ -1561,7 +1615,7 @@ def cmd_build(edit):
     look = look_of(sc)
     w, h = size_of(edit)
     S = scene.Scene(w, h, FPS, background=look.get("ground") or "#000000", edit=edit)
-    fell, dark = [], []
+    fell, dark, parts = [], [], []
     for r in tm["scenes"]:
         f = clip_of(edit, r["id"])
         if not f:
@@ -1570,7 +1624,13 @@ def cmd_build(edit):
             y = luma_of(f)
             if y is not None and y < DARK_LUMA:
                 dark.append(f"{r['id']} ({y:.0f})")
-        S.video(str(f.relative_to(edit)), r["start"], r["start"] + r["dur"], track="Scenes", volume=0)
+        parts.append((f, r["dur"]))
+    film = film_of(edit, parts, w, h)       # the picture is one continuous file; the scenes' own clips stay on disk to remake one
+    if film:
+        S.video(film.name, 0, tm["length"], track="Film", volume=0, name="Film")
+    else:
+        for (f, _), r in zip(parts, tm["scenes"]):
+            S.video(str(f.relative_to(edit)), r["start"], r["start"] + r["dur"], track="Scenes", volume=0)
     if b["text"] and words:   # one captions item per scene: a caption page never runs across a cut
         style = {**((CAPTION_3D_TALL if h > w else CAPTION_3D) if sc.get("style3d") else CAPTION_STYLE), **(sc.get("captions") or {})}
         for r in tm["scenes"]:
