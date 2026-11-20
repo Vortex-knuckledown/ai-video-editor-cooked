@@ -4,6 +4,12 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **The voice plays without gaps in the editor.** The layered timeline carried the narration as one piece a line, and
+  the editor started loading each piece only when it was due, so the voice gapped at every join. The narration is one
+  continuous piece again (still its own track, apart from the music and the effects), and every sound is loaded a
+  second ahead.
+- **Fully animated means the 3D pipeline.** Choosing Fully animated in Long video now makes the video with the 3D
+  animated pipeline (shared worlds and characters, one film), with the researched, shaped and critiqued script.
 - **The narration is one take.** Measured on a real video: each line was recorded by itself, 1.4 s of silence was
   added after every one to reach the length, and the voice was boosted and its peaks squashed, so it stopped and
   started 11 times in a minute and sounded clipped. The whole script is now spoken in as few breaths as the voice

@@ -95,6 +95,13 @@ and type the look notes name (scenes.json `look`). Say in one line what you took
 - About one scene per 4-6 s of the asked length. Each `say` is one sentence of at most 16 words (a voice reads about
   2.6 words a second); longer: split it into two scenes. The first scene hooks in its first second with a question
   or a surprising claim; the last lands the one idea the viewer keeps.
+- **A video of 60 s or more is researched and shaped first**, by `${CLAUDE_SKILL_DIR}/../long-video/references/story.md`:
+  WebSearch and WebFetch 5 or more pages into `EDIT/research.md` (step 1), then the shape of step 3: a hook that
+  talks to the viewer, an intro that says why it matters and what they will know by the end, a story in 3 to 5 parts
+  each holding something real from the research (a name, a date, a number, a moment), and an ending that returns to
+  the opening and answers it. Sentences lead into each other like someone telling it; the narration is recorded as
+  one continuous take. Then step 3a: a fresh agent marks the `say` lines against the rubric in `EDIT/critique.md`;
+  rewrite until it ends `verdict: pass`, before the user sees the script.
 - `id`: short kebab-case, unique. `visual`: one concrete picture that makes the line understood (a mechanism, a
   count, a before and after, a real-looking UI), never a stock image or words on a plain ground.
 - `text`: the on-screen words when there is no voice (the voice is off and text is on). With a voice the captions

@@ -3267,6 +3267,13 @@ def make_handler(token):
             prompt = re.sub(r"\s+", " ", str(b.get("prompt") or "")).strip()[:4000]
             if len(prompt) < 8 and not str(b.get("voiceover") or "").strip():
                 return self.send(400, {"ok": False, "msg": "Say what the video is about first."})
+            if b.get("visuals") == "animated" and not str(b.get("voiceover") or "").strip():
+                # fork: a fully animated long video is made by the 3D animated pipeline (shared worlds and characters, one film), which is
+                # the one whose videos the user liked; long-video's own animated shots were flatter and did not hold together
+                return self.animated({"prompt": ("" if re.search(r"\b3d\b", prompt, re.I) else "A 3D animated video: ") + prompt,
+                                      "aspect": "9:16" if b.get("aspect") == "9:16" else "16:9", "length": 60 * max(1, min(10, int(b.get("minutes") or 2))),
+                                      "voice": True, "text": b.get("text"), "music": b.get("music"),
+                                      **{k: b[k] for k in ("voice_engine", "voice_id", "voice_speed") if k in b}}, d)
             aspect = "9:16" if b.get("aspect") == "9:16" else "16:9"
             own = str(b.get("own") or "").strip()
             if own and not Path(os.path.expanduser(own)).is_dir():

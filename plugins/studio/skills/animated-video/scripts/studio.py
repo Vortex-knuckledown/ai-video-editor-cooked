@@ -1492,6 +1492,16 @@ def write_stems(edit, tm, sound, mix, bed, v, landed, dg):
                             "-ar", str(sr), "-c:a", "pcm_s16le", str(f)], check=True)
             tmp.unlink()
             out["voice"].append({"id": r["id"], "file": f"audio/stems/{f.name}", "at": round(a / sr, 3), "dur": round((z - a) / sr, 3)})
+    if v is not None and float(np.abs(v).max()) > 1e-4:
+        # the narration whole, as ONE piece. Measured: the editor played 13 line-by-line pieces with a small gap at every
+        # join, and the voice sounded cut; a video whose voice was one file played smoothly. The pieces stay on disk for
+        # re-voicing one line; the timeline carries the whole take.
+        tmp = d / "whole.wav"
+        sound.write_wav(tmp, v)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(tmp), "-af", f"volume={g:.4f},alimiter=limit=0.78:attack=3:release=80:level=false",
+                        "-ar", str(sr), "-c:a", "pcm_s16le", str(d / "narration.wav")], check=True)
+        tmp.unlink()
+        out["narration"] = {"file": "audio/stems/narration.wav", "at": 0, "dur": round(n / sr, 3)}
     if bed is not None and float(np.abs(bed).max()) > 1e-5:
         sound.write_wav(d / "music.wav", bed * dg * g)
         out["music"] = {"file": "audio/stems/music.wav", "at": 0, "dur": round(n / sr, 3)}
@@ -1521,8 +1531,11 @@ def add_sound(S, edit, tm, scenes=None):
         S.audio("audio/mix.wav", 0, tm["length"], track="Sound")
         return 1
     say = {str(x.get("id")): " ".join(str(x.get("say") or "").split()[:6]) for x in (scenes or []) if isinstance(x, dict)}
-    for x in st.get("voice") or []:
-        S.audio(x["file"], x["at"], x["at"] + x["dur"], track="Narration", name=("Narration: " + say.get(str(x["id"]), str(x["id"])))[:60])
+    if st.get("narration") and (edit / st["narration"]["file"]).exists():
+        S.audio(st["narration"]["file"], 0, st["narration"]["dur"], track="Narration", name="Narration")
+    else:
+        for x in st.get("voice") or []:
+            S.audio(x["file"], x["at"], x["at"] + x["dur"], track="Narration", name=("Narration: " + say.get(str(x["id"]), str(x["id"])))[:60])
     if st.get("music"):
         S.audio(st["music"]["file"], 0, st["music"]["dur"], track="Music", name="Music")
     for x in st.get("fx") or []:

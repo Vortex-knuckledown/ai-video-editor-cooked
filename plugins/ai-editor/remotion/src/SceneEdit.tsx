@@ -289,7 +289,7 @@ export const SceneEdit: React.FC<SceneDoc> = ({ tracks, assets, background }) =>
             const a = it.asset ? assets[it.asset] : undefined;
             if (tr.kind === "audio")
               return tr.muted || !a ? null : seq(it, <Audio src={urlOf(a)} trimBefore={Math.round((it.in ?? 0) * fps)} playbackRate={it.speed ?? 1}
-                volume={vol(it, fps, false)} {...amp()} />);
+                volume={vol(it, fps, false)} {...amp()} />, true);   // fork: a sound is mounted a second early too, or each piece of a narration starts late and the voice gaps at every join
             if (it.type === "video") return seq(it, <VideoItem it={it} a={a} W={W} H={H} muted={!!tr.muted} hidden={!!tr.hidden} />, true);
             if (tr.hidden) return null;
             if (it.type === "card") return t >= it.start && t < it.end + 0.4 ? <CardItem key={it.id} it={it} t={t} W={W} H={H} /> : null;
