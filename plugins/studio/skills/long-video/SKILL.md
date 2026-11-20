@@ -71,12 +71,12 @@ script, and a fresh agent's `critique.md` (story.md, step 3a). `check` refuses a
              "shots": [{"kind": "photo", "query": "Egyptian tomb wall painting"}, {"kind": "stat", "value": "3,000", "label": "years old, and still edible"}]}]}
 ```
 
-- **Length**: about 150 words a minute of `minutes`. One scene is one spoken line, 8 to 22 words, said the way a
-  person talks. 4 to 7 `section`s, each a few words: they become the chapters. `id`: a-z, 0-9 and `-`.
-- **Structure**: a hook in the first two lines (a fact, a question or a claim that the video pays off), then the
-  sections, each ending on a line that makes the next one wanted, then a close that answers the hook. No "in this
-  video", no "let's dive in", no "smash that like button".
-- **Shots**: every line has 2 to 5, so a new picture every 1.5 to 3 seconds (`check` refuses slower than one every
+- **Length**: about 150 words a minute of `minutes`. One scene is one spoken line of one or two sentences, 12 to 32
+  words, told the way a person talks. 4 to 7 `section`s, each a few words: they become the chapters. `id`: a-z, 0-9, `-`.
+- **Structure**: every line has `"part"`: `hook` (a question or surprising fact said to the viewer), `intro` (why it
+  matters, what they will know by the end), `story` (3 to 5 parts that build), `ending` (returns to the opening and
+  answers it). story.md step 3 is the rule; `check` refuses less. One continuous take: lines lead into each other.
+- **Shots**: every line has 2 to 5 (a fully animated video: ONE `motion` shot a line, words on it with `over`), so a new picture every 1.5 to 3 seconds (`check` refuses slower than one every
   3.4 s). That pace is what makes a video read as edited: measured on channels cut this way, the picture changes
   every 1.3 to 2.3 seconds. Pick what a viewer would want to see while hearing that line, and prefer the specific
   to the generic: the named person talking in an interview, the actual event, the actual place, the actual object,

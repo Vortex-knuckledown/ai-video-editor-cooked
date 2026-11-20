@@ -296,11 +296,16 @@ def estimate(s, b):
 
 
 # ---------------------------------------------------------------- the voice
-def tts_eleven(text, out, voice, key):
+def tts_eleven(text, out, voice, key, before="", after=""):
     import urllib.request
     from ai_editor import net
+    body = {"text": text, "model_id": "eleven_multilingual_v2"}
+    if before:
+        body["previous_text"] = before[-600:]
+    if after:
+        body["next_text"] = after[:600]
     req = urllib.request.Request(f"https://api.elevenlabs.io/v1/text-to-speech/{voice}?output_format=mp3_44100_128",
-                                 data=json.dumps({"text": text, "model_id": "eleven_multilingual_v2"}).encode(),
+                                 data=json.dumps(body).encode(),
                                  headers={"xi-api-key": key, "Content-Type": "application/json"})
     mp3 = Path(out).with_suffix(".mp3")
     with net.urlopen(req, 120) as r:
@@ -642,10 +647,43 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
             out_d.append(duration(out))
         return out_d
 
-    speed, air, vds = 1.0, 0.0, []
-    if eng != "none":
+    def say_chunk(text, out, rate, before="", after=""):       # some lines in one breath, in the engine the video uses
+        text = pronounce(text)
+        if eng == "eleven":
+            tts_eleven(text, out, voice or DEFAULT_VOICE, key, before, after)
+        elif eng == "edge":
+            tts_edge(text, out, voice or EDGE_VOICE, (rate or 100) / 100.0)
+        elif eng == "kokoro":
+            tts_kokoro(text, out, voice or KOKORO_VOICE, (rate or 100) / 100.0)
+        elif eng == "pocket":
+            sample = my_voice() if voice == "mine" else None
+            tts_pocket(text, out, str(sample) if sample and sample.is_file() else (POCKET_VOICE if voice in (None, "mine") else voice), (rate or 100) / 100.0)
+        else:
+            tts_mac(text, out, voice or MAC_VOICE, rate)
+
+    speed, air, vds, take = 1.0, 0.0, [], False
+    if eng != "none" and not b.get("voice_by_line"):
+        # One take. Measured on a real video: a line recorded by itself starts its melody again every time, and 1.4 s of
+        # silence was added after each to reach the length, so the narration stopped and started 11 times in a minute.
+        # The whole script is now spoken in as few breaths as the engine allows, then cut only in its own pauses.
+        rate = None
+        if b.get("voice_speed") and eng in ("kokoro", "edge", "pocket"):
+            try:
+                rate = round(100 * max(0.8, min(1.25, float(b["voice_speed"]))))
+                speed = rate / 100.0
+            except (TypeError, ValueError):
+                rate = None
+        try:
+            vds = one_take(edit, scenes, say_chunk, f"{eng}|{voice}|{rate}", rate)
+            take = True
+        except Exception as e:   # noqa: BLE001  (no transcription model, an engine that refused a long text): line by line, as before
+            print(f"note: the narration could not be made as one take ({type(e).__name__}: {str(e)[:120]}); recording it line by line")
+    if take:
+        pass
+    elif eng != "none":
         vds = speak(None)
         speed, air = fit_plan(sum(vds), len(scenes), fit, like.get("speech_share") or 0.85)
+        air = min(air, 0.25)        # never a long silence to reach a length: a short video is said to be short (FIT below)
         if eng == "mac" and speed < 0.97:      # ElevenLabs is paid by the character: one pass, air only
             want = sum(vds) / speed
             rate = round(MAC_RATE * speed)
@@ -668,20 +706,21 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
         elif speed < 0.97:
             speed = 1.0
         if fit:
-            air = round(max(0.0, min(MAX_AIR_S, (fit - LEAD_S - sum(vds) - len(scenes) * TAIL_S) / len(scenes))), 3)
+            air = round(max(0.0, min(0.25, (fit - LEAD_S - sum(vds) - len(scenes) * TAIL_S) / len(scenes))), 3)
     t, rows = 0.0, []
     for i, s in enumerate(scenes):
         row = {"id": s["id"], "start": round(t, 3)}
         if eng != "none":
             lead = LEAD_S if i == 0 else 0.0
             row.update(vo=f"audio/vo-{s['id']}.wav", vo_at=round(t + lead, 3), vo_dur=round(vds[i], 3))
-            dur = max(MIN_SCENE_S, lead + vds[i] + TAIL_S + air)
+            # one take: each line is exactly its piece of the take (its own pause included), so the pieces join without a seam
+            dur = lead + vds[i] + (0.6 if i == len(scenes) - 1 else 0.0) if take else max(MIN_SCENE_S, lead + vds[i] + TAIL_S + air)
         else:
             dur = estimate(s, b)
         row["dur"] = round(dur, 3)
         rows.append(row)
         t += dur
-    tm = {"engine": eng, "voice": voice or (DEFAULT_VOICE if eng == "eleven" else KOKORO_VOICE if eng == "kokoro" else EDGE_VOICE if eng == "edge" else MAC_VOICE if eng == "mac" else None),
+    tm = {"engine": eng, "take": take, "voice": voice or (DEFAULT_VOICE if eng == "eleven" else KOKORO_VOICE if eng == "kokoro" else EDGE_VOICE if eng == "edge" else MAC_VOICE if eng == "mac" else None),
           "length": round(t, 3), "scenes": rows}
     if fit and eng != "none":
         tm["fit"] = {"target": round(fit, 1), "speed": speed, "air": air}
@@ -701,6 +740,106 @@ def cmd_voice(edit, engine="auto", voice=None, fit=None):
         elif t > 1.1 * fit:
             print(f"FIT   {t - fit:.0f} s long: cut about {round((t - fit) * words / max(1.0, sum(vds)))} words from the say lines, then voice again")
     return 0
+
+
+def _norm(w):
+    return re.sub(r"[^a-z0-9]+", "", str(w).lower())
+
+
+def one_take(edit, scenes, say_chunk, stamp, rate=None, limit=2400):
+    """The narration as one continuous take, then cut into each line's piece only where the voice itself pauses.
+    Lines are grouped into breaths of up to `limit` characters (a section, or a few), each spoken in one request with
+    what comes before and after it as context; the breaths are joined; the take is transcribed for its word times; each
+    line's words are found in it; and the cut between two lines falls at the quietest moment of the pause between them.
+    Writes audio/vo-<id>.wav for every line and returns their lengths. A line that is a sound bite keeps its own file."""
+    import difflib
+    edit = Path(edit)
+    aud = edit / "audio"
+    lines = [(s["id"], str(s["say"]).strip(), bool(s.get("bite") and (aud / f"bite-{s['id']}.wav").exists())) for s in scenes]
+    want = stamp + "|" + "|".join(t for _, t, _ in lines)
+    st = aud / "take.txt"
+    if st.exists() and st.read_text(encoding="utf-8") == want and all((aud / f"vo-{i}.wav").exists() for i, _, _ in lines):
+        return [duration(aud / f"vo-{i}.wav") for i, _, _ in lines]
+    root = use_editor()
+    # runs of spoken lines between sound bites; each run is one take
+    runs, cur = [], []
+    for row in lines:
+        if row[2]:
+            if cur:
+                runs.append(cur)
+            cur = []
+        else:
+            cur.append(row)
+    if cur:
+        runs.append(cur)
+    for k, run in enumerate(runs):
+        chunks, c = [], []
+        for row in run:                                    # breaths: whole lines, up to `limit` characters
+            if c and sum(len(t) + 1 for _, t, _ in c) + len(row[1]) > limit:
+                chunks.append(c)
+                c = []
+            c.append(row)
+        chunks.append(c)
+        parts = []
+        for j, c in enumerate(chunks):
+            f = aud / f"take-{k}-{j}.wav"
+            text = " ".join(t for _, t, _ in c)
+            say_chunk(text, f, rate, " ".join(t for _, t, _ in chunks[j - 1]) if j else "", " ".join(t for _, t, _ in chunks[j + 1]) if j + 1 < len(chunks) else "")
+            parts.append(f)
+        take = aud / f"take-{k}.wav"
+        if len(parts) == 1:
+            parts[0].replace(take)
+        else:
+            lst = aud / f"take-{k}.txt"
+            lst.write_text("".join(f"file '{f.name}'\n" for f in parts), encoding="utf-8")
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c:a", "pcm_s16le", str(take)], check=True, cwd=str(aud))
+            lst.unlink()
+            for f in parts:
+                f.unlink(missing_ok=True)
+        raw = aud / f"take-{k}.words.json"
+        r = subprocess.run([sys.executable, str(root / "skills" / "cut" / "scripts" / "transcribe.py"), str(take), str(raw), "--engine", "whisper"], capture_output=True, text=True)
+        if r.returncode or not raw.exists():
+            raise RuntimeError("the take did not transcribe")
+        heard = [w for w in jload(raw) if w.get("type", "word") == "word" and _norm(w.get("text"))]
+        if len(heard) < 3:
+            raise RuntimeError("nothing was heard in the take")
+        script = [(_norm(w), n) for n, (_, t, _) in enumerate(run) for w in words_in(t) if _norm(w)]
+        sm = difflib.SequenceMatcher(None, [w for w, _ in script], [_norm(w["text"]) for w in heard], autojunk=False)
+        first, last = {}, {}
+        for a0, b0, size in sm.get_matching_blocks():
+            for d in range(size):
+                n = script[a0 + d][1]
+                first.setdefault(n, heard[b0 + d]["start"])
+                last[n] = heard[b0 + d]["end"]
+        total = duration(take)
+        # where each line begins: the quietest 20 ms between the last word heard of the line before and its own first word
+        import numpy as np
+        pcm = np.frombuffer(subprocess.run(["ffmpeg", "-v", "error", "-i", str(take), "-ac", "1", "-ar", "16000", "-f", "s16le", "-"], capture_output=True, check=True).stdout, np.int16).astype(np.float32)
+        cuts = [0.0]
+        for n in range(1, len(run)):
+            lo = last.get(n - 1)
+            hi = first.get(n)
+            if lo is None or hi is None or hi <= lo:        # a line the transcription lost: by its share of the words
+                share = sum(len(words_in(t)) for _, t, _ in run[:n]) / max(1, sum(len(words_in(t)) for _, t, _ in run))
+                cuts.append(max(cuts[-1] + 0.3, share * total))
+                continue
+            a_, z_ = int(lo * 16000), max(int(lo * 16000) + 320, int(hi * 16000))
+            seg = np.abs(pcm[a_:z_])
+            win = np.convolve(seg, np.ones(320) / 320, mode="valid") if len(seg) > 320 else seg
+            at = (a_ + int(np.argmin(win)) + 160) / 16000.0 if len(win) else (lo + hi) / 2
+            cuts.append(max(cuts[-1] + 0.2, min(total - 0.1, at)))
+        cuts.append(total)
+        for n, (sid, _, _) in enumerate(run):
+            fade = f"afade=t=in:st=0:d=0.008,afade=t=out:st={max(0.0, cuts[n + 1] - cuts[n] - 0.008):.3f}:d=0.008"    # 8 ms: no click, nothing heard
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{cuts[n]:.3f}", "-t", f"{cuts[n + 1] - cuts[n]:.3f}", "-i", str(take), "-af", fade,
+                            "-ac", "2", "-ar", "48000", "-c:a", "pcm_s16le", str(aud / f"vo-{sid}.wav")], check=True)
+            (aud / f"vo-{sid}.txt").write_text("take", encoding="utf-8")
+        raw.unlink(missing_ok=True)
+    for sid, _, bite in lines:
+        if bite:
+            shutil.copy2(aud / f"bite-{sid}.wav", aud / f"vo-{sid}.wav")
+    st.write_text(want, encoding="utf-8")
+    return [duration(aud / f"vo-{i}.wav") for i, _, _ in lines]
 
 
 def join_voice(edit, tm):
@@ -1347,7 +1486,11 @@ def write_stems(edit, tm, sound, mix, bed, v, landed, dg):
             if z - a < sr // 10 or float(np.abs(v[:, a:z]).max()) < 1e-4:
                 continue
             f = d / f"voice-{i + 1:02d}-{r['id']}.wav"
-            sound.write_wav(f, soft(v[:, a:z] * g))
+            tmp = d / "piece.wav"
+            sound.write_wav(tmp, v[:, a:z])        # as recorded; the level and the ceiling are given by a look-ahead limiter, as the master does it
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(tmp), "-af", f"volume={g:.4f},alimiter=limit=0.84:attack=3:release=80:level=false",
+                            "-ar", str(sr), "-c:a", "pcm_s16le", str(f)], check=True)
+            tmp.unlink()
             out["voice"].append({"id": r["id"], "file": f"audio/stems/{f.name}", "at": round(a / sr, 3), "dur": round((z - a) / sr, 3)})
     if bed is not None and float(np.abs(bed).max()) > 1e-5:
         sound.write_wav(d / "music.wav", bed * dg * g)

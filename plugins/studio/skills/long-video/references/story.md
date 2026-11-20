@@ -62,28 +62,50 @@ Every beat has at least one sourced fact and at least one thing to see. A beat w
 
 ## 3. The script, written with its pictures
 
+**The shape every script has** (the user's own words for it, November 2026: "a proper intro, then a proper story,
+and then an exit: a very good ending, or it returns to the point where we started"). Mark each line's part in
+scenes.json with `"part": "hook" | "intro" | "story" | "ending"`; `check` refuses a script that lacks one of them.
+
+1. **Hook** (the first 1 or 2 lines). Talk to the viewer and open the question the whole video answers, the way a
+   person would start telling it: "Have you ever thought about how big the universe really is?" A question to them,
+   or a fact that sounds wrong. Warm, direct, in plain words.
+2. **Intro** (2 to 4 lines). Why this matters to them, and what they will know by the end ("By the end of this, you
+   will know why..."). It makes a promise the ending keeps. It gives the one piece of background they need.
+3. **Story** (most of the video, in 3 to 5 parts). Each part is a small story of its own: it sets something up, shows
+   it with one real example, person, number or moment from the research, and ends on what that leads to, so the next
+   part is wanted ("But that raises a bigger problem."). The parts build: each one is a step closer to the answer.
+4. **Ending** (the last 2 to 4 lines). Return to the opening: say its question or its picture again, and answer it
+   now that the viewer knows what they know. Then one last thought to leave with. No list of what was covered.
+
+The voice is one person explaining to a friend who is curious: warm, unhurried, "you" and "we", full sentences that
+lead into each other ("and that is where it gets strange", "so here is what they did"). A fact is given its meaning,
+not just stated. It is a told story, never notes read aloud.
+
 Write it as two columns, one row a shot: what is said, and what is seen while it is said. scenes.json is that
 table: `say` is the left column, `shots` the right. Decide the picture as you write the line; a line you cannot
 show is rewritten or cut.
 
 Writing for the ear (NPR's training rules: the listener cannot rewind):
-- One line is one thought, 8 to 22 words. Short words. The number comes last. No brackets, no dependent clauses
-  stacked in front of the point.
+- One line is one or two sentences that belong together, 12 to 32 words: enough for the voice to carry a thought,
+  never a fragment. Short words. No brackets, no dependent clauses stacked in front of the point.
+- Lines lead into each other. Read two in a row aloud: the second must sound like the next thing a person would
+  say, not a new slide.
 - Numbers a person can picture: "seven thousand times slower", not "a Lorentz factor of 7,000".
 - Say it aloud in your head. Where you would breathe, end the line. If you would not say it that way to a friend,
   rewrite it.
 
 Then take the tells of generated writing out (the `humanizer` and `stop-slop` skills when they are in your skills
 list; these rules when they are not). None of these may be in the script:
-- An opener any video could use: "Have you ever wondered", "In this video", "Let's dive in", "Imagine", "Picture this".
-- Throat-clearing: "But here's the thing", "It turns out", "The truth is", "Here's where it gets interesting",
-  "Now,", "So,", "Well,".
-- "It's not X, it's Y" reveals. Three-part lists for rhythm. A question the next line does not answer.
+- An opener that is about the video, not the subject: "In this video", "Let's dive in", "Welcome back", "Today we are
+  going to talk about". (A question to the viewer about the subject is the right way to open.)
+- Empty wind-up with nothing after it: "The truth is", "It is important to note". A linking phrase that carries the
+  listener from one thought to the next ("so", "but here is the strange part") is how people talk: keep those.
+- A question the video never answers.
 - Stock intensifiers and praise: "incredible", "fascinating", "mind-blowing", "truly", "actually", "literally".
 - Vague claims of importance: "plays a crucial role", "changed everything", "a testament to", "in today's world".
-- A tidy moral or a summary at the end.
-Score the draft 1 to 10 on each of directness, rhythm, trust, authenticity and density (stop-slop's rubric) and
-rewrite until it totals 35 or more.
+- A summary of what was covered at the end (the ending answers the opening; it does not recap).
+Never trade warmth for brevity: a script that is correct and clipped ("If the copy lands late, peak misses peak")
+reads as notes. Say it the way you would tell it.
 
 ## 1b. Who and what it is about (`EDIT/subjects.json`, then `subjects EDIT`)
 
@@ -117,15 +139,20 @@ research, so it reads as a viewer. It writes `critique.md`: a mark out of 5 for 
 weakest lines quoted and a better version of each, ending `verdict: pass` (every mark 4 or 5) or `verdict: rewrite`.
 Rewrite and run it again until it passes; `check` refuses a script without a passing critique newer than the script.
 
-1. **The first 15 seconds.** Does the first sentence make a person want the second? A fact that sounds wrong, a
-   question they now need answered, or a stake. Not a greeting, not "in this video", not the topic restated.
+1. **The hook and the intro.** Does it open by talking to the viewer, with a question or a fact that makes them want
+   the answer? Does the intro then say why it matters and promise what they will know by the end?
 2. **One question.** Can the whole video be said as one question, and does every section move toward its answer?
 3. **Told, not listed.** Does each section set something up, raise a doubt and pay it off ("but", "so", "which
    means"), or is it fact, fact, fact?
 4. **Said, not written.** Read it aloud: short sentences, one idea each, the important word last, numbers a person
    can picture ("six and a half miles", not "10,668 metres").
 5. **Something to remember.** Is there one line a viewer would repeat to someone else?
-6. **The ending.** Does it answer the opening question in a sentence and stop, with no summary of what was said?
+6. **The ending.** Does it return to the opening (its question or its picture) and answer it, then leave one last
+   thought? No list of what was covered, no stopping dead on a fact.
+7. **Told by a person.** Read three lines in a row aloud: do they lead into each other like someone talking, warm
+   and unhurried, or are they separate clipped statements? Is each fact given its meaning?
+8. **Researched.** Does every part of the story hold something specific the viewer did not know (a name, a date, a
+   number, a moment), or could it have been written without looking anything up?
 
 ## 3b. Every claim is checked before the voice is recorded (`EDIT/claims.md`)
 

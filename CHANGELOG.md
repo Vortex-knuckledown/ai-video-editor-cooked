@@ -4,6 +4,18 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **The narration is one take.** Measured on a real video: each line was recorded by itself, 1.4 s of silence was
+  added after every one to reach the length, and the voice was boosted and its peaks squashed, so it stopped and
+  started 11 times in a minute and sounded clipped. The whole script is now spoken in as few breaths as the voice
+  allows (ElevenLabs is given what comes before and after), cut only where the voice itself pauses, levelled with a
+  look-ahead limiter, and never padded with silence.
+- **An animated video flows.** One animation a line, each melting into the next over 0.4 s, each told what comes
+  before and after it and held to the same colours, light and scale. Words sit on the animation, never on a card
+  of their own.
+- **A script has a shape.** Hook (a question or surprising fact said to the viewer), intro (why it matters, what
+  they will know by the end), story (3 to 5 parts that build), ending (returns to the opening and answers it).
+  `check` refuses a script without all four; lines are one or two sentences that lead into each other; the critic
+  also marks "told by a person" and "researched".
 - **A video is layers, not one file.** A Long or animated video opens in the editor as a timeline of its parts: every
   clip, every graphic, the captions, each narration line, the music and each sound effect, on their own tracks. Any
   one can be moved, muted, replaced or re-voiced, by hand or by Claude from a note, without touching the rest. The

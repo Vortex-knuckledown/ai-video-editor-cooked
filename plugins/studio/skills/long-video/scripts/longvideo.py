@@ -59,6 +59,7 @@ TIER_COLOURS = {"S": "#FF5A5F", "A": "#FF9F43", "B": "#FFD24A", "C": "#5AD17E", 
 MAXH = 1080               # the tallest footage fetched; 2160 for a 4K video (brief "quality": "4k")
 MAX_IMAGES = 8            # pictures made by the user's AI image tool a video: each is paid for on their own account
 MAX_MOTION = 12           # animated hero graphics a video: each is built by its own agent, a few minutes apiece
+DISSOLVE_S = 0.4          # how long one animation takes to melt into the next in a fully animated video
 MAX_MOTION_ANIMATED = 40  # a fully animated video (brief "visuals": "animated"): one animation a line, each running the whole line
 NEEDS = {"clip": ("query",), "stock": ("query",), "photo": ("query",), "own": ("file",), "motion": ("visual", "fallback"),
          "ai": ("prompt", "fallback"), "bite": (),
@@ -117,7 +118,11 @@ def check(edit):
             if kind == "photo" and sh.get("subject") and not sh.get("query"):
                 sh["query"] = str(sh["subject"])
             ov = sh.get("over")
-            if ov is not None and not (kind in MEDIA and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat", "ring", "clip", "stamp", "count"))):
+            if mode == "animated" and kind in GRAPHICS and kind not in ("bars", "line", "versus", "timeline", "map", "layers", "tier"):
+                errs.append(f"scene {s.get('id')} shot {k} ({kind}): in a fully animated video words do not get their own card (it reads as a cut to a slide): "
+                            "put them on the animation with \"over\" (a label, a stat, a count, a stamp), or animate the idea in the motion shot")
+                continue
+            if ov is not None and not ((kind in MEDIA or (kind == "motion" and mode == "animated")) and isinstance(ov, dict) and any(ov.get(x) for x in ("label", "name", "stat", "ring", "clip", "stamp", "count"))):
                 errs.append(f"scene {s.get('id')} shot {k}: \"over\" goes on footage or a picture and has a label, a name, a stat, a ring, a clip or a stamp")
             for f in NEEDS[kind]:
                 if not sh.get(f):
@@ -179,6 +184,19 @@ def story_gaps(edit):
         out.append('no subjects.json: name who and what the video is about, then run `subjects EDIT`: {"subjects": [{"name": "...", "kind": "person|company|place|event|thing"}]} (an empty list when it names none)')
     if r and not (edit / "models.md").is_file():
         out.append("no models.md: run `models EDIT \"<the topic as people search it>\"` and write the script to its TARGET column")
+    sc_ = [x for x in scenes_of(edit) if isinstance(x, dict)]
+    if r and sc_:               # the shape: a hook, an intro, a story, an ending, in that order
+        parts = [str(x.get("part") or "").lower() for x in sc_]
+        lack = [k for k in ("hook", "intro", "story", "ending") if k not in parts]
+        if lack:
+            out.append("the script has no " + ", ".join(lack) + ': mark every line "part": "hook" | "intro" | "story" | "ending" (story.md, step 3) and write the missing part')
+        elif [k for i, k in enumerate(parts) if k and (i == 0 or parts[i - 1] != k)] != ["hook", "intro", "story", "ending"]:
+            out.append("the parts are out of order or split: hook, then intro, then story, then ending, each in one run of lines")
+        elif parts.count("story") < max(3, len(parts) // 2):
+            out.append(f"the story is {parts.count('story')} of {len(parts)} lines: it is most of the video, in 3 to 5 parts")
+        short = [str(x.get("id")) for x in sc_ if len(str(x.get("say") or "").split()) < 9]
+        if len(short) > len(sc_) // 4:
+            out.append("lines too short to be told (under 9 words): " + " ".join(short[:8]) + ". A line is one or two sentences that lead into the next")
     tj = jload(edit / "thumb.json", None)
     if r and not (isinstance(tj, dict) and 1 <= len(str(tj.get("words") or "").split()) <= 5):
         out.append('no thumb.json: fix the title and the thumbnail before the script: {"words": "1 to 5 words that add to the title", "mark": "the one word in the accent"}')
@@ -294,8 +312,12 @@ def cmd_check(edit):
     if kinds["motion"] > (MAX_MOTION_ANIMATED if mode == "animated" else MAX_MOTION):
         print(f"FIX  {kinds['motion']} motion shots: {MAX_MOTION_ANIMATED if mode == 'animated' else MAX_MOTION} at most. Keep them for the ideas a flat graphic cannot show")
         return 1
-    if mode == "animated" and kinds["motion"] < 0.4 * len(sc):
-        print(f"FIX  a fully animated video, but only {kinds['motion']} of {len(sc)} lines have an animated shot: give most lines one motion shot that runs the whole line")
+    if mode == "animated" and kinds["motion"] < 0.8 * len(sc):
+        print(f"FIX  a fully animated video, but only {kinds['motion']} of {len(sc)} lines have an animated shot: every line is one motion shot that runs the whole line "
+              "(a chart or a map may take a line instead); words and numbers go on it with \"over\"")
+        return 1
+    if mode == "animated" and len(shots) > 1.35 * len(sc):
+        print(f"FIX  {len(shots)} shots on {len(sc)} lines: a fully animated video flows, one animation a line; fold the extra shots into their line's motion shot")
         return 1
     words = sum(len(studio.words_in(s.get("say"))) for s in sc)
     print(f"ok   {len(sc)} lines, {words} words, about {est // 60:.0f}:{est % 60:02.0f}, {len(shots)} shots "
@@ -1547,6 +1569,17 @@ def cmd_voiceover(edit, src):
 
 
 # ---------------------------------------------------------------- animated graphics (one clip-builder agent each)
+FLOW_NOTE = """ This is shot {n} of {total} in ONE continuous animated film, not a clip by itself. The shots melt into each other
+ (a {d} s dissolve), so: (1) the whole frame is alive from the first frame to the last, the camera never stops and nothing waits on an
+ empty or dark frame; (2) the last {d} s of this clip are extra time under the dissolve: keep moving through them, add nothing new;
+ (3) the same world in every shot: the same ground colour, the same ONE accent colour, the same line weight, type and lighting given in
+ the look, so two shots side by side read as one film; (4) fill the frame: the subject is large (at least half the frame's height), lit,
+ with depth behind it (layers, soft light, particles or a gradient field), never thin lines on black; (5) no big words alone on the
+ screen: words are small labels on the thing they name. The shot before this one shows: {prev}. Begin where that leaves the eye (the
+ same side of the frame, the same scale) and carry its movement on. The shot after this one shows: {next}. End moving toward it. The
+ captions sit in the bottom fifth: keep that calm."""
+
+
 def cmd_briefs(edit):
     """EDIT/motion/<key>/ for every `motion` shot: the animation template, beat.json and brief.md that one
     ai-editor:clip-builder agent builds into a full-frame animated clip of exactly that shot's length."""
@@ -1570,8 +1603,11 @@ def cmd_briefs(edit):
     says = {s["id"]: s.get("say", "") for s in sc["scenes"]}
     order = [s["id"] for s in sc["scenes"]]
     for n, sp in enumerate(todo, 1):
-        sh, key, dur = sp["shot"], sp["key"], round(sp["b"] - sp["a"], 2)
+        flow = visuals_of(edit) == "animated"
+        sh, key, dur = sp["shot"], sp["key"], round(sp["b"] - sp["a"] + (DISSOLVE_S if flow else 0), 2)
         i = order.index(sp["sid"])
+        j = todo.index(sp)
+        prev_v, next_v = (todo[j - 1]["shot"].get("visual") if j else None), (todo[j + 1]["shot"].get("visual") if j + 1 < len(todo) else None)
         mine = [{"w": x["w"], "t": round(x["start"] - sp["a"], 2)} for x in words if sp["a"] <= x["start"] < sp["b"]]
         beat = {"id": key, "type": "scene", "props": {}, "start": sp["a"], "dur": dur, "clock": "video", "size": [w, h], "words": mine,
                 "line": says[sp["sid"]], "before": says[order[i - 1]] if i else "", "after": says[order[i + 1]] if i + 1 < len(order) else ""}
@@ -1586,8 +1622,10 @@ def cmd_briefs(edit):
             shutil.copy(gsap, d / "assets" / "gsap.min.js")
         jsave(d / "beat.json", beat)
         visual = str(sh["visual"]) + (" Use exactly these numbers and names, nothing invented: " + json.dumps(sh["data"]) if sh.get("data") else "") + \
-            " This is one shot inside a documentary cut from real footage: it must look designed and deep (layers, light, a moving camera," \
-            " easing), not a slide. The captions sit in the bottom fifth: keep that calm."
+            (FLOW_NOTE.format(prev=prev_v or "nothing: this is the first shot, so it opens the film (start already in motion, never on an empty frame)",
+                              next=next_v or "nothing: this is the last shot, so it settles and holds", d=DISSOLVE_S, n=j + 1, total=len(todo)) if flow else
+             " This is one shot inside a documentary cut from real footage: it must look designed and deep (layers, light, a moving camera,"
+             " easing), not a slide. The captions sit in the bottom fifth: keep that calm.")
         three = studio.THREE_NOTE if studio.three_assets(d) else ""
         (d / "brief.md").write_text(three.join(studio.BRIEF.split("\n{start}Build:", 1)[:1] + ["\n{start}Build:" + studio.BRIEF.split("\n{start}Build:", 1)[1]]).format(
             id=key, card=root / "skills" / "motion" / "references" / "clip-brief-card.md", dir=d, w=w, h=h, dur=dur,
@@ -2275,7 +2313,11 @@ def cmd_build(edit):
     look = {**LOOK, **{k: v for k, v in (sc.get("look") or {}).items() if k in LOOK}} if isinstance(sc.get("look"), dict) else dict(LOOK)
     W, H = studio.size_of(edit)
     S = scene.Scene(W, H, studio.FPS, background=look["ground"], edit=edit)
-    S.track("Footage"); S.track("Graphics bg"); S.track("Graphics"); S.track("Graphics top")
+    flow, flow_n = visuals_of(edit) == "animated", [0]
+    S.track("Footage")
+    if flow:
+        S.track("Footage B")
+    S.track("Graphics bg"); S.track("Graphics"); S.track("Graphics top")
     miss, fell, all_sp = [], [], spans(edit)
     stills = [(sp["n"], db[sp["key"]]["file"]) for sp in all_sp if sp["shot"]["kind"] in MEDIA
               and str((db.get(sp["key"]) or {}).get("file") or "").endswith(".jpg") and (edit / db[sp["key"]]["file"]).exists()]
@@ -2298,7 +2340,18 @@ def cmd_build(edit):
         if sh["kind"] == "motion":
             clip = studio.clip_of(edit, sp["key"])
             if clip:
-                S.video(str(clip.relative_to(edit)), a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H)
+                if flow:        # one animation melts into the next: this one stays to its own end underneath while the next fades in over it
+                    # two rows, in turn. The upper one fades in over the lower clip's last moments and fades out over the next
+                    # lower clip's first: so every join is a dissolve, whichever row the clip is on
+                    tail = max(0.0, min(DISSOLVE_S, duration(clip) - d))
+                    upper = flow_n[0] % 2 == 1
+                    flow_n[0] += 1
+                    S.video(str(clip.relative_to(edit)), a, min(tm["length"], z + tail), track="Footage B" if upper else "Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H,
+                            anim={"in": "fade" if a > 0.01 else "none", "out": "fade" if z + tail < tm["length"] - 0.01 else "none", "dur": DISSOLVE_S} if upper else None)
+                else:
+                    S.video(str(clip.relative_to(edit)), a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H)
+                if flow and isinstance(sh.get("over"), dict):
+                    overlay(S, sh["over"], a + 0.4, z, W, H, look)
             else:                       # its animation did not pass: the simple graphic written beside it
                 fell.append(sp["key"])
                 graphic(S, sh["fallback"], a, z, W, H, look)
