@@ -196,6 +196,120 @@ def studio_claude_do(what):
     return {"ok": False, "msg": "unknown"}
 
 
+# studio: topic ideas. The app goes on YouTube for a niche: what is being watched on it now (the most-viewed of the
+# top results and of the newest), so the user picks a topic that has an audience instead of guessing.
+_IDEAS = {}
+
+
+def studio_ideas(niche):
+    niche = re.sub(r"\s+", " ", str(niche or "")).strip()[:80]
+    if len(niche) < 3:
+        return {"ok": False, "msg": "Type a niche first: space, Bollywood, personal finance, fitness..."}
+    c = _IDEAS.get(niche.lower())
+    if c and time.time() - c[0] < 1800:
+        return c[1]
+    y = links.ytdlp()
+    if not y:
+        return {"ok": False, "msg": "The downloader is not installed yet. Run setup first."}
+    rows, seen, refused = [], set(), False
+    for q in (f"ytsearch14:{niche}", f"ytsearchdate14:{niche}"):
+        try:
+            r = subprocess.run(y + ["--no-warnings", "--force-ipv4", "--flat-playlist", "--print", "%(id)s\t%(view_count)s\t%(duration)s\t%(title)s\t%(channel)s", q],
+                               capture_output=True, text=True, timeout=120)
+        except subprocess.SubprocessError:
+            continue
+        refused = refused or "confirm you" in r.stderr
+        for ln in r.stdout.splitlines():
+            p = ln.split("\t")
+            if len(p) < 5 or p[0] in seen:
+                continue
+            try:
+                views, dur = int(float(p[1])), float(p[2])
+            except ValueError:
+                continue
+            if dur < 60:      # not a Short: a topic for a full video
+                continue
+            seen.add(p[0])
+            rows.append({"id": p[0], "title": p[3][:110], "by": p[4][:40], "views": views, "minutes": round(dur / 60), "new": q.startswith("ytsearchdate")})
+    rows.sort(key=lambda x: -x["views"])
+    out = {"ok": bool(rows), "niche": niche, "ideas": rows[:12],
+           "msg": "" if rows else ("YouTube has stopped answering this computer for now. Try again in an hour." if refused else "Nothing found for that. Try other words.")}
+    if rows:
+        _IDEAS[niche.lower()] = (time.time(), out)
+    return out
+
+
+# studio: the clip downloader. A link and a from/to time become a clip in <library>/clips, kept with where it came from
+# (for the credit line). Long videos can then use it as the user's own clip.
+_CLIPS = {"busy": {}, "last": ""}
+
+
+def clips_dir():
+    return Path(read()["root"]) / "clips"
+
+
+def studio_clips():
+    d = clips_dir()
+    out = []
+    for f in sorted(d.glob("*.mp4"), key=lambda f: -f.stat().st_mtime)[:60] if d.is_dir() else []:
+        try:
+            m = json.loads(f.with_suffix(".json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            m = {}
+        out.append({"name": f.name, "path": str(f), "title": m.get("title") or f.stem, "by": m.get("by") or "", "from": m.get("from") or "", "seconds": m.get("seconds") or 0,
+                    "mb": round(f.stat().st_size / 1e6, 1)})
+    return {"folder": str(d), "clips": out, "busy": [v for v in _CLIPS["busy"].values()], "last": _CLIPS["last"]}
+
+
+def _clock(t):
+    """Seconds from "1:23", "83", "0:01:23". None when it is not a time."""
+    p = [x for x in str(t or "").strip().split(":")]
+    try:
+        v = [float(x) for x in p]
+    except ValueError:
+        return None
+    return sum(x * 60 ** i for i, x in enumerate(reversed(v))) if 1 <= len(v) <= 3 else None
+
+
+def studio_clip_get(url, start, end):
+    url = str(url or "").strip()
+    a, z = _clock(start), _clock(end)
+    if not re.match(r"https?://", url):
+        return {"ok": False, "msg": "Paste the link of the video."}
+    if a is None or z is None or not 1 <= z - a <= 600:
+        return {"ok": False, "msg": "Give a start and an end, like 1:20 and 1:45 (10 minutes at most)."}
+    y = links.ytdlp()
+    if not y:
+        return {"ok": False, "msg": "The downloader is not installed yet. Run setup first."}
+    d = clips_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    key = secrets.token_hex(4)
+    _CLIPS["busy"][key] = {"url": url, "start": start, "end": end}
+
+    def run():
+        try:
+            info = subprocess.run(y + ["--no-warnings", "--no-playlist", "--force-ipv4", "--skip-download", "--print", "%(title)s\t%(channel)s", url],
+                                  capture_output=True, text=True, timeout=120).stdout.strip().split("\t")
+            title = (info[0] if info and info[0] else "clip")[:80]
+            name = re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", title.lower())).strip("-")[:40] or "clip"
+            out = d / f"{name}-{int(a)}-{int(z)}.mp4"
+            r = subprocess.run(y + ["--no-warnings", "--no-playlist", "--force-ipv4", "-f", "bv*[height<=1080][vcodec^=avc1]+ba[ext=m4a]/b[height<=1080]/b",
+                                    "--download-sections", f"*{a:.1f}-{z:.1f}", "--force-keyframes-at-cuts", "--merge-output-format", "mp4", "-o", str(out), url],
+                               capture_output=True, text=True, timeout=1200)
+            if r.returncode or not out.is_file():
+                err = (r.stderr.strip().splitlines() or ["the download failed"])[-1]
+                _CLIPS["last"] = "The site has stopped answering this computer for now. Try again in an hour." if "confirm you" in err else "That clip did not download: " + err[:140]
+            else:
+                out.with_suffix(".json").write_text(json.dumps({"title": title, "by": info[1] if len(info) > 1 else "", "from": url, "start": a, "end": z, "seconds": round(z - a, 1)}), encoding="utf-8")
+                _CLIPS["last"] = ""
+        except Exception as e:   # noqa: BLE001
+            _CLIPS["last"] = f"That clip did not download ({type(e).__name__})."
+        finally:
+            _CLIPS["busy"].pop(key, None)
+    threading.Thread(target=run, daemon=True).start()
+    return {"ok": True}
+
+
 # studio: the Studio voice (Pocket TTS in its own Python environment), installed in the background for the user's click.
 _POCKET_SETUP = {"p": None}
 
@@ -2384,6 +2498,8 @@ def make_handler(token):
                 except Exception:   # noqa: BLE001
                     ok = False
                 return self.send(200, f.read_bytes(), "image/jpeg", cache="private, max-age=86400") if ok else self.send(404, {})
+            if path == "/studio/clips":   # studio: the clip downloader's clips
+                return self.send(200, studio_clips())
             if path == "/studio/pocket":   # studio: is the Studio voice installed
                 return self.send(200, studio_pocket())
             if path == "/studio/claude":   # studio: whose Claude account does the editing (claude auth status), for Settings
@@ -2599,10 +2715,34 @@ def make_handler(token):
                     return self.send(400, {})
                 subprocess.Popen(library.reveal_cmd(p), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return self.send(200, {})
+            if path == "/studio/ideas":   # studio: what is being watched on a niche
+                return self.send(200, studio_ideas(body.get("niche") if isinstance(body, dict) else ""))
+            if path == "/studio/clips":   # studio: download one clip (a link, a start, an end) into the library's clips folder
+                return self.send(200, studio_clip_get(body.get("url"), body.get("start"), body.get("end")) if isinstance(body, dict) else {"ok": False})
+            if path == "/studio/clips/reveal":
+                subprocess.Popen(library.reveal_cmd(clips_dir()), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                return self.send(200, {})
             if path == "/studio/pocket":   # studio: install the Studio voice in the background
                 return self.send(200, studio_pocket("install"))
             if path == "/studio/claude":   # studio: sign in to Claude (the browser opens) or sign out
                 return self.send(200, studio_claude_do((body or {}).get("do") if isinstance(body, dict) else None))
+            if path == "/studio/pack":   # studio: the export pack of a finished Long video: thumbnails, the publishing kit, Shorts, the video itself, in its exports folder
+                d = Path(str(body.get("dir") or "")).resolve()
+                t = studio_script("long-video", "longvideo.py")
+                if d not in library.edit_dirs() or not t or not (d / "render.mp4").is_file() or not (d / "shots.json").is_file():
+                    return self.send(400, {"msg": "The export pack is made from a finished Long video."})
+                try:
+                    title = str(json.loads((d / "scenes.json").read_text(encoding="utf-8")).get("title") or d.name)
+                except (OSError, ValueError):
+                    title = d.name
+                (d / "exports").mkdir(exist_ok=True)
+                run_ = f'"{sys.executable}" "{Path(__file__).with_name("run.py")}" "{t}"'
+                safe = re.sub(r"[^A-Za-z0-9 ,.'-]", "", title)[:80] or "video"
+                sh = (f'cp -f "{d / "render.mp4"}" "{d / "exports" / (safe + ".mp4")}"; {run_} thumbs "{d}" --title "{safe}"; '
+                      + (f'{run_} kit "{d}"; ' if (d / "kit.json").is_file() else "") + f'{run_} shorts "{d}" --reveal')
+                log = open(d / "pack.log", "w", encoding="utf-8")
+                subprocess.Popen(["/bin/sh", "-c", sh], stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+                return self.send(200, {"started": True, "kit": (d / "kit.json").is_file()})
             if path == "/studio/shorts":   # studio: Shorts from a finished Long video, rendered in the background into its exports folder
                 d = Path(str(body.get("dir") or "")).resolve()
                 t = studio_script("long-video", "longvideo.py")

@@ -4,6 +4,13 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **Topic ideas.** Home has "Find topics people are watching": type a niche and the app goes on YouTube for it,
+  showing the most-watched and the newest videos with their views. One click starts your own video on that topic,
+  researched and written fresh.
+- **Clip downloader.** Library has a Clip downloader tab: a link and a from/to time become a clip in the library's
+  clips folder, kept with where it came from for the credit line.
+- **Export pack.** A finished Long video has one Export pack button: the video, three thumbnails, the publishing kit
+  and the Shorts, together in its exports folder.
 - **A motion kit with real depth.** Studied frame by frame against published work of this kind: their graphics are
   glass panels tilted in space, glossy bars on reflections, a paper lying in perspective, layers pulled apart, the
   footage blurred behind. Ours were flat text and rectangles. `graphics` now renders every title, stat, chart, list,

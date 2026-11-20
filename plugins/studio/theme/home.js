@@ -60,6 +60,31 @@
     var b = document.getElementById('cf-box'); if (b) b.classList.toggle('over', !!on);
     if (on === 'drop') { if (b) b.classList.remove('over'); studioFiles(e.dataTransfer.files); }
   };
+  // topic ideas: the app goes on YouTube for a niche and shows what people are watching on it
+  var ideas = { open: false, niche: '', busy: false, d: null };
+  var post = function (u, b) { return fetch(u, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }).then(function (r) { return r.json(); }); };
+  window.studioIdeas = function (on) { ideas.open = on; render(); if (on) setTimeout(function () { var i = document.getElementById('cf-niche'); if (i) i.focus(); }, 30); };
+  window.studioIdeasFind = function () {
+    var i = document.getElementById('cf-niche'); ideas.niche = (i ? i.value : ideas.niche).trim();
+    if (ideas.niche.length < 3) return;
+    ideas.busy = true; ideas.d = null; render();
+    post('/studio/ideas', { niche: ideas.niche }).then(function (d) { ideas.busy = false; ideas.d = d; render(); }).catch(function () { ideas.busy = false; ideas.d = { ok: false, msg: 'That did not work. Try again.' }; render(); });
+  };
+  window.studioIdeaUse = function (k) {
+    var x = ideas.d && ideas.d.ideas[k]; if (!x) return;
+    hero.text = x.title; hero.len = Math.max(hero.len || 0, 180); ideas.open = false; render();
+    setTimeout(function () { var b = document.getElementById('cfq'); if (b) { b.focus(); b.select(); } }, 30);
+  };
+  function fmtViews(n) { return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n); }
+  function ideasHTML() {
+    if (!ideas.open) return '<button class="cf-wait" style="margin-top:10px" onclick="studioIdeas(true)">Not sure what to make?<span>Find topics people are watching</span></button>';
+    var d = ideas.d;
+    var list = !d ? '' : !d.ok ? '<p class="cf-idea-msg">' + esc(d.msg || '') + '</p>' : '<div class="cf-ideas">' + d.ideas.map(function (x, k) {
+      return '<button class="cf-idea" onclick="studioIdeaUse(' + k + ')"><b>' + esc(x.title) + '</b><span>' + fmtViews(x.views) + ' views · ' + esc(x.by) + ' · ' + x.minutes + ' min' + (x['new'] ? ' · recent' : '') + '</span></button>';
+    }).join('') + '</div><p class="cf-idea-msg">Pick one to start from its topic. Your video is researched and written fresh; nothing is copied from theirs.</p>';
+    return '<div class="cf-ideabox"><div class="cf-idearow"><input id="cf-niche" class="input" placeholder="A niche: space, Bollywood, personal finance, fitness…" value="' + esc(ideas.niche) + '" onkeydown="if(event.key===\'Enter\')studioIdeasFind()">' +
+      '<button class="b1" onclick="studioIdeasFind()"' + (ideas.busy ? ' disabled' : '') + '>' + (ideas.busy ? 'Looking on YouTube…' : 'Find topics') + '</button><button class="b2" onclick="studioIdeas(false)">Close</button></div>' + list + '</div>';
+  }
   window.studioHome = function (vids) {
     var kinds = KINDS.map(function (k) {
       return '<button class="cf-kind" onclick="studioKind(\'' + k[0] + '\')"><span class="cf-art"><svg viewBox="0 0 120 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -73,6 +98,7 @@
       'oninput="studioTyped(this)" onkeydown="if(event.key===\'Enter\'&&(event.metaKey||event.ctrlKey)){event.preventDefault();if(!/^https?:/i.test(this.value.trim()))studioGo()}">' + esc(hero.text) + '</textarea>' +
       '<div class="cf-row" id="cf-row">' + rowHTML() + '</div><div class="cf-drop">Drop your clips to edit them</div></div>' +
       (waiting ? '<button class="cf-wait" onclick="rgo(\'videos\')"><i></i>' + waiting + ' video' + (waiting === 1 ? ' is' : 's are') + ' waiting for you<span>Open Videos</span></button>' : '') +
+      ideasHTML() +
       '<div class="cf-kinds">' + kinds + '</div></div></div>';
   };
   window.studioHero = window.studioHome;
@@ -119,14 +145,40 @@
   var lib = { d: null, tab: 'worlds', at: 0 };
   function libLoad() { lib.at = Date.now(); get('/studio/library?json=1').then(function (d) { lib.d = d; redraw(); }).catch(function () {}); }
   window.studioLibTab = function (t) { lib.tab = t; redraw(); };
+  // the clip downloader: a link and a from/to time become a clip kept in the library
+  var clips = { d: null, at: 0, f: { url: '', start: '', end: '' }, msg: '' };
+  function clipsLoad() { clips.at = Date.now(); get('/studio/clips').then(function (d) { var was = JSON.stringify(clips.d); clips.d = d; if (was !== JSON.stringify(d)) redraw(); if (d.busy && d.busy.length) setTimeout(clipsLoad, 3000); }).catch(function () {}); }
+  window.studioClipSet = function (k, v) { clips.f[k] = v; };
+  window.studioClipGet = function () {
+    clips.msg = '';
+    send('/studio/clips', clips.f).then(function (r) { if (!r.ok) { clips.msg = r.msg || 'That did not start.'; redraw(); return; } clips.f = { url: '', start: '', end: '' }; clipsLoad(); redraw(); });
+  };
+  window.studioClipCopy = function (p) { try { navigator.clipboard.writeText(p); } catch (e) {} };
+  function clipsView() {
+    if (!clips.d || Date.now() - clips.at > 15000) clipsLoad();
+    var d = clips.d || { clips: [], busy: [], last: '' }, f = clips.f;
+    var inp = function (k, ph, w) { return '<input class="input" style="height:40px;min-height:40px;padding:0 12px;font-family:inherit;' + (w ? 'width:' + w + 'px;flex:none' : 'flex:1') + '" placeholder="' + ph + '" value="' + esc(f[k]) + '" oninput="studioClipSet(\'' + k + '\', this.value)">'; };
+    var rows = d.clips.map(function (c) {
+      return '<div class="lb-card"><div class="lb-pic"><span>▶</span></div><b>' + esc(c.title) + '</b><p>' + esc(c.by || '') + (c.seconds ? ' · ' + Math.round(c.seconds) + ' s' : '') + ' · ' + c.mb + ' MB</p>' +
+        '<em><button class="hlink" style="font-size:12px" onclick="studioClipCopy(' + J(c.path) + ')">Copy its path</button></em></div>';
+    }).join('');
+    return '<div class="fw-clipform"><div class="row" style="gap:8px;align-items:center">' + inp('url', 'Paste a video link (YouTube, Vimeo, X, TikTok…)') + inp('start', 'From 1:20', 110) + inp('end', 'To 1:45', 110) +
+      '<button class="b1" onclick="studioClipGet()">Download clip</button></div>' +
+      (clips.msg || d.last ? '<div class="msg bad" style="margin-top:8px"><span>' + esc(clips.msg || d.last) + '</span></div>' : '') +
+      (d.busy.length ? '<p class="lb-note">Downloading ' + d.busy.length + ' clip' + (d.busy.length > 1 ? 's' : '') + '…</p>' : '') +
+      '<p class="lb-note">Clips are saved in your library\'s clips folder with where they came from. To use them in a Long video, put that folder in "Your own clips". Publishing other people\'s footage is your call. <button class="hlink" style="font-size:12px" onclick="send(\'/studio/clips/reveal\', {})">Show the folder</button></p></div>' +
+      '<div class="lb-grid lb-props">' + (rows || '<div class="none">' + (clips.d ? 'No clips yet.' : 'Loading…') + '</div>') + '</div>';
+  }
   window.studioLibraryView = function () {
     if (!lib.d || Date.now() - lib.at > 15000) libLoad();
     var d = lib.d || { worlds: [], characters: [], props: [] };
     var TABS = [['worlds', 'Worlds', 'Places built once in detail. A script set in one of these uses it as it is.'],
       ['characters', 'Characters', 'People and figures. Ask for any movement by name and it is fetched.'],
-      ['props', 'Props', 'Free models fetched the first time a world needs one, then kept.']];
+      ['props', 'Props', 'Free models fetched the first time a world needs one, then kept.'],
+      ['clips', 'Clip downloader', 'Cut a moment out of any video by its link. No more hunting and trimming by hand.']];
     var cur = TABS.filter(function (t) { return t[0] === lib.tab; })[0] || TABS[0];
-    var tabs = TABS.map(function (t) { return '<button class="' + (t[0] === cur[0] ? 'on' : '') + '" onclick="studioLibTab(\'' + t[0] + '\')">' + t[1] + ' <i>' + d[t[0]].length + '</i></button>'; }).join('');
+    var tabs = TABS.map(function (t) { return '<button class="' + (t[0] === cur[0] ? 'on' : '') + '" onclick="studioLibTab(\'' + t[0] + '\')">' + t[1] + (d[t[0]] ? ' <i>' + d[t[0]].length + '</i>' : '') + '</button>'; }).join('');
+    if (cur[0] === 'clips') return '<div class="pgc"><div class="ph"><h1>Library</h1><p>Everything your videos can reuse.</p></div><div class="lb-tabs">' + tabs + '</div><p class="lb-note">' + cur[2] + '</p>' + clipsView() + '</div>';
     var cards = d[cur[0]].map(function (x) {
       var foot = x.moves ? x.moves.join(' · ') + (x.outfit ? ' · any outfit colour' : '') : x.textures ? 'textures only' : '';
       return '<div class="lb-card"><div class="lb-pic"' + (x.pic ? ' style="background-image:url(\'' + esc(x.pic) + '\')"' : '') + '>' + (x.pic ? '' : '<span>' + esc((x.name || '?').slice(0, 1).toUpperCase()) + '</span>') + '</div>' +

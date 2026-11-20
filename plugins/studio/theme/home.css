@@ -440,3 +440,16 @@ body.fw-app a, body.fw-app button { cursor: default; }
 .fw-mine { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .fw-mine b { display: block; font-size: 13px; }
 .fw-mine span { display: block; font-size: 12px; line-height: 17px; color: var(--muted, #8b93a1); margin-top: 2px; }
+.fw-clipform { margin: 6px 0 18px; }
+.fw-clipform .row { display: flex; }
+/* topic ideas on Home */
+.cf-ideabox { width: 100%; max-width: 760px; margin: 14px auto 0; padding: 14px; border: 1px solid var(--ring); border-radius: 16px; background: var(--menu); text-align: left; }
+.cf-idearow { display: flex; gap: 8px; align-items: center; }
+.cf-idearow .input { flex: 1; height: 40px; min-height: 40px; padding: 0 12px; font-family: inherit; }
+.cf-ideas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.cf-idea { text-align: left; padding: 10px 12px; border: 1px solid var(--ring); border-radius: 12px; background: none; color: inherit; cursor: pointer; font: inherit; }
+.cf-idea:hover { border-color: var(--accent); background: var(--accent-soft); }
+.cf-idea b { display: block; font-size: 13px; line-height: 18px; font-weight: 600; }
+.cf-idea span { display: block; margin-top: 3px; font-size: 12px; color: var(--muted, #8b93a1); }
+.cf-idea-msg { margin: 10px 2px 0; font-size: 12px; color: var(--muted, #8b93a1); }
+@media (max-width: 720px) { .cf-ideas { grid-template-columns: 1fr; } }
