@@ -50,6 +50,7 @@ for d in ("animated-video", "stream-clips"):
 import studio  # noqa: E402  (the voice, the words, the render; finding the editor)
 from studio import jload, jsave, duration  # noqa: E402
 import streamclips  # noqa: E402  (yt-dlp, the cover image)
+import motionkit  # noqa: E402  (graphics with depth, glass and light, rendered as clips)
 import storytools  # noqa: E402  (the subjects' real material, the watched videos measured)
 
 MEDIA = ("clip", "stock", "photo", "own", "ai", "bite")
@@ -990,6 +991,81 @@ def cmd_charts(edit):
             bad += 1
             print(f"{key}: did not render: flat bars will be used")
     return 0
+
+
+def cmd_graphics(edit, only=None):
+    """Every graphic shot the motion kit can draw (motionkit.KINDS), rendered as a clip with depth, glass and light:
+    EDIT/motion/<key>/renders/clip.mp4, three at a time, no agent. The video's own footage is blurred behind each. One
+    that does not render is drawn flat at build, as before."""
+    edit = Path(edit).resolve()
+    root = studio.use_editor()
+    import motion
+    tm, sc = jload(edit / "timing.json"), jload(edit / "scenes.json")
+    if not tm:
+        sys.exit("ERROR: run studio.py voice first.")
+    all_sp, db = spans(edit), jload(edit / "shots.json", {}) or {}
+    todo = [sp for sp in all_sp if kit_shot(sp["shot"]) and (not only or sp["key"] in only)]
+    if not todo:
+        print("0 graphics for the motion kit")
+        return 0
+    ok, why = motion.ensure_tools()
+    if not ok:
+        sys.exit("ERROR: the motion tools are missing: " + str(why))
+    look0, (w, h) = studio.look_of(sc), studio.size_of(edit)
+    look = {**LOOK, **{k: v for k, v in (sc.get("look") or {}).items() if k in LOOK}} if isinstance(sc.get("look"), dict) else dict(LOOK)
+    gsap = motion.home() / "motion" / "node_modules" / "gsap" / "dist" / "gsap.min.js"
+
+    import hashlib
+    kit_ver = hashlib.sha256(Path(motionkit.__file__).read_bytes()).hexdigest()[:12]      # a changed kit draws every graphic again
+
+    def one(sp):
+        sh, key, dur = kit_shot(sp["shot"]), sp["key"], round(sp["b"] - sp["a"], 2)
+        d = edit / "motion" / key
+        (d / "assets").mkdir(parents=True, exist_ok=True)
+        bgf = backdrop(edit, sp, all_sp, db)
+        stamp = json.dumps([sh, dur, w, h, look, bgf, kit_ver], sort_keys=True, default=str)
+        if (d / "kit.stamp").exists() and (d / "kit.stamp").read_text(encoding="utf-8") == stamp and (d / "renders" / "clip.mp4").exists():
+            return key, "ok (already rendered)"
+        bg = None
+        if bgf and (edit / bgf).is_file():       # a small copy: it is only ever seen blurred
+            r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(edit / bgf), "-vf", "scale=960:-2", "-frames:v", "1", "-q:v", "4", str(d / "assets" / "bg.jpg")], capture_output=True)
+            bg = "bg.jpg" if not r.returncode else None
+        got = motionkit.part(sh["kind"], sh, w, h, look, bg)
+        if not got:
+            return key, "no kit graphic for this kind"
+        beat = {"id": key, "type": "scene", "props": {}, "start": sp["a"], "dur": dur, "clock": "video", "size": [w, h], "words": [], "line": "", "before": "", "after": ""}
+        page = motion.fill_template(beat, look0)
+        page = page.replace('<div id="viewport"><div id="rail"><div id="scene">', '<div id="viewport"><div id="rail"><div id="scene">\n<!-- real-text: the graphic\'s own words and numbers are its content -->' + got[0], 1)
+        page = page.replace("</body>", got[1] + "\n  </body>", 1)
+        (d / "index.html").write_text(page, encoding="utf-8")
+        shutil.copy(root / "skills" / "motion" / "template" / "hyperframes.json", d / "hyperframes.json")
+        if gsap.exists():
+            shutil.copy(gsap, d / "assets" / "gsap.min.js")
+        jsave(d / "beat.json", beat)
+        (d / "gates.json").unlink(missing_ok=True)
+        (d / "renders" / "clip.mp4").unlink(missing_ok=True)
+        subprocess.run([sys.executable, str(root / "lib" / "ai_editor" / "run.py"), str(root / "skills" / "motion" / "scripts" / "motion.py"), "check", str(d)], capture_output=True, text=True)
+        if (d / "renders" / "clip.mp4").exists():
+            (d / "kit.stamp").write_text(stamp, encoding="utf-8")
+            return key, "rendered"
+        return key, "did not render: drawn flat instead"
+    with ThreadPoolExecutor(3) as ex:
+        for key, what in ex.map(one, todo):
+            print(f"{key}: {what}", flush=True)
+    return 0
+
+
+def kit_shot(sh):
+    """The shot as the motion kit draws it (a versus is two bars; a motion shot is not the kit's), or None."""
+    if not isinstance(sh, dict) or sh.get("kind") not in motionkit.KINDS:
+        return None
+    return sh
+
+
+def kit_clip(edit, key):
+    d = Path(edit) / "motion" / key
+    f = d / "renders" / "clip.mp4"
+    return f if f.exists() and (d / "kit.stamp").exists() else None
 
 
 def fetch_ai(edit, key, sh, need, w, h):
@@ -2472,6 +2548,10 @@ def cmd_build(edit):
                 S.video(str(clip.relative_to(edit)), a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H)
                 continue
             sh = {**sh, "kind": "bars", "items": sh["items"][:6]}
+        kc = kit_clip(edit, sp["key"]) if kit_shot(sh) else None
+        if kc:                              # the motion kit drew it with depth and light: the clip is the whole picture
+            S.video(str(kc.relative_to(edit)), a, z, track="Footage", volume=0, x=W / 2, y=H / 2, w=W, h=H, name=str(sh.get("title") or sh.get("text") or sh["kind"])[:40])
+            continue
         if sh["kind"] in GRAPHICS or (sh["kind"] == "motion" and not studio.clip_of(edit, sp["key"])):
             bg = backdrop(edit, sp, all_sp, db)
             if bg:
@@ -2539,10 +2619,12 @@ def cmd_build(edit):
         prev_hud = bool(r and rows)
     for s in sc["scenes"]:           # where a line's fact comes from, small, while it is said
         r = next((r for r in tm["scenes"] if r["id"] == s["id"]), None)
-        if r and s.get("source") and not any(x["kind"] in ("bars", "source") for x in s["shots"]):
+        # off unless the brief asks ("show_sources": true). The user's words: "stop mentioning the source tag... it's looking ugly".
+        # The sources are in the publishing kit, where they belong; with the option on they sit small in the bottom right corner.
+        if r and s.get("source") and b.get("show_sources") and not any(x["kind"] in ("bars", "source") for x in s["shots"]):
             S.text("Source: " + (s.get("source_label") or domain(s["source"])), r["start"] + 0.2, r["start"] + r["dur"], track="Graphics top",
-                   x=W * 0.03 + W * 0.2, y=H * 0.045, w=int(W * 0.4), size=int(min(W, H) * 0.022), weight=500, color="#FFFFFF", align="left",
-                   box={"color": "#000000", "pad": [10, 5], "radius": 6, "opacity": 0.55}, anim={"in": "fade", "out": "fade", "dur": 0.2})
+                   x=W * 0.97 - W * 0.2, y=H * 0.965, w=int(W * 0.4), size=int(min(W, H) * 0.016), weight=500, color="#FFFFFF", opacity=0.55, align="right",
+                   anim={"in": "fade", "out": "fade", "dur": 0.2})
     if b["text"] and words:
         style = {**CAPTIONS, **(sc.get("captions") or {})}
         for r in tm["scenes"]:
@@ -2949,7 +3031,7 @@ def demo():
         jsave(e / "scenes.json", good)
         assert title_score({"title": "Tokyo 4K drone footage", "duration": 300}) > title_score({"title": "Tokyo explained | podcast", "duration": 300})
         assert fit_cmd("a", "b", 1920, 1080)[-1] == "b" and "-t" in fit_cmd("a", "b", 1920, 1080, 3.0)
-    assert storytools.demo() == 0
+    assert storytools.demo() == 0 and motionkit.demo() == 0
     print("longvideo demo ok")
     return 0
 
@@ -2961,6 +3043,7 @@ def main(argv):
     sub.add_parser("tools")
     for name in ("check", "sheet", "build", "kit", "briefs", "qa", "charts"):
         sub.add_parser(name).add_argument("edit")
+    p = sub.add_parser("graphics"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
     sub.add_parser("bites").add_argument("edit")
     sub.add_parser("subjects").add_argument("edit")
     sub.add_parser("frames").add_argument("edit")
@@ -2983,7 +3066,7 @@ def main(argv):
             "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo,
             "charts": lambda: cmd_charts(a.edit), "claims": lambda: cmd_claims(a.edit, a.gate),
             "subjects": lambda: cmd_subjects(a.edit), "models": lambda: cmd_models(a.edit, a.topic),
-            "frames": lambda: cmd_frames(a.edit), "filmsheet": lambda: cmd_filmsheet(a.edit),
+            "frames": lambda: cmd_frames(a.edit), "filmsheet": lambda: cmd_filmsheet(a.edit), "graphics": lambda: cmd_graphics(a.edit, a.only),
             "music": lambda: cmd_music(a.edit, a.feel, a.bpm, a.use), "sfx-setup": cmd_sfx_setup}[a.cmd]()
 
 

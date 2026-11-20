@@ -210,7 +210,7 @@ would be empty.
 python3 "$PY" "$L" sfx-setup; python3 "$PY" "$L" music EDIT --feel "Mysterious"   # lists real tracks; then --use "<title>"
 python3 "$PY" "$L" sound EDIT [--mood linear]      # the voice, a quiet bed that rests, a sound where something lands
 python3 "$PY" "$L" build EDIT
-python3 "$PY" "$L" charts EDIT && python3 "$PY" "$L" build EDIT   # only with chart3d shots: render them, then build again
+python3 "$PY" "$L" graphics EDIT && python3 "$PY" "$L" charts EDIT && python3 "$PY" "$L" build EDIT   # the graphics drawn with depth, glass and light (the motion kit), then build again
 python3 "$PY" "$T" render EDIT   # EDIT/render.mp4, about 2 min a minute of video; 4K (brief "quality") four times that
 ```
 

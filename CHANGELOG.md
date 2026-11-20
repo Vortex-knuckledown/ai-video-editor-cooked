@@ -4,6 +4,13 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **A motion kit with real depth.** Studied frame by frame against published work of this kind: their graphics are
+  glass panels tilted in space, glossy bars on reflections, a paper lying in perspective, layers pulled apart, the
+  footage blurred behind. Ours were flat text and rectangles. `graphics` now renders every title, stat, chart, list,
+  tier list, paper, layer stack, timeline and quote that way (CSS 3D, blur, light, a slow camera push), from the
+  shot's own data, in the video's own colours, with no agent. A `kicker` line and a paper's `finding_value` are new.
+- **No source tag on the picture.** The "Source:" label on every shot is gone; sources are in the publishing kit.
+  `"show_sources": true` in the brief puts a small one in the bottom right corner.
 - **One sentence in, one directed film out.** After the script is approved the app directs the film itself, with no
   question to the user: it decides what kind of film the topic is (real photographs and footage for real people and
   events, animation for what no camera can show, or both), writes one design system for the whole video (colours,

@@ -84,3 +84,20 @@ number or a name, never a sentence. No yellow headline cards one after another.
 - **`over: {"count": {"from": 0, "to": 35000, "unit": "ft", "label": "altitude"}}`**: a number running on the
   footage, lower left: a height climbing, a price, a year. `seconds` sets how long it runs (default 1.6).
 
+## The motion kit: how graphics are drawn
+
+`graphics EDIT` renders every `title`, `word`, `place`, `stat`, `bars`, `versus`, `list`, `tier`, `paper`, `source`,
+`layers`, `timeline` and `quote` shot as a clip with real depth: glass panels tilted in space, glossy bars standing
+on their reflections, a paper lying in perspective with its one line lit, layers pulled apart, the video's own
+footage blurred behind, a slow camera push. Run it before `build`; a graphic that does not render is drawn flat.
+Three fields make them read as designed:
+
+- **`kicker`** on any of them: three or four words in small spaced capitals above the title ("Share of weekly sets"
+  over "Back gets a third"). Write the title as a finding, not a label.
+- **`finding_value`** on a `paper`: the one number of the result ("25"), drawn large on the KEY FINDING card beside
+  `finding` ("FFMI was the ceiling for drug-free lifters"); `finding_kicker` for the card's small line ("Key finding
+  · 157 athletes").
+- **`note`** on a `stat`: one quiet line under the number.
+
+The colours are the video's `look` (ground, ink, accent) from scenes.json, set by the director.
+
