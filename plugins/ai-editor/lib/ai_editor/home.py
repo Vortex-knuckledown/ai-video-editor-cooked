@@ -3267,13 +3267,6 @@ def make_handler(token):
             prompt = re.sub(r"\s+", " ", str(b.get("prompt") or "")).strip()[:4000]
             if len(prompt) < 8 and not str(b.get("voiceover") or "").strip():
                 return self.send(400, {"ok": False, "msg": "Say what the video is about first."})
-            if b.get("visuals") == "animated" and not str(b.get("voiceover") or "").strip():
-                # fork: a fully animated long video is made by the 3D animated pipeline (shared worlds and characters, one film), which is
-                # the one whose videos the user liked; long-video's own animated shots were flatter and did not hold together
-                return self.animated({"prompt": ("" if re.search(r"\b3d\b", prompt, re.I) else "A 3D animated video: ") + prompt,
-                                      "aspect": "9:16" if b.get("aspect") == "9:16" else "16:9", "length": 60 * max(1, min(10, int(b.get("minutes") or 2))),
-                                      "voice": True, "text": b.get("text"), "music": b.get("music"),
-                                      **{k: b[k] for k in ("voice_engine", "voice_id", "voice_speed") if k in b}}, d)
             aspect = "9:16" if b.get("aspect") == "9:16" else "16:9"
             own = str(b.get("own") or "").strip()
             if own and not Path(os.path.expanduser(own)).is_dir():
@@ -3281,13 +3274,13 @@ def make_handler(token):
             vo = os.path.expanduser(str(b.get("voiceover") or "").strip())   # the user's own recorded voiceover: the script is what it says
             if vo and not (Path(vo).is_file() and Path(vo).suffix.lower() in (".wav", ".mp3", ".m4a", ".aac", ".flac", ".ogg", ".mp4", ".mov")):
                 return self.send(400, {"ok": False, "msg": "That voiceover file is not there (a .wav, .mp3 or .m4a recording)."})
-            brief = {"prompt": prompt, "minutes": max(1, min(10, int(b.get("minutes") or 3))), "aspect": aspect, "voice": True,
+            brief = {"prompt": prompt, "minutes": max(1, min(15, int(b.get("minutes") or 3))), "aspect": aspect, "voice": True,
                      "text": b.get("text") is not False, "music": b.get("music") is not False,
                      "footage": {"youtube": b.get("youtube") is not False, "photos": b.get("photos") is not False, "licensed_first": bool(b.get("licensed"))},   # fork: licensed_first
                      "own": os.path.expanduser(own) if own else None, **voice_of(b),
                      "ai": bool(b.get("ai")) and any(keys.get(n)[0] for n in ("runway", "gemini", "higgsfield", "openai")),   # AI-generated shots: only with a connection
                      "voiceover": vo or None, "quality": "4k" if str(b.get("quality") or "").lower() == "4k" else "1080",   # fork: 4K output
-                     "visuals": b.get("visuals") if b.get("visuals") in ("mixed", "real", "animated") else "mixed"}   # fork: the look the user chose
+                     "visuals": b.get("visuals") if b.get("visuals") in ("mixed", "real", "animated") else "auto"}   # fork: the look the user chose, else decided from the topic
             edit = new_edit(Path(d["root"]), " ".join(prompt.split()[:6]) or "my voiceover")
             (edit / "brief.json").write_text(json.dumps(brief, indent=1), encoding="utf-8")
             self.placeholder(edit, aspect, prompt[:60] or "From your voiceover")

@@ -17,6 +17,21 @@ most viewers and has to confirm the title and thumbnail.)
 
 ## 1. Research (`EDIT/research.md`)
 
+Research is most of the work and it is done before anything is written. From one sentence of the user's, find out
+what is true, what is new, and what people want to know. `check` refuses a 4 minute video on fewer than 10 pages
+from 5 sites (7 from 4 for 2 minutes), and a research file without the section named below.
+
+**`## What people are watching and asking`** (required, first). Before the facts: what is being searched, watched
+and reported on this topic now. Search the news of the last year; read the titles and openings of the most-watched
+videos (`models.md`); find the questions people ask (search "<topic> why", "<topic> reddit", "<topic> explained").
+Write 4 to 8 lines: what is trending, what angle the watched videos took, what nobody has answered well. Then one
+line: **the angle this video takes**, chosen because of what you found. A video on a tired angle is not watched.
+
+**Then the facts, from every kind of source the topic has**: the news reports, the primary source (the paper, the
+court filing, the company's own statement, the interview itself), a reference work, the numbers from the body that
+counts them, and what the people involved said in their own words. A topic about a person needs their own
+interviews; a topic about science needs the paper, not only an article about it.
+
 The method is Anthropic's own research pattern (the deep-research skill and the claude-cookbooks research prompts)
 with open_deep_research's stopping rule. When the `deep-research` skill is in your skills list, run it on the topic
 and write its findings into research.md in the format below; otherwise do the same steps yourself:

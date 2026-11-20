@@ -968,8 +968,9 @@ CRAFT_NOTE = f"""Start from proven work, not from a blank page:
   `{CRAFT / "chart-animation" / "SKILL.md"}` and `{CRAFT / "animated-infographic" / "SKILL.md"}` (a chart or a diagram),
   `{CRAFT / "threejs-lighting" / "SKILL.md"}`, `{CRAFT / "threejs-materials" / "SKILL.md"}` and
   `{CRAFT / "threejs-postprocessing" / "SKILL.md"}` (anything in 3D).
-- **One look.** Near-black ground, white type, ONE accent colour, glass panels with a thin light edge, soft depth of
-  field and a little motion blur on fast moves. No second accent, no gradient text, no drop-shadowed clip art.
+- **One film.** The look is the video's own (given above, and in the film's direction when the brief names one): its
+  ground, its type, its accent, its panels. Fill the frame: the subject large and lit, depth behind it, a camera that
+  moves. Never thin lines alone on an empty dark frame, no gradient text, no drop-shadowed clip art.
 - **Every element lands on its word.** Use `WORDS`: a number appears on the syllable that says it.
 
 """.replace("{", "{{").replace("}", "}}")

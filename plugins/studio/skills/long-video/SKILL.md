@@ -38,9 +38,10 @@ Say every step in the editor too: `python3 "$R" EDIT status "Researching"`. The 
 `EDIT/brief.json`: `{"prompt", "minutes", "aspect": "16:9"|"9:16", "voice": true, "text", "music",
 "footage": {"youtube": true|false, "photos": true|false}, "own": "<a folder of the user's clips>"|null,
 "voice_engine": "kokoro"|"eleven"|"edge"|"pocket", "voice_id", "ai": true|false, "voiceover": "<the user's own recording>"|null}`.
-`voice_engine` and `voice_id` are the narrator the user picked on the page: `voice` reads them itself. `visuals` is the
-look they chose and `check` enforces it: `animated` (no footage or photos at all: one `motion` shot a line, graphics
-between), `real` (only footage and photographs, numbers as `over`, nothing animated), `mixed`.
+`voice_engine` and `voice_id` are the narrator the user picked on the page: `voice` reads them itself. `visuals`:
+`auto` (you decide from the topic: write `direction/mode.json` BEFORE the script, by direction.md step 1), or the
+user's choice. `check` enforces it: `animated` (no footage or photos: one `motion` shot a line), `real` (only
+footage and photographs, numbers as `over`), `mixed`.
 Asked in chat instead of the page: make the edit folder (`python3 "$E/lib/ai_editor/library.py" path`, then
 `edits/<name>/`), write brief.json (3 minutes, 16:9, everything on), and
 `python3 "$R" EDIT start --raw --video <any 2 s clip> --stage edit` so the editor has the video.
@@ -160,29 +161,28 @@ Say which voice it used. The Mac voice: tell the user once that an ElevenLabs ke
 key") sounds like a person and bills their own ElevenLabs plan. Before the first ElevenLabs voice on a video over
 2 minutes, say that it will use about `words x 6` characters of their plan.
 
-## 4. Animated graphics, footage and pictures
+## 4. Direct the film, then animated graphics, footage and pictures
 
-Start the animated graphics first, since they take the longest, then find the footage while they build:
+**First the director's pass: read `${CLAUDE_SKILL_DIR}/references/direction.md` and do all of it** (the look this
+topic needs, one design system, style frames, their review). The user is asked nothing. `briefs` refuses without it.
 
 ```bash
-python3 "$PY" "$L" briefs EDIT         # EDIT/motion/<key>/brief.md for every motion shot
+python3 "$PY" "$L" frames EDIT         # the style frames rendered: direction/frames.jpg
+python3 "$PY" "$L" briefs EDIT         # EDIT/motion/<key>/brief.md for every motion shot, each carrying the direction
 ```
 
 Launch one `ai-editor:clip-builder` agent per brief, all in one message, in the background, each given only the
-full path of its brief.md. Each returns `{"clip", "pass", "render", "what", "failing"}`. When they are back, look at
-every passed clip's `renders/sheet.png`: one that shows the wrong idea, reads as a slide, or leaves the frame empty
-gets one note to its agent (SendMessage) before the build. One that does not pass shows its `fallback` graphic;
-say which. No clip-builder agent in this session: say so once and go on, the fallbacks are drawn.
+full path of its brief.md. When they are back: `python3 "$PY" "$L" filmsheet EDIT`, and the film review of
+direction.md step 5 (a fresh agent, notes to the weak scenes, their builders again, two rounds at most). A scene
+that does not pass shows its `fallback` graphic; say which. No clip-builder agent here: say so once and go on.
 
 ```bash
 python3 "$PY" "$L" find EDIT           # every clip and photo into EDIT/shots/, 4 at a time; about 10 s a clip
 python3 "$PY" "$L" sheet EDIT          # EDIT/sheets/sheet-N.jpg, 20 shots a sheet, each labelled with its key
 ```
 
-The free picture sites allow few pictures a minute to a caller with no key (Wikimedia rests for 2 minutes once it
-says slow down), so `find` fetches pictures one at a time and waits when told to: about 5 s a picture, sometimes
-minutes more. Say "Finding N clips and M pictures" on the page. A picture still `MISSING` with "the picture sites":
-run `find` again once (it only fetches what is missing), then make what is left a clip or a graphic.
+The free picture sites are slow (about 5 s a picture, sometimes minutes). Say "Finding N clips and M pictures" on the
+page. A picture still `MISSING`: run `find` again once, then make what is left a clip or a graphic.
 
 `find` takes each clip's best-matching moment, passes over a result that carries a channel's logo or someone
 else's subtitles (it tries the next two) and prints `LOGO <key>` when every one it tried has one: change that

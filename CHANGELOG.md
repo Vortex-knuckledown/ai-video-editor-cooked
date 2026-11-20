@@ -4,12 +4,24 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **One sentence in, one directed film out.** After the script is approved the app directs the film itself, with no
+  question to the user: it decides what kind of film the topic is (real photographs and footage for real people and
+  events, animation for what no camera can show, or both), writes one design system for the whole video (colours,
+  type, panels, light, camera, motion) as a file every scene imports, builds style frames, and has them judged by a
+  fresh reviewer. Scenes are built to match those frames, then the whole film is judged side by side and weak
+  scenes are sent back. The fixed "near-black with thin lines" rule is gone: the look comes from the topic.
+- **The look is Auto.** Long video's Look defaults to Auto; Mixed, Real footage and Fully animated remain as overrides.
+- **Research first, and more of it.** Research opens with what people are watching and asking about the topic now
+  (recent news, the most-watched videos' angles, the questions asked) and the angle chosen because of it; a 4 minute
+  video rests on 10 or more pages from 5 sites. Videos can be up to 15 minutes.
+- **The picture is one file.** A generated film is one continuous video on the timeline, its scenes melted into each
+  other inside it; captions, labels, the narration, the music and the effects are the separate layers.
+- **Music at one level.** No dip under each sentence, no rest before each section, and the track's own loud and
+  quiet parts are ridden to within about 2 dB.
 - **The voice plays without gaps in the editor.** The layered timeline carried the narration as one piece a line, and
   the editor started loading each piece only when it was due, so the voice gapped at every join. The narration is one
   continuous piece again (still its own track, apart from the music and the effects), and every sound is loaded a
   second ahead.
-- **Fully animated means the 3D pipeline.** Choosing Fully animated in Long video now makes the video with the 3D
-  animated pipeline (shared worlds and characters, one film), with the researched, shaped and critiqued script.
 - **The narration is one take.** Measured on a real video: each line was recorded by itself, 1.4 s of silence was
   added after every one to reach the length, and the voice was boosted and its peaks squashed, so it stopped and
   started 11 times in a minute and sounded clipped. The whole script is now spoken in as few breaths as the voice

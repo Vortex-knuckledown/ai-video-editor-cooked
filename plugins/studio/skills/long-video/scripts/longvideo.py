@@ -86,7 +86,10 @@ VISUALS = ("mixed", "animated", "real")
 
 
 def visuals_of(edit):
-    v = str(studio.brief_of(edit).get("visuals") or "mixed").lower()
+    """The look: the user's choice, else what the director decided for this topic (direction/mode.json), else mixed."""
+    v = str(studio.brief_of(edit).get("visuals") or "auto").lower()
+    if v not in VISUALS:
+        v = str((jload(Path(edit) / "direction" / "mode.json", {}) or {}).get("visuals") or "mixed").lower()
     return v if v in VISUALS else "mixed"
 
 
@@ -170,8 +173,14 @@ def story_gaps(edit):
         r = ""
     urls = set(re.findall(r"https?://[^\s)>\]]+", r))
     sites = {re.sub(r"^www\.", "", urllib.parse.urlsplit(u).netloc) for u in urls}
-    if r and (len(urls) < 5 or len(sites) < 3):
-        out.append(f"research.md rests on {len(urls)} page(s) from {len(sites)} site(s): 5 or more pages from at least 3 sites")
+    mins = float(studio.brief_of(edit).get("minutes") or 2)
+    need_u, need_s = (10, 5) if mins >= 4 else (7, 4) if mins >= 2 else (5, 3)
+    if r and (len(urls) < need_u or len(sites) < need_s):
+        out.append(f"research.md rests on {len(urls)} page(s) from {len(sites)} site(s): a {mins:.0f} minute video needs {need_u} or more pages from at least {need_s} sites "
+                   "(news, the primary source or paper, a reference work, an expert's own words)")
+    if r and not re.search(r"^#+\s*(what people are (watching|asking)|trending)", r, re.I | re.M):
+        out.append("research.md has no \"## What people are watching and asking\" section: what is being searched, watched and reported on this topic right now "
+                   "(recent news, the most-watched videos' angles from models.md, the questions people ask), and the angle this video takes because of it")
     try:
         beats = [x for x in (edit / "beats.md").read_text(encoding="utf-8").splitlines() if re.match(r"\s*(\d+[.)]|[-*])\s+\S", x)]
     except OSError:
@@ -1569,6 +1578,117 @@ def cmd_voiceover(edit, src):
 
 
 # ---------------------------------------------------------------- animated graphics (one clip-builder agent each)
+DIRECTION_NOTE = """ THE FILM'S DIRECTION COMES FIRST. This video was designed as one film before any scene was built. Read `{md}` (the
+ design system, and the paragraph for scene `{key}`), and LOOK at the approved style frames with the Read tool: {frames}. Your scene
+ must look like it was cut from the same film as those frames: link `assets/system.css` (and `assets/system.js` when it is there) in
+ your index.html and use ITS colours, type, panels, labels and easing; invent none of your own. Where the direction and anything above
+ disagree about the look, the direction wins."""
+
+
+def direction_gaps(edit):
+    """What the film's direction still lacks before any scene is built (references/direction.md)."""
+    d, out = Path(edit) / "direction", []
+    if not (d / "direction.md").is_file():
+        return ["no direction/direction.md: design the whole film first (references/direction.md): the look for this topic, one design system, a frame for every scene"]
+    if (jload(d / "mode.json", {}) or {}).get("visuals") not in VISUALS:
+        out.append('no direction/mode.json: {"visuals": "mixed" | "real" | "animated", "why": "..."}')
+    if not (d / "system.css").is_file() or (d / "system.css").stat().st_size < 400:
+        out.append("no direction/system.css: the design system every scene imports (colours, type, panels, labels, easing) as CSS variables and classes")
+    pngs = sorted((d / "frames").glob("*.png")) if (d / "frames").is_dir() else []
+    if len(pngs) < 3:
+        out.append(f"{len(pngs)} style frame(s): build 3 or more in direction/frames/*.html with the design system, then `frames EDIT` renders them")
+    rv = d / "review.md"
+    if not out and not (rv.is_file() and re.search(r"^verdict:\s*pass\b", rv.read_text(encoding="utf-8"), re.I | re.M)):
+        out.append("no passing direction/review.md: a fresh agent looks at direction/frames.jpg against references/direction.md's rubric and writes review.md ending "
+                   "`verdict: pass` or `verdict: redo` with what to change; redo the frames until it passes")
+    return out
+
+
+def chrome():
+    """The headless browser the animation tool already has (for a still of a page), or None."""
+    import os
+    home = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor")
+    hf = home / "motion" / "node_modules" / ".bin" / "hyperframes"
+    try:
+        r = subprocess.run([str(hf), "browser", "path"], capture_output=True, text=True, timeout=60)
+        f = Path((r.stdout.strip().splitlines() or [""])[-1])
+        return f if f.is_file() else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def cmd_frames(edit):
+    """Renders the director's style frames (direction/frames/*.html, each a still page the size of the video that
+    links ../system.css) to PNG, and puts them on one sheet to look at: direction/frames.jpg."""
+    from PIL import Image
+    edit = Path(edit).resolve()
+    d = edit / "direction" / "frames"
+    pages = sorted(d.glob("*.html")) if d.is_dir() else []
+    if not pages:
+        sys.exit("ERROR: no direction/frames/*.html. Write the style frames first (references/direction.md).")
+    exe = chrome()
+    if not exe:
+        sys.exit("ERROR: the animation tool's browser is missing: run the setup skill.")
+    w, h = studio.size_of(edit)
+    made = []
+    for f in pages:
+        out = f.with_suffix(".png")
+        r = subprocess.run([str(exe), "--headless", "--disable-gpu", "--hide-scrollbars", "--allow-file-access-from-files", f"--window-size={w},{h}",
+                            "--virtual-time-budget=2500", f"--screenshot={out}", f.as_uri()], capture_output=True, text=True, timeout=120)
+        if out.is_file() and out.stat().st_size > 2000:
+            made.append(out)
+        else:
+            print(f"FIX  {f.name} did not render: " + (r.stderr.strip().splitlines() or ["no picture"])[-1][:160])
+    if not made:
+        return 1
+    tw_, th_ = 960, int(960 * h / w)
+    cols = 2 if len(made) > 1 else 1
+    sheet = Image.new("RGB", (tw_ * cols, th_ * ((len(made) + cols - 1) // cols)), (30, 30, 30))
+    for i, f in enumerate(made):
+        sheet.paste(Image.open(f).convert("RGB").resize((tw_, th_)), ((i % cols) * tw_, (i // cols) * th_))
+    sheet.save(edit / "direction" / "frames.jpg", quality=90)
+    print(f"FRAMES {len(made)} on {edit / 'direction' / 'frames.jpg'}. Look at it, then have a fresh agent review it (direction/review.md).")
+    return 0
+
+
+def cmd_filmsheet(edit):
+    """Every animated scene of the film side by side, in order (its first, middle and last frame), to judge as one film:
+    EDIT/sheets/film-N.jpg, 4 scenes a sheet, each row labelled with its shot."""
+    import cv2
+    import numpy as np
+    edit = Path(edit).resolve()
+    rows = []
+    for sp in spans(edit):
+        f = studio.clip_of(edit, sp["key"]) if sp["shot"]["kind"] == "motion" else None
+        if not f:
+            continue
+        cap = cv2.VideoCapture(str(f))
+        n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        tiles = []
+        for frac in (0.06, 0.5, 0.94):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(n * frac))
+            ok, fr = cap.read()
+            tiles.append(cv2.resize(fr, (640, 360)) if ok else np.zeros((360, 640, 3), np.uint8))
+        cap.release()
+        row = np.hstack(tiles)
+        cv2.putText(row, sp["key"], (10, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 4)
+        cv2.putText(row, sp["key"], (10, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        rows.append(row)
+    if not rows:
+        print("0 animated scenes built yet")
+        return 1
+    (edit / "sheets").mkdir(exist_ok=True)
+    for f in (edit / "sheets").glob("film-*.jpg"):
+        f.unlink()
+    for k in range(0, len(rows), 4):
+        out = edit / "sheets" / f"film-{k // 4 + 1}.jpg"
+        cv2.imwrite(str(out), np.vstack(rows[k:k + 4]))
+        print(out)
+    print(f"FILM {len(rows)} scene(s). A fresh agent judges these sheets beside direction/frames.jpg (references/direction.md, the film review) and writes "
+          "motion/<key>/notes.md for every scene to redo.")
+    return 0
+
+
 FLOW_NOTE = """ This is shot {n} of {total} in ONE continuous animated film, not a clip by itself. The shots melt into each other
  (a {d} s dissolve), so: (1) the whole frame is alive from the first frame to the last, the camera never stops and nothing waits on an
  empty or dark frame; (2) the last {d} s of this clip are extra time under the dissolve: keep moving through them, add nothing new;
@@ -1594,6 +1714,12 @@ def cmd_briefs(edit):
     if not todo:
         print("0 briefs: no motion shots")
         return 0
+    gaps = direction_gaps(edit) if (edit / "research.md").is_file() else []     # a researched video is directed before it is built
+    if gaps:
+        print("\n".join("FIX  " + g for g in gaps))
+        return 1
+    ddir = edit / "direction"
+    frames = sorted((ddir / "frames").glob("*.png")) if (ddir / "frames").is_dir() else []
     ok, why = motion.ensure_tools()
     if not ok:
         sys.exit("ERROR: the motion tools are missing: " + str(why))
@@ -1620,6 +1746,9 @@ def cmd_briefs(edit):
         shutil.copy(root / "skills" / "motion" / "template" / "hyperframes.json", d / "hyperframes.json")
         if gsap.exists():
             shutil.copy(gsap, d / "assets" / "gsap.min.js")
+        for f in ("system.css", "system.js"):       # the film's design system, the same file in every scene
+            if (ddir / f).is_file():
+                shutil.copy(ddir / f, d / "assets" / f)
         jsave(d / "beat.json", beat)
         visual = str(sh["visual"]) + (" Use exactly these numbers and names, nothing invented: " + json.dumps(sh["data"]) if sh.get("data") else "") + \
             (FLOW_NOTE.format(prev=prev_v or "nothing: this is the first shot, so it opens the film (start already in motion, never on an empty frame)",
@@ -1629,7 +1758,8 @@ def cmd_briefs(edit):
         three = studio.THREE_NOTE if studio.three_assets(d) else ""
         (d / "brief.md").write_text(three.join(studio.BRIEF.split("\n{start}Build:", 1)[:1] + ["\n{start}Build:" + studio.BRIEF.split("\n{start}Build:", 1)[1]]).format(
             id=key, card=root / "skills" / "motion" / "references" / "clip-brief-card.md", dir=d, w=w, h=h, dur=dur,
-            title=sc.get("title") or "", prompt=b.get("prompt") or "", look=json.dumps(look), visual=visual,
+            title=sc.get("title") or "", prompt=b.get("prompt") or "", look=json.dumps(look),
+            visual=visual + (DIRECTION_NOTE.format(md=ddir / "direction.md", frames=", ".join(str(f) for f in frames[:5]), key=key) if frames else ""),
             say=beat["line"], before=beat["before"], after=beat["after"], words=json.dumps(mine), n=n, total=len(todo), first="", last="",
             start="- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
             env=f'AI_EDITOR_HOME="{os.environ["AI_EDITOR_HOME"]}" ' if os.environ.get("AI_EDITOR_HOME") else "",
@@ -2833,6 +2963,8 @@ def main(argv):
         sub.add_parser(name).add_argument("edit")
     sub.add_parser("bites").add_argument("edit")
     sub.add_parser("subjects").add_argument("edit")
+    sub.add_parser("frames").add_argument("edit")
+    sub.add_parser("filmsheet").add_argument("edit")
     p = sub.add_parser("models"); p.add_argument("edit"); p.add_argument("topic", nargs="?", default="")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
     p = sub.add_parser("claims"); p.add_argument("edit"); p.add_argument("--gate", action="store_true")
@@ -2851,6 +2983,7 @@ def main(argv):
             "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo,
             "charts": lambda: cmd_charts(a.edit), "claims": lambda: cmd_claims(a.edit, a.gate),
             "subjects": lambda: cmd_subjects(a.edit), "models": lambda: cmd_models(a.edit, a.topic),
+            "frames": lambda: cmd_frames(a.edit), "filmsheet": lambda: cmd_filmsheet(a.edit),
             "music": lambda: cmd_music(a.edit, a.feel, a.bpm, a.use), "sfx-setup": cmd_sfx_setup}[a.cmd]()
 
 
