@@ -2372,16 +2372,25 @@ def overlay(S, ov, a, z, W, H, look):
     s, d = min(W, H), z - a
     hold = min(z, a + max(1.6, min(d, 3.2)))
     sh = {"blur": 18, "y": 4, "opacity": 0.7}
-    if ov.get("label"):
-        S.text(str(ov["label"]).upper(), a + 0.08, hold, track="Graphics", x=W / 2, y=H * 0.44, w=int(W * 0.86), size=int(s * 0.15), font=DISPLAY,
-               weight=400, color="#FFFFFF", line_height=1.02, shadow=sh, anim={"in": "pop", "out": "fade", "dur": 0.18})
+    if ov.get("label"):         # lower left, in the kit's own type: a short accent rule, then the words. Not capitals across the middle of the picture
+        lab = str(ov["label"]).strip()
+        if not any(c.islower() for c in lab):       # written in capitals: as a person would write it, small words and units small
+            small = {"a", "an", "the", "of", "in", "on", "or", "and", "to", "per", "km", "m", "kg", "mph", "vs"}
+            ws = lab.lower().split()
+            lab = " ".join(w if (i and w.strip(".,") in small) else w[:1].upper() + w[1:] for i, w in enumerate(ws))
+        ls = min(s * 0.095, W * 0.8 / max(6, len(lab)) * 1.75)
+        x0, y = W * 0.06, H * 0.69
+        S.shape(a + 0.05, hold, track="Graphics", x=x0 + s * 0.035, y=y - ls * 0.82, w=s * 0.07, h=max(4, s * 0.006), radius=3, fill=look["accent"],
+                anim={"in": "fade", "out": "fade", "dur": 0.2}, keys={"w": [[0, 4, "out"], [0.4, s * 0.07, "out"]], "x": [[0, x0 + 2, "out"], [0.4, x0 + s * 0.035, "out"]]})
+        S.text(lab, a + 0.1, hold, track="Graphics", x=x0 + min(W * 0.84, tw(lab, ls, 800)) / 2, y=y, w=int(W * 0.86), size=int(ls), font="Inter",
+               weight=800, color="#FFFFFF", align="left", line_height=1.04, shadow={"blur": 28, "y": 6, "opacity": 0.75}, anim={"in": "slide-up", "out": "fade", "dur": 0.25})
     if ov.get("name"):
         size = s * 0.07
         x0, y = W * 0.055, H * 0.72
         S.shape(a + 0.1, hold, track="Graphics", x=x0 - s * 0.012, y=y + (size * 0.5 if ov.get("role") else 0), w=max(4, s * 0.006), h=size * (2.0 if ov.get("role") else 1.0),
                 fill=look["accent"], anim={"in": "fade", "out": "fade", "dur": 0.2})
-        S.text(str(ov["name"]).upper(), a + 0.1, hold, track="Graphics", x=x0 + anton_w(ov["name"], size) / 2 + s * 0.01, y=y, w=int(W * 0.6), size=int(size),
-               font=DISPLAY, weight=400, color="#FFFFFF", align="left", shadow=sh, anim={"in": "slide-up", "out": "fade", "dur": 0.22})
+        S.text(str(ov["name"]), a + 0.1, hold, track="Graphics", x=x0 + tw(str(ov["name"]), size * 0.8, 800) / 2 + s * 0.01, y=y, w=int(W * 0.6), size=int(size * 0.8),
+               font="Inter", weight=800, color="#FFFFFF", align="left", shadow=sh, anim={"in": "slide-up", "out": "fade", "dur": 0.22})
         if ov.get("role"):
             rs = s * 0.026
             S.text(str(ov["role"]).upper(), a + 0.2, hold, track="Graphics", x=x0 + tw(str(ov["role"]).upper(), rs, 600) / 2 + s * 0.01, y=y + size * 1.0, w=int(W * 0.6),
