@@ -1488,7 +1488,7 @@ def write_stems(edit, tm, sound, mix, bed, v, landed, dg):
             f = d / f"voice-{i + 1:02d}-{r['id']}.wav"
             tmp = d / "piece.wav"
             sound.write_wav(tmp, v[:, a:z])        # as recorded; the level and the ceiling are given by a look-ahead limiter, as the master does it
-            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(tmp), "-af", f"volume={g:.4f},alimiter=limit=0.84:attack=3:release=80:level=false",
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(tmp), "-af", f"volume={g:.4f},alimiter=limit=0.78:attack=3:release=80:level=false",
                             "-ar", str(sr), "-c:a", "pcm_s16le", str(f)], check=True)
             tmp.unlink()
             out["voice"].append({"id": r["id"], "file": f"audio/stems/{f.name}", "at": round(a / sr, 3), "dur": round((z - a) / sr, 3)})
