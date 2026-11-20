@@ -163,7 +163,7 @@
   // ---- the bell: what needs you, quietly. Claude's question opens from here, never over the whole window.
   var bell = { open: false, last: '', seen: {} };
   try { bell.seen = JSON.parse(localStorage.getItem('fw-seen') || '{}'); } catch (e) {}
-  function asking() { var a = document.getElementById('askq'); return !!(a && a.classList.contains('on')); }
+  function asking() { var a = document.getElementById('askq'); return !!(a && (a.classList.contains('on') || a.querySelector('.aq-opt, #asko'))); }   // a question the video's own page also has is drawn but not opened: it still counts
   function items() {
     var out = [];
     if (asking()) out.push({ id: 'ask', kind: 'ask', t: 'A question about your video', s: 'Answer it to carry on', js: "studioAsk()" });
@@ -179,7 +179,7 @@
     } catch (e) {}
     return out;
   }
-  window.studioAsk = function () { document.body.classList.add('fw-ask'); studioBell(false); };
+  window.studioAsk = function () { document.body.classList.add('fw-ask'); if (window.askOpen) window.askOpen(); studioBell(false); };
   window.studioBell = function (on) {
     bell.open = on === undefined ? !bell.open : !!on;
     if (bell.open) { items().forEach(function (i) { bell.seen[i.id] = 1; }); try { localStorage.setItem('fw-seen', JSON.stringify(bell.seen)); } catch (e) {} }

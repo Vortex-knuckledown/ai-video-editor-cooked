@@ -174,10 +174,11 @@ def find_models(topic, search_youtube, subs_of, views_of, n=3):
                 text.append(t)
             last = t or last
         full = re.sub(r"\s+", " ", " ".join(text))
-        full = full if re.search(r"[.!?]", full[:600]) else re.sub(r"(\S+(?:\s+\S+){12})\s", r"\1. ", full)   # no punctuation: every 13 words, to have sentences to count
+        punct = len(re.findall(r"[.!?](?:\s|$)", full)) >= max(8, len(full.split()) / 40)     # automatic subtitles have no sentences to count
         step = max(1, len(subs) // 7)
         out.append({"id": c["id"], "title": c["title"], "channel": c.get("channel", ""), "views": c["views"], "minutes": round(c["duration"] / 60, 1),
-                    "measure": {**measure(full, c["duration"]), "hook": " ".join(full.split()[:25])},
+                    "measure": {**measure(full, c["duration"]), "hook": " ".join(full.split()[:25]),
+                                **({} if punct else {k: None for k in ("sentence", "short", "long", "questions", "open")})},
                     "outline": [(f"{int(a) // 60}:{int(a) % 60:02d}", " ".join(t.split()[:9])) for a, _, t in subs[::step]][:8]})
         if len(out) >= n:
             break
@@ -191,7 +192,8 @@ def models_md(topic, rows, mine=None):
     keys = ("wpm", "sentence", "short", "long", "questions", "you", "numbers", "open")
     label = {"wpm": "words a minute", "sentence": "words in a sentence", "short": "share of sentences of 8 words or fewer", "long": "share of sentences over 22 words",
              "questions": "questions in 100 sentences", "you": "\"you\" in 100 words", "numbers": "numbers in 100 words", "open": "words in the first sentence"}
-    avg = {k: round(sum((r["measure"][k] or 0) for r in rows) / len(rows), 2) for k in keys}
+    have = lambda k: [r["measure"][k] for r in rows if r["measure"].get(k) is not None]   # noqa: E731
+    avg = {k: (round(sum(have(k)) / len(have(k)), 2) if have(k) else "not measurable (no punctuation in their subtitles): use story.md's") for k in keys}
     out = [f"# Models for: {topic}", "", "The most-watched videos on this topic, measured. Write the script to the TARGET column. Their words are theirs:",
            "take the shape (how it opens, when it turns, how it pays off), never a sentence.", ""]
     for r in rows:
@@ -200,7 +202,7 @@ def models_md(topic, rows, mine=None):
     out += ["## The measures", "", "| | " + " | ".join(f"model {i + 1}" for i in range(len(rows))) + " | TARGET |" + (" this draft |" if mine else ""),
             "|---|" + "---|" * (len(rows) + 1 + bool(mine))]
     for k in keys:
-        out.append(f"| {label[k]} | " + " | ".join(str(r["measure"][k]) for r in rows) + f" | **{avg[k]}** |" + (f" {mine[k]} |" if mine else ""))
+        out.append(f"| {label[k]} | " + " | ".join("-" if r["measure"][k] is None else str(r["measure"][k]) for r in rows) + f" | **{avg[k]}** |" + (f" {mine[k]} |" if mine else ""))
     return "\n".join(out) + "\n"
 
 
@@ -208,7 +210,9 @@ def draft_gaps(mine, rows):
     """Where a draft reads unlike the videos people watched. Plain sentences to fix, most important first."""
     if not rows:
         return []
-    avg = lambda k: sum((r["measure"][k] or 0) for r in rows) / len(rows)   # noqa: E731
+    def avg(k):         # a measure none of them has (unpunctuated subtitles) falls back to how spoken explainers read
+        v = [r["measure"][k] for r in rows if r["measure"].get(k) is not None]
+        return sum(v) / len(v) if v else {"open": 11, "sentence": 13, "short": 0.3, "questions": 4, "you": 1.5}.get(k, 0)
     out = []
     if mine["open"] > max(14, avg("open") * 1.5):
         out.append(f"the first sentence is {mine['open']} words; theirs open in about {avg('open'):.0f}. Open on the one fact or question that makes someone stay")
