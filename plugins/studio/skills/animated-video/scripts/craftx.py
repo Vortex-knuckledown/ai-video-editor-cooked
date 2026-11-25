@@ -106,9 +106,21 @@ def front(f):
         return f.parent.name, ""
     m = re.match(r"---\s*\n(.*?)\n---", t, re.S)
     fm = m.group(1) if m else ""
-    name = (re.search(r"^name:\s*(.+)$", fm, re.M) or [None, ""])[1].strip().strip("\"'") or f.parent.name
-    d = re.search(r"^description:\s*(?:[>|][+-]?\s*\n)?((?:.+\n?)+?)(?=^\w[\w-]*:|\Z)", fm, re.M)
-    desc = re.sub(r"\s+", " ", d.group(1)).strip().strip("\"'") if d else ""
+    name, desc, on = "", [], False
+    for ln in fm.splitlines():            # read line by line: one pattern over the whole block can take hours on an odd file
+        if on and (ln[:1] in " \t" or not ln.strip()):
+            desc.append(ln.strip())
+            continue
+        on = False
+        k, _, v = ln.partition(":")
+        if k.strip() == "name":
+            name = v.strip().strip("\"'")
+        elif k.strip() == "description":
+            on = True
+            v = v.strip()
+            desc = [] if v in (">", "|", ">-", "|-", ">+", "|+") else [v]
+    name = name or f.parent.name
+    desc = re.sub(r"\s+", " ", " ".join(desc)).strip().strip("\"'")
     if not desc:
         body = t[m.end():] if m else t
         p = [x.strip() for x in body.split("\n\n") if x.strip() and not x.strip().startswith(("#", "```", "|", "<"))]
