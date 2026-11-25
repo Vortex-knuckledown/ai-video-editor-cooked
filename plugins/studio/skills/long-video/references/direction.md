@@ -46,7 +46,9 @@ Write `direction.md`, a page a stranger could build from:
   depth is shown (blur, haze, light), what texture sits over everything (grain, none).
 - **Light and camera.** Where the light comes from. How the camera moves (slow push, orbit, track) and how fast.
   One language for the whole film.
-- **Motion.** The easing every move uses, how things arrive and leave, how one scene hands over to the next.
+- **Motion.** The film's two or three cuts and its one camera habit, chosen from `references/motion.md` (events on
+  the spoken words, arrivals, the camera, cuts made at speed). Every scene paragraph below lists its events in order,
+  each with the word it lands on.
 - **What recurs.** The two or three things the viewer will see again and again (the same Earth, the same character,
   the same chart style), so the film has a memory.
 - **Every scene, a paragraph each, by its id.** What fills the frame (the subject large, at least half its height),
@@ -102,8 +104,9 @@ of those scenes back to a builder with its brief (the brief tells it to read `no
 Two rounds at most; a scene that still fails is replaced by its fallback graphic. Never show the user a film whose
 sheets you have not looked at.
 
-Before the reviewer, measure: `python3 "$PY" "$L" look EDIT` runs every scene and the finished video through a script
-that finds runs of empty frames, frozen stretches, an end that holds too long and loudness off target. Fix every `FIX`.
+Before the reviewer, measure: `python3 "$PY" "$L" look EDIT` measures every scene and the finished video: empty
+frames, frozen stretches, a median change under 2.0 a frame, and any whole second quieter than 1.0 (a slide). Send
+every `FIX` scene back to a builder with the line `look` printed in its `notes.md`; the rules are `references/motion.md`.
 
 The reviewer is never the builder (the rule of `plugins/studio/craft/motion-film/references/gauntlet.md`, whose
 `critic-prompts.md` has the wording): it sees only the sheets and the brief, lists faults, and the next round's

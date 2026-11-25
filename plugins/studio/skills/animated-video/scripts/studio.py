@@ -993,6 +993,24 @@ CRAFT_NOTE = f"""Start from proven work, not from a blank page:
 BRIEF = BRIEF.replace("@@CRAFT@@", CRAFT_NOTE)
 
 
+def motion_note(run, edit, key, dur):
+    """The part of a brief that stops a scene being a slide: the events it must have, how it is measured, the rules page."""
+    here = Path(__file__).resolve()
+    ref = here.parents[2] / "long-video" / "references" / "motion.md"
+    lv = here.parents[2] / "long-video" / "scripts" / "longvideo.py"
+    lo, hi = max(2, round(dur / 3.0) + 1), max(3, round(dur / 1.6))
+    return (f"- **This scene must move like a film, not a slide. Read `{ref}` before you write the timeline; it is short and it is the law here.**\n"
+            f"  - First write the events as a comment at the top of the timeline: time, what happens, the spoken word it lands on (the words and their times are above). "
+            f"This scene is {dur:.1f} s: {lo} to {hi} events, one at least every 2 to 3 s, the first inside 0.5 s. At t=0 only what the first words name is on screen; "
+            "each further piece ARRIVES on the word that names it. Nothing sits finished while the voice is still explaining it.\n"
+            "  - One camera on one wrapper, moving with intent from the first frame to the last and going to each new subject as it is named; three depth layers under it. "
+            "What stays on screen is alive by what it does (filling, drawing, counting, flowing), never by breathing or floating. Swaps inside the scene are cut at speed, "
+            "same direction, never crossfaded. Arrivals 0.35 to 0.6 s `power3.out` or `expo.out` on two or three properties; no bounce, no elastic, no overshoot on numbers.\n"
+            f"  - After `check` passes, MEASURE it: `python3 \"{run}\" \"{lv}\" look \"{edit}\" --only {key}`. It must print `ok`: a median change of 2.0 a frame or more "
+            "and no whole second under 1.0. A `FIX` names the quiet seconds: give them the next event, a camera arrival or a live inside (never grain, flicker or a wobble), "
+            "then check and measure again. Do not hand the scene back while it prints `FIX`.\n")
+
+
 def craft_ext_note():
     """One line for a brief when the wider craft library is on this computer (craftx.py setup), else nothing."""
     try:
@@ -1405,7 +1423,7 @@ def cmd_briefs(edit):
             say=beat["line"], before=beat["before"], after=beat["after"], words=json.dumps(beat["words"]),
             n=k + 1, total=len(rows), first=" The first scene: it hooks in the first second." if k == 0 else "",
             last=" The last scene: it lands the idea and holds its final state." if k + 1 == len(rows) else "",
-            start=craft_ext_note() + "- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
+            start=motion_note(root / "lib" / "ai_editor" / "run.py", edit, r["id"], beat["dur"]) + craft_ext_note() + "- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
             env=f'AI_EDITOR_HOME="{os.environ["AI_EDITOR_HOME"]}" ' if os.environ.get("AI_EDITOR_HOME") else "",
             run=root / "lib" / "ai_editor" / "run.py", motion=root / "skills" / "motion" / "scripts" / "motion.py",
             rounds=motion.ROUNDS), encoding="utf-8")

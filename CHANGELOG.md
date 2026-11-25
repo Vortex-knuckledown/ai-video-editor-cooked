@@ -4,6 +4,14 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **Scenes that move like a film, measured.** A new rules page (`long-video/references/motion.md`), drawn from
+  working motion designers and the best open-source motion skills: a scene is planned as events on the spoken words
+  (something new every 2 to 3 s, nothing front-loaded), one camera that moves with intent, things kept alive by what
+  they do instead of breathing, and cuts made at speed. Every scene brief now carries it, and the builder measures
+  its own scene (`look EDIT --only <scene>`) before handing it back. `look` now fails a scene whose median change is
+  under 2.0 a frame (was 1.2) or that has any whole second quieter than 1.0.
+- Two more craft packs, with their licences: Motify's motion doctrine and velocity-matched cuts (Apache-2.0) and the
+  LottieFiles motion-design tables (MIT).
 - **One setup that downloads everything, into one folder.** The app stays about 25 MB. Start setup on a new computer
   (or "Launch setup" on Home when something is missing) now also fetches the studio's own downloads: the narrator
   voice, the Studio voice, the thumbnail cut-out model and font, the 3D engine and kit, the sound effects and the

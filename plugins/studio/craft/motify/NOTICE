@@ -1,0 +1,6 @@
+Motify (formerly Motionly) by COPPSARY, github.com/COPPSARY/Motify, Apache License 2.0 (see LICENSE).
+
+Files here are copied from its .agents/skills folders (faceless-explainer/references, cut-the-curve,
+motion-doctrine/references) on 26 November 2026. Changes: files renamed and flattened into one folder; em dashes
+replaced with colons or commas. Paths inside the text that point at other Motify files are left as written and do
+not resolve here.

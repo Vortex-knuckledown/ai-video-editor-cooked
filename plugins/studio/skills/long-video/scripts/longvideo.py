@@ -1732,6 +1732,11 @@ def cmd_frames(edit):
     return 0
 
 
+MOTION_MIN = 2.0   # a scene's median change a frame, on the 96x54 luma frame: films people made measure 4.4 to 9.8; ours measured 0.6 to 2.4 and read as slides.
+                   # Not higher: a drifting camera would buy the number and is worse than stillness. The quiet seconds are the real test (references/motion.md)
+QUIET = 1.0        # a whole second under this is a slide, wherever the median lands
+
+
 def look_at(f, fps_default=30.0):
     """A film measured the way craft/motionmaxxing's look.py does (its thresholds, on a 96x54 luma frame): runs of more
     than 3 empty frames (std under 1.5), stretches of 0.6 s or more where nothing changes (mean change under 0.35 of
@@ -1762,16 +1767,24 @@ def look_at(f, fps_default=30.0):
                     out.append((round((i - k) / fps, 2), round(i / fps, 2)))
                 k = 0
         return out
+    n = max(1, int(fps))                      # the quiet seconds: whole seconds whose average change is under QUIET, joined
+    quiet = runs([float(np.mean(diffs[i:i + n])) < QUIET for i in range(1, max(1, len(diffs) - n + 1))], 1)
+    quiet = [(a, round(z + 1.0, 2)) for a, z in quiet]
     return {"empty": runs(flat, 4), "frozen": runs([d < 0.35 for d in diffs], int(0.6 * fps)), "motion": round(float(np.median(diffs)) if diffs else 0.0, 2),
-            "seconds": round(len(diffs) / fps, 2)}
+            "quiet": quiet, "seconds": round(len(diffs) / fps, 2)}
 
 
-def cmd_look(edit):
+def cmd_look(edit, only=None):
     """Measures every animated scene and the finished video: empty frames, frozen stretches, how much the picture
-    moves. Prints a FIX for each scene that fails, with the times."""
+    moves and which seconds are too quiet. Prints a FIX for each scene that fails, with the times. --only: just these
+    scenes, from their latest render even when another gate still fails (what a scene's builder runs after each check)."""
     edit = Path(edit).resolve()
-    films = [(sp["key"], studio.clip_of(edit, sp["key"])) for sp in spans(edit) if sp["shot"]["kind"] == "motion"]
-    films = [(k, f) for k, f in films if f] + ([("video", edit / "render.mp4")] if (edit / "render.mp4").is_file() else [])
+    if only:
+        films = [(k, edit / "motion" / k / "renders" / "clip.mp4") for k in only]
+        films = [(k, f) for k, f in films if f.is_file()]
+    else:
+        films = [(sp["key"], studio.clip_of(edit, sp["key"])) for sp in spans(edit) if sp["shot"]["kind"] == "motion"]
+        films = [(k, f) for k, f in films if f] + ([("video", edit / "render.mp4")] if (edit / "render.mp4").is_file() else [])
     bad = 0
     for key, f in films:
         m = look_at(f)
@@ -1785,8 +1798,10 @@ def cmd_look(edit):
         fz = [x for x in m["frozen"] if key != "video" or x[1] - x[0] >= 1.5]      # in the whole video a held photograph is normal; a long one is not
         if fz:
             why.append("nothing moves at " + ", ".join(f"{a}-{z} s" for a, z in fz[:4]))
-        if key != "video" and m["motion"] < 1.2:
-            why.append(f"it barely moves (change {m['motion']} a frame; films people made measure 4 to 10)")
+        if key != "video" and m["motion"] < MOTION_MIN:
+            why.append(f"it moves too little (change {m['motion']} a frame; it must reach {MOTION_MIN}, films people made measure 4 to 10)")
+        if key != "video" and m["quiet"]:
+            why.append("too quiet at " + ", ".join(f"{a}-{z} s" for a, z in m["quiet"][:4]) + " (give those seconds a camera move, a second layer moving, or the next event)")
         if why:
             bad += 1
         print(("FIX  " if why else "ok   ") + f"{key}: " + ("; ".join(why) if why else f"moves {m['motion']} a frame, no empty or frozen stretch"))
@@ -1907,7 +1922,7 @@ def cmd_briefs(edit):
             title=sc.get("title") or "", prompt=b.get("prompt") or "", look=json.dumps(look),
             visual=visual + (DIRECTION_NOTE.format(md=ddir / "direction.md", frames=", ".join(str(f) for f in frames[:5]), key=key) if frames else ""),
             say=beat["line"], before=beat["before"], after=beat["after"], words=json.dumps(mine), n=n, total=len(todo), first="", last="",
-            start=studio.craft_ext_note() + "- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
+            start=studio.motion_note(root / "lib" / "ai_editor" / "run.py", edit, key, dur) + studio.craft_ext_note() + "- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
             env=f'AI_EDITOR_HOME="{os.environ["AI_EDITOR_HOME"]}" ' if os.environ.get("AI_EDITOR_HOME") else "",
             run=root / "lib" / "ai_editor" / "run.py", motion=root / "skills" / "motion" / "scripts" / "motion.py",
             rounds=motion.ROUNDS), encoding="utf-8")
@@ -3127,7 +3142,9 @@ def main(argv):
     sub.add_parser("subjects").add_argument("edit")
     sub.add_parser("frames").add_argument("edit")
     sub.add_parser("filmsheet").add_argument("edit")
-    sub.add_parser("look").add_argument("edit")
+    q = sub.add_parser("look")
+    q.add_argument("edit")
+    q.add_argument("--only", nargs="*")
     p = sub.add_parser("models"); p.add_argument("edit"); p.add_argument("topic", nargs="?", default="")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
     p = sub.add_parser("claims"); p.add_argument("edit"); p.add_argument("--gate", action="store_true")
@@ -3146,7 +3163,7 @@ def main(argv):
             "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo,
             "charts": lambda: cmd_charts(a.edit), "claims": lambda: cmd_claims(a.edit, a.gate),
             "subjects": lambda: cmd_subjects(a.edit), "models": lambda: cmd_models(a.edit, a.topic),
-            "frames": lambda: cmd_frames(a.edit), "filmsheet": lambda: cmd_filmsheet(a.edit), "look": lambda: cmd_look(a.edit), "graphics": lambda: cmd_graphics(a.edit, a.only),
+            "frames": lambda: cmd_frames(a.edit), "filmsheet": lambda: cmd_filmsheet(a.edit), "look": lambda: cmd_look(a.edit, a.only), "graphics": lambda: cmd_graphics(a.edit, a.only),
             "music": lambda: cmd_music(a.edit, a.feel, a.bpm, a.use), "sfx-setup": cmd_sfx_setup}[a.cmd]()
 
 
