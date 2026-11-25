@@ -344,6 +344,11 @@ def cmd_check(edit):
         print(f"FIX  {kinds['photo']} photo shots: 20 at most (the picture sites are slow). Make the others clips or graphics")
         return 1
     g = sum(kinds[k] for k in GRAPHICS) + kinds["motion"]
+    marks = g + kinds["chart3d"] + sum(1 for sh in shots if isinstance(sh.get("over"), dict))
+    if mode != "animated" and est / max(1, marks) > 9.0:
+        print(f"FIX  {marks} graphics in {est:.0f} s (one every {est / max(1, marks):.0f} s): an edited video puts a number, a name, a label or a chart on screen every "
+              "5 to 8 seconds, landing on the word that earns it. Add \"over\" to more shots, or a kit graphic")
+        return 1
     if mode == "real" and g > 0.2 * len(shots):
         print(f"FIX  {g} of {len(shots)} shots are graphics in a real-footage video: 1 in 5 at most; say the rest with \"over\" on the footage")
         return 1
@@ -1727,6 +1732,68 @@ def cmd_frames(edit):
     return 0
 
 
+def look_at(f, fps_default=30.0):
+    """A film measured the way craft/motionmaxxing's look.py does (its thresholds, on a 96x54 luma frame): runs of more
+    than 3 empty frames (std under 1.5), stretches of 0.6 s or more where nothing changes (mean change under 0.35 of
+    255), and how much the picture moves on average (films people made: about 4.4 to 9.8). Returns
+    {"empty": [(a, b)], "frozen": [(a, b)], "motion": x, "seconds": s}; times in seconds."""
+    import cv2
+    import numpy as np
+    cap = cv2.VideoCapture(str(f))
+    fps = cap.get(cv2.CAP_PROP_FPS) or fps_default
+    prev, flat, diffs = None, [], []
+    while True:
+        ok, fr = cap.read()
+        if not ok:
+            break
+        g = cv2.cvtColor(cv2.resize(fr, (96, 54), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY).astype(np.float32)
+        flat.append(bool(g.std() < 1.5 and g.max() - g.min() < 8))
+        diffs.append(float(np.abs(g - prev).mean()) if prev is not None else 9.0)
+        prev = g
+    cap.release()
+
+    def runs(mask, least):
+        out, k = [], 0
+        for i, m in enumerate(list(mask) + [False]):
+            if m:
+                k += 1
+            else:
+                if k >= least:
+                    out.append((round((i - k) / fps, 2), round(i / fps, 2)))
+                k = 0
+        return out
+    return {"empty": runs(flat, 4), "frozen": runs([d < 0.35 for d in diffs], int(0.6 * fps)), "motion": round(float(np.median(diffs)) if diffs else 0.0, 2),
+            "seconds": round(len(diffs) / fps, 2)}
+
+
+def cmd_look(edit):
+    """Measures every animated scene and the finished video: empty frames, frozen stretches, how much the picture
+    moves. Prints a FIX for each scene that fails, with the times."""
+    edit = Path(edit).resolve()
+    films = [(sp["key"], studio.clip_of(edit, sp["key"])) for sp in spans(edit) if sp["shot"]["kind"] == "motion"]
+    films = [(k, f) for k, f in films if f] + ([("video", edit / "render.mp4")] if (edit / "render.mp4").is_file() else [])
+    bad = 0
+    for key, f in films:
+        m = look_at(f)
+        if not m["seconds"]:
+            bad += 1
+            print(f"FIX  {key}: could not be read")
+            continue
+        why = []
+        if m["empty"]:
+            why.append("empty frames at " + ", ".join(f"{a}-{z} s" for a, z in m["empty"][:4]))
+        fz = [x for x in m["frozen"] if key != "video" or x[1] - x[0] >= 1.5]      # in the whole video a held photograph is normal; a long one is not
+        if fz:
+            why.append("nothing moves at " + ", ".join(f"{a}-{z} s" for a, z in fz[:4]))
+        if key != "video" and m["motion"] < 1.2:
+            why.append(f"it barely moves (change {m['motion']} a frame; films people made measure 4 to 10)")
+        if why:
+            bad += 1
+        print(("FIX  " if why else "ok   ") + f"{key}: " + ("; ".join(why) if why else f"moves {m['motion']} a frame, no empty or frozen stretch"))
+    print(f"LOOK {len(films)} measured, {bad} to fix")
+    return 1 if bad else 0
+
+
 def cmd_filmsheet(edit):
     """Every animated scene of the film side by side, in order (its first, middle and last frame), to judge as one film:
     EDIT/sheets/film-N.jpg, 4 scenes a sheet, each row labelled with its shot."""
@@ -1822,6 +1889,9 @@ def cmd_briefs(edit):
         shutil.copy(root / "skills" / "motion" / "template" / "hyperframes.json", d / "hyperframes.json")
         if gsap.exists():
             shutil.copy(gsap, d / "assets" / "gsap.min.js")
+        mj = studio.CRAFT / "motionmaxxing" / "runtime" / "motion.js"      # the measured-ease runtime (craft/motionmaxxing, Apache-2.0)
+        if mj.is_file():
+            shutil.copy(mj, d / "assets" / "motion.js")
         for f in ("system.css", "system.js"):       # the film's design system, the same file in every scene
             if (ddir / f).is_file():
                 shutil.copy(ddir / f, d / "assets" / f)
@@ -3057,6 +3127,7 @@ def main(argv):
     sub.add_parser("subjects").add_argument("edit")
     sub.add_parser("frames").add_argument("edit")
     sub.add_parser("filmsheet").add_argument("edit")
+    sub.add_parser("look").add_argument("edit")
     p = sub.add_parser("models"); p.add_argument("edit"); p.add_argument("topic", nargs="?", default="")
     p = sub.add_parser("find"); p.add_argument("edit"); p.add_argument("--only", nargs="*")
     p = sub.add_parser("claims"); p.add_argument("edit"); p.add_argument("--gate", action="store_true")
@@ -3075,7 +3146,7 @@ def main(argv):
             "bites": lambda: cmd_bites(a.edit), "qa": lambda: cmd_qa(a.edit), "tools": cmd_tools, "demo": demo,
             "charts": lambda: cmd_charts(a.edit), "claims": lambda: cmd_claims(a.edit, a.gate),
             "subjects": lambda: cmd_subjects(a.edit), "models": lambda: cmd_models(a.edit, a.topic),
-            "frames": lambda: cmd_frames(a.edit), "filmsheet": lambda: cmd_filmsheet(a.edit), "graphics": lambda: cmd_graphics(a.edit, a.only),
+            "frames": lambda: cmd_frames(a.edit), "filmsheet": lambda: cmd_filmsheet(a.edit), "look": lambda: cmd_look(a.edit), "graphics": lambda: cmd_graphics(a.edit, a.only),
             "music": lambda: cmd_music(a.edit, a.feel, a.bpm, a.use), "sfx-setup": cmd_sfx_setup}[a.cmd]()
 
 

@@ -96,3 +96,13 @@ For every scene that fails it writes `motion/<key>/notes.md` saying exactly what
 of those scenes back to a builder with its brief (the brief tells it to read `notes.md`), then `filmsheet` again.
 Two rounds at most; a scene that still fails is replaced by its fallback graphic. Never show the user a film whose
 sheets you have not looked at.
+
+Before the reviewer, measure: `python3 "$PY" "$L" look EDIT` runs every scene and the finished video through a script
+that finds runs of empty frames, frozen stretches, an end that holds too long and loudness off target. Fix every `FIX`.
+
+The reviewer is never the builder (the rule of `plugins/studio/craft/motion-film/references/gauntlet.md`, whose
+`critic-prompts.md` has the wording): it sees only the sheets and the brief, lists faults, and the next round's
+reviewer is a new one that marks each fault FIXED, PARTLY or STILL PRESENT. Give it the thirteen passes of
+`plugins/studio/craft/video-critique/critique.md` (what is seen in one second, one accent, one dominant thing a
+frame, sameness three in a row, generated-look tells, phone legibility, empty frames) and the never-ship table of
+`plugins/studio/craft/motionmaxxing/references/slop.md`. If a first score is 9 out of 10, score it again.

@@ -968,6 +968,20 @@ CRAFT_NOTE = f"""Start from proven work, not from a blank page:
   `{CRAFT / "chart-animation" / "SKILL.md"}` and `{CRAFT / "animated-infographic" / "SKILL.md"}` (a chart or a diagram),
   `{CRAFT / "threejs-lighting" / "SKILL.md"}`, `{CRAFT / "threejs-materials" / "SKILL.md"}` and
   `{CRAFT / "threejs-postprocessing" / "SKILL.md"}` (anything in 3D).
+- **What separates made from generated** (measured on films people made; read
+  `{CRAFT / "motionmaxxing" / "references" / "slop.md"}` for the full table, `{CRAFT / "motionmaxxing" / "references" / "motion.md"}`
+  for the numbers and `{CRAFT / "motionmaxxing" / "references" / "world.md"}` for the frame):
+  an entry takes about 12 frames (0.4 s), not 20 to 30; it lands by slowing down (most of its travel in the first 4
+  frames: `cubic-bezier(0.16,1,0.3,1)`) and leaves by speeding up; almost nothing fades in (things arrive by moving
+  or being uncovered; opacity is a 4 to 6 frame helper); siblings start 1 to 3 frames apart, unevenly; one spring at
+  most in a film. Frame 0 is already a finished picture. No run of more than 3 empty frames, no hold over 0.6 s
+  without something alive. The subject fills 60 to 85% of the frame, one hero a frame, nothing within 60 px of the
+  edge. Every frame is a world: a ground, a key and a rim light with a contact shadow, two or three depth planes,
+  a texture. Never: a card on a flat colour, corner labels, "02 / TITLE" counters, a progress bar, a headline left
+  and a device right. Words are held still while they are read (1 s, plus 0.25 s a word past three).
+- **A runtime that keeps to those numbers.** `assets/motion.js` (needs only GSAP, already loaded) gives
+  `Motion.film()` with the measured eases, `enter`, `exit`, `words`, `type` and `cut`; its notes are at the top of the
+  file. Use it or plain GSAP, never both on one element.
 - **One film.** The look is the video's own (given above, and in the film's direction when the brief names one): its
   ground, its type, its accent, its panels. Fill the frame: the subject large and lit, depth behind it, a camera that
   moves. Never thin lines alone on an empty dark frame, no gradient text, no drop-shadowed clip art.
@@ -1366,6 +1380,8 @@ def cmd_briefs(edit):
         shutil.copy(root / "skills" / "motion" / "template" / "hyperframes.json", d / "hyperframes.json")
         if gsap.exists():
             shutil.copy(gsap, d / "assets" / "gsap.min.js")
+        if (CRAFT / "motionmaxxing" / "runtime" / "motion.js").is_file():     # the measured-ease runtime (craft/motionmaxxing, Apache-2.0)
+            shutil.copy(CRAFT / "motionmaxxing" / "runtime" / "motion.js", d / "assets" / "motion.js")
         jsave(d / "beat.json", beat)
         three = THREE_NOTE if three_assets(d) else ""
         if sc.get("style3d") and s.get("world"):       # a shot in one of the video's worlds

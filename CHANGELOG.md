@@ -4,6 +4,25 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **Proven craft, adopted.** From a survey of 548 open-source video skills (awesome-claude-video-skills), the
+  permissively licensed ones that fit were read in full and five were vendored unchanged with their licences in
+  `plugins/studio/craft/`: `motionmaxxing` (Apache-2.0: measured durations, eases and stagger; the table of what a
+  generated video does beside what a professional does; how a frame becomes a world; 20 scene joins; a seek-safe GSAP
+  runtime), `claude-motion` (MIT: motion rules, a render-look-fix loop, a three.js stage, a sound synth),
+  `motion-film` (MIT: a quality bar and a critic loop in which the builder never grades itself), `video-critique`
+  (MIT: thirteen passes over a contact sheet), `narration` (MIT: sentence rules for the ear) and `editing-recipes`
+  (Apache-2.0: graphic density, punch-ins, freeze frames, caption styles, how Shorts are chosen). Projects under
+  AGPL or with no licence were read for ideas only and nothing of theirs is in the product.
+- **Scenes are measured, not only looked at.** `look` measures every animated scene and the finished video: runs of
+  empty frames, stretches where nothing moves, and how much the picture changes a frame. First finding on our own
+  work: our scenes change 0.6 to 2.75 a frame where films people made measure 4.4 to 9.8.
+- **The builders are told the numbers.** Every scene brief now carries them (an entry in 0.4 s, landing by slowing
+  down, almost nothing fading in, the subject 60 to 85% of the frame, frame 0 already a finished picture, no hold
+  over 0.6 s without something alive) and gets the measured-ease runtime as `assets/motion.js`.
+- **A graphic every 5 to 8 seconds.** `check` refuses a script whose numbers, names and labels come less often than
+  one in 9 seconds.
+- **Eight rules of a story that holds** in the script method: the ending, the opening and both turns known first;
+  open on a moment; every section turns something; a false win or defeat in the middle; a second hook half way.
 - **Topic ideas.** Home has "Find topics people are watching": type a niche and the app goes on YouTube for it,
   showing the most-watched and the newest videos with their views. One click starts your own video on that topic,
   researched and written fresh.

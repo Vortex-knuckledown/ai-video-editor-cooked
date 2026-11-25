@@ -92,6 +92,29 @@ scenes.json with `"part": "hook" | "intro" | "story" | "ending"`; `check` refuse
 4. **Ending** (the last 2 to 4 lines). Return to the opening: say its question or its picture again, and answer it
    now that the viewer knows what they know. Then one last thought to leave with. No list of what was covered.
 
+**Eight rules of a story that holds** (from screenwriting craft, turned to narration; write them into beats.md
+before the script):
+
+1. **Know four things first**: the ending, the opening, and the two turns (where the story changes direction about
+   a quarter in, and again about three quarters in). Do not start writing lines until all four are one sentence each.
+2. **Open on a moment, not on information.** Start near the most dramatic point: one place, one time, something
+   happening. Never answer the video's question in the opening. If the opening borrows from the ending, take the
+   moment before the climax, not after it.
+3. **Every section turns something.** Mark each section's start and end as better or worse for the subject. If both
+   are the same, the section is only explaining: cut it and put its fact inside a section that moves.
+4. **The middle is a false win or a false defeat**, and about three quarters in comes its opposite. A middle that
+   sags is repeating the first part at the same size.
+5. **Each setback teaches one new thing.** After every failure or surprise, write the sentence the viewer now knows.
+   A step with no new sentence is merged into another.
+6. **Decide who knows what, and when.** Tell the viewer the danger is real early; hold back what it is. Hold the
+   best fact for the moment it hurts or delights most, never the first moment it could be said.
+7. **A second hook at the halfway point**: a line that reopens the question bigger than before.
+8. **Sections get shorter toward the end.** Enter each one late and leave before it resolves. Once the ending is
+   written, read backwards: every part must be there because the ending needs it.
+
+Sentence rules for the ear are in `plugins/studio/craft/narration/writing.md` (8 to 18 words, one idea a sentence,
+every sentence adds a fact, about 2.4 words a second); use them for hygiene, and this page for the story.
+
 The voice is one person explaining to a friend who is curious: warm, unhurried, "you" and "we", full sentences that
 lead into each other ("and that is where it gets strange", "so here is what they did"). A fact is given its meaning,
 not just stated. It is a told story, never notes read aloud.
