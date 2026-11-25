@@ -4,6 +4,11 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **Real 3D graphics.** Bars, a number, a tier list, a document and exploded layers are now drawn by three.js on one
+  lit stage (`long-video/templates/stage3d.js`): chrome columns on a mirror floor that really reflects, slabs of glass
+  that refract the video's own footage behind them, a document in perspective with its line marked, plates that come
+  apart with labels, and a camera that travels. The same shot fields as before; the flat kit draws any that does not
+  render, and `"graphics": "flat"` in the brief keeps a video on it.
 - **Scenes that move like a film, measured.** A new rules page (`long-video/references/motion.md`), drawn from
   working motion designers and the best open-source motion skills: a scene is planned as events on the spoken words
   (something new every 2 to 3 s, nothing front-loaded), one camera that moves with intent, things kept alive by what

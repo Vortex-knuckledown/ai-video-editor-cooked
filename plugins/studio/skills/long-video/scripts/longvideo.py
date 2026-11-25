@@ -51,6 +51,7 @@ import studio  # noqa: E402  (the voice, the words, the render; finding the edit
 from studio import jload, jsave, duration  # noqa: E402
 import streamclips  # noqa: E402  (yt-dlp, the cover image)
 import motionkit  # noqa: E402  (graphics with depth, glass and light, rendered as clips)
+import motionkit3d  # noqa: E402  (the same graphics in real 3D: chrome, glass, a mirror floor)
 import storytools  # noqa: E402  (the subjects' real material, the watched videos measured)
 
 MEDIA = ("clip", "stock", "photo", "own", "ai", "bite")
@@ -1021,7 +1022,8 @@ def cmd_graphics(edit, only=None):
     gsap = motion.home() / "motion" / "node_modules" / "gsap" / "dist" / "gsap.min.js"
 
     import hashlib
-    kit_ver = hashlib.sha256(Path(motionkit.__file__).read_bytes()).hexdigest()[:12]      # a changed kit draws every graphic again
+    kit_ver = hashlib.sha256(Path(motionkit.__file__).read_bytes() + Path(motionkit3d.__file__).read_bytes() + motionkit3d.STAGE.read_bytes()).hexdigest()[:12]   # a changed kit draws every graphic again
+    flat = studio.brief_of(edit).get("graphics") == "flat"      # the brief can keep every graphic on the flat kit
 
     def one(sp):
         sh, key, dur = kit_shot(sp["shot"]), sp["key"], round(sp["b"] - sp["a"], 2)
@@ -1035,24 +1037,33 @@ def cmd_graphics(edit, only=None):
         if bgf and (edit / bgf).is_file():       # a small copy: it is only ever seen blurred
             r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(edit / bgf), "-vf", "scale=960:-2", "-frames:v", "1", "-q:v", "4", str(d / "assets" / "bg.jpg")], capture_output=True)
             bg = "bg.jpg" if not r.returncode else None
-        got = motionkit.part(sh["kind"], sh, w, h, look, bg)
-        if not got:
+        flat_got = motionkit.part(sh["kind"], sh, w, h, look, bg)
+        deep = None if flat else motionkit3d.part(sh["kind"], sh, w, h, look, bg)      # real 3D first for the kinds that have it
+        if deep and not studio.three_assets(d):
+            deep = None
+        if not flat_got and not deep:
             return key, "no kit graphic for this kind"
         beat = {"id": key, "type": "scene", "props": {}, "start": sp["a"], "dur": dur, "clock": "video", "size": [w, h], "words": [], "line": "", "before": "", "after": ""}
-        page = motion.fill_template(beat, look0)
-        page = page.replace('<div id="viewport"><div id="rail"><div id="scene">', '<div id="viewport"><div id="rail"><div id="scene">\n<!-- real-text: the graphic\'s own words and numbers are its content -->' + got[0], 1)
-        page = page.replace("</body>", got[1] + "\n  </body>", 1)
-        (d / "index.html").write_text(page, encoding="utf-8")
         shutil.copy(root / "skills" / "motion" / "template" / "hyperframes.json", d / "hyperframes.json")
         if gsap.exists():
             shutil.copy(gsap, d / "assets" / "gsap.min.js")
         jsave(d / "beat.json", beat)
-        (d / "gates.json").unlink(missing_ok=True)
-        (d / "renders" / "clip.mp4").unlink(missing_ok=True)
-        subprocess.run([sys.executable, str(root / "lib" / "ai_editor" / "run.py"), str(root / "skills" / "motion" / "scripts" / "motion.py"), "check", str(d)], capture_output=True, text=True)
-        if (d / "renders" / "clip.mp4").exists():
-            (d / "kit.stamp").write_text(stamp, encoding="utf-8")
-            return key, "rendered"
+        for what, got in (("in 3D", deep), ("", flat_got)):      # the 3D stage, then the flat kit if that did not render
+            if not got:
+                continue
+            if what:
+                shutil.copy(motionkit3d.STAGE, d / "assets" / "stage3d.js")
+            page = motion.fill_template(beat, look0)
+            page = page.replace('<div id="viewport"><div id="rail"><div id="scene">', '<div id="viewport"><div id="rail"><div id="scene">\n<!-- real-text: the graphic\'s own words and numbers are its content -->' + got[0], 1)
+            page = page.replace("</body>", got[1] + "\n  </body>", 1)
+            (d / "index.html").write_text(page, encoding="utf-8")
+            (d / "gates.json").unlink(missing_ok=True)
+            (d / "renders" / "clip.mp4").unlink(missing_ok=True)
+            subprocess.run([sys.executable, str(root / "lib" / "ai_editor" / "run.py"), str(root / "skills" / "motion" / "scripts" / "motion.py"), "check", str(d)], capture_output=True, text=True)
+            f = d / "renders" / "clip.mp4"
+            if f.exists() and not (what and look_at(f)["empty"]):      # a 3D clip with empty frames did not draw: the flat kit takes it
+                (d / "kit.stamp").write_text(stamp, encoding="utf-8")
+                return key, ("rendered " + what).strip()
         return key, "did not render: drawn flat instead"
     with ThreadPoolExecutor(3) as ex:
         for key, what in ex.map(one, todo):

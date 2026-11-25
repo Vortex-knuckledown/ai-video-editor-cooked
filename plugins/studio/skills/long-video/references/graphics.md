@@ -101,3 +101,12 @@ Three fields make them read as designed:
 
 The colours are the video's `look` (ground, ink, accent) from scenes.json, set by the director.
 
+## The 3D stage (bars, versus, stat, tier, paper, source, layers)
+
+These seven kinds are drawn in real 3D when three.js is installed (`templates/stage3d.js`, driven by
+`scripts/motionkit3d.py`): chrome columns on a black mirror floor that really reflects, numbers on slabs of glass that
+refract the video's own footage behind them, a document standing in perspective with its line marked and a glass
+"key finding" card, plates that come apart with a label on each. One studio light for all of them, the film's accent
+as the second light, a camera that travels and arrives. Nothing to write differently: the same shot fields as above.
+A graphic that does not render in 3D is drawn by the flat kit, and that by the build. `"graphics": "flat"` in
+`brief.json` keeps a whole video on the flat kit. The stage never glows: type has a soft drop shadow only.
