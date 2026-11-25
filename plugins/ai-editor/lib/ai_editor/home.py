@@ -196,6 +196,20 @@ def studio_claude_do(what):
     return {"ok": False, "msg": "unknown"}
 
 
+# studio: the wider craft library (craftx.py): open-source video skills fetched from their authors onto this computer, never into the repo
+_CRAFTX = {"p": None}
+
+
+def studio_craftx(do=None):
+    d = Path(os.environ.get("AI_EDITOR_HOME", "").strip() or Path.home() / ".ai-video-editor") / "craft-ext"
+    n = len(list(d.glob("*/.fetched"))) if d.is_dir() else 0
+    p = _CRAFTX["p"]
+    t = studio_script("animated-video", "craftx.py")
+    if do == "install" and t and not (p and p.poll() is None):
+        _CRAFTX["p"] = p = subprocess.Popen([sys.executable, str(t), "setup"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"ready": n > 0 and (d / "INDEX.md").is_file(), "projects": n, "busy": bool(p and p.poll() is None)}
+
+
 # studio: topic ideas. The app goes on YouTube for a niche: what is being watched on it now (the most-viewed of the
 # top results and of the newest), so the user picks a topic that has an audience instead of guessing.
 _IDEAS = {}
@@ -2498,6 +2512,8 @@ def make_handler(token):
                 except Exception:   # noqa: BLE001
                     ok = False
                 return self.send(200, f.read_bytes(), "image/jpeg", cache="private, max-age=86400") if ok else self.send(404, {})
+            if path == "/studio/craftx":   # studio: is the wider craft library on this computer
+                return self.send(200, studio_craftx())
             if path == "/studio/clips":   # studio: the clip downloader's clips
                 return self.send(200, studio_clips())
             if path == "/studio/pocket":   # studio: is the Studio voice installed
@@ -2715,6 +2731,8 @@ def make_handler(token):
                     return self.send(400, {})
                 subprocess.Popen(library.reveal_cmd(p), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return self.send(200, {})
+            if path == "/studio/craftx":   # studio: fetch the wider craft library in the background
+                return self.send(200, studio_craftx("install"))
             if path == "/studio/ideas":   # studio: what is being watched on a niche
                 return self.send(200, studio_ideas(body.get("niche") if isinstance(body, dict) else ""))
             if path == "/studio/clips":   # studio: download one clip (a link, a start, an end) into the library's clips folder

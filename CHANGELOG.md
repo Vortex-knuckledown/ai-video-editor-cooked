@@ -4,6 +4,12 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **A wider craft library, on your computer only.** Settings > Connections > Craft fetches the text of about 94
+  open-source video skill projects (those graded safe with 300 stars or more on awesome-claude-video-skills) straight
+  from their authors into `~/.ai-video-editor/craft-ext`, and indexes every skill. The director, the script writer
+  and every scene builder search that index and read the skills that fit before they design. Some of these projects
+  are under AGPL or carry no licence, which is why they are fetched on each computer for the team's own use and are
+  never in this repository or in the app's download. Nothing fetched is ever run.
 - **Proven craft, adopted.** From a survey of 548 open-source video skills (awesome-claude-video-skills), the
   permissively licensed ones that fit were read in full and five were vendored unchanged with their licences in
   `plugins/studio/craft/`: `motionmaxxing` (Apache-2.0: measured durations, eases and stagger; the table of what a

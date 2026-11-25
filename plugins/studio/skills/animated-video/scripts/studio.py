@@ -993,6 +993,15 @@ CRAFT_NOTE = f"""Start from proven work, not from a blank page:
 BRIEF = BRIEF.replace("@@CRAFT@@", CRAFT_NOTE)
 
 
+def craft_ext_note():
+    """One line for a brief when the wider craft library is on this computer (craftx.py setup), else nothing."""
+    try:
+        import craftx
+        return craftx.note()
+    except Exception:   # noqa: BLE001
+        return ""
+
+
 # braces are doubled: the note goes through str.format with the brief
 THREE_NOTE = """
 Real 3D is available for this clip: three.js is in `assets/three.module.js` (with `assets/three.core.js` beside it).
@@ -1396,7 +1405,7 @@ def cmd_briefs(edit):
             say=beat["line"], before=beat["before"], after=beat["after"], words=json.dumps(beat["words"]),
             n=k + 1, total=len(rows), first=" The first scene: it hooks in the first second." if k == 0 else "",
             last=" The last scene: it lands the idea and holds its final state." if k + 1 == len(rows) else "",
-            start="- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
+            start=craft_ext_note() + "- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
             env=f'AI_EDITOR_HOME="{os.environ["AI_EDITOR_HOME"]}" ' if os.environ.get("AI_EDITOR_HOME") else "",
             run=root / "lib" / "ai_editor" / "run.py", motion=root / "skills" / "motion" / "scripts" / "motion.py",
             rounds=motion.ROUNDS), encoding="utf-8")

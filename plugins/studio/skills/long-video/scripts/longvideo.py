@@ -1907,7 +1907,7 @@ def cmd_briefs(edit):
             title=sc.get("title") or "", prompt=b.get("prompt") or "", look=json.dumps(look),
             visual=visual + (DIRECTION_NOTE.format(md=ddir / "direction.md", frames=", ".join(str(f) for f in frames[:5]), key=key) if frames else ""),
             say=beat["line"], before=beat["before"], after=beat["after"], words=json.dumps(mine), n=n, total=len(todo), first="", last="",
-            start="- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
+            start=studio.craft_ext_note() + "- Notes on this clip, if any: `notes.md` beside this brief. Do what they say.\n\n",
             env=f'AI_EDITOR_HOME="{os.environ["AI_EDITOR_HOME"]}" ' if os.environ.get("AI_EDITOR_HOME") else "",
             run=root / "lib" / "ai_editor" / "run.py", motion=root / "skills" / "motion" / "scripts" / "motion.py",
             rounds=motion.ROUNDS), encoding="utf-8")

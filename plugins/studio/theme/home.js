@@ -318,6 +318,18 @@
       '<div class="fw-int-tx"><b>Studio voice</b><span>21 natural narrators that run on this computer: free, offline, nothing sent anywhere. About 1 GB, once.</span></div></div>' +
       '<div class="fw-int-foot">' + pill + (d.ready || d.busy ? '' : '<button class="b1 s" onclick="studioPocket()">Install</button>') + '</div>' + mine + '</div>';
   }
+  // the wider craft library: open-source video skills the builders learn from, fetched onto this computer
+  var craftx = { d: null, at: 0 };
+  function craftxLoad() { craftx.at = Date.now(); get('/studio/craftx').then(function (d) { var was = JSON.stringify(craftx.d); craftx.d = d; if (was !== JSON.stringify(d)) redraw(); if (d.busy) setTimeout(craftxLoad, 5000); }).catch(function () {}); }
+  window.studioCraftx = function () { craftx.d = Object.assign({}, craftx.d, { busy: true }); redraw(); send('/studio/craftx', {}).then(function () { setTimeout(craftxLoad, 4000); }); };
+  function craftxConn() {
+    if (!craftx.d || Date.now() - craftx.at > 30000) craftxLoad();
+    var d = craftx.d || {};
+    var pill = d.busy ? '<span class="fw-pill">Fetching… ' + (d.projects || 0) + '</span>' : d.ready ? '<span class="fw-pill ok">' + d.projects + ' projects</span>' : '<span class="fw-pill">Not fetched</span>';
+    return '<div class="fw-int' + (d.ready ? ' is-on' : '') + '"><div class="fw-int-top"><span class="fw-int-logo"><b>C</b></span>' +
+      '<div class="fw-int-tx"><b>Craft library</b><span>Open-source video skills (motion, editing, story, Shorts) fetched from their authors for Framewise to learn from. Kept on this computer; for your team only.</span></div></div>' +
+      '<div class="fw-int-foot">' + pill + (d.busy ? '' : '<button class="' + (d.ready ? 'b2' : 'b1') + ' s" onclick="studioCraftx()">' + (d.ready ? 'Refresh' : 'Fetch') + '</button>') + '</div></div>';
+  }
   window.studioSettingsView = function () {
     var by = {}; KEYS.concat(STUDIO_KEYS).forEach(function (k) { by[k.id] = k; });
     var pick = function (ids) { return ids.filter(function (i) { return by[i]; }).map(function (i) { return conn(by[i]); }).join(''); };
@@ -332,7 +344,8 @@
           group('Voice', 'The narrator', pocketConn() + pick(['huggingface', 'elevenlabs'])) +
           group('Footage and pictures', 'For long videos', pick(['pixabay', 'pexels'])) +
           group('AI video', 'Generated shots, charged by each service', pick(['gemini', 'runway', 'higgsfield'])) +
-          group('Rendering', 'Where the video is made', modalConn());
+          group('Rendering', 'Where the video is made', modalConn()) +
+          group('Craft', 'What the builders learn from', craftxConn());
       },
       publishing: function () { return '<div class="fw-sec-h"><h2>Publishing</h2><p>Post finished videos to your social accounts.</p></div>' + stPost(); },
       storage: function () {
