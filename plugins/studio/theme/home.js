@@ -98,6 +98,7 @@
       'oninput="studioTyped(this)" onkeydown="if(event.key===\'Enter\'&&(event.metaKey||event.ctrlKey)){event.preventDefault();if(!/^https?:/i.test(this.value.trim()))studioGo()}">' + esc(hero.text) + '</textarea>' +
       '<div class="cf-row" id="cf-row">' + rowHTML() + '</div><div class="cf-drop">Drop your clips to edit them</div></div>' +
       (waiting ? '<button class="cf-wait" onclick="rgo(\'videos\')"><i></i>' + waiting + ' video' + (waiting === 1 ? ' is' : 's are') + ' waiting for you<span>Open Videos</span></button>' : '') +
+      (window.studioResLine ? window.studioResLine() : '') +
       ideasHTML() +
       '<div class="cf-kinds">' + kinds + '</div></div></div>';
   };
@@ -330,6 +331,32 @@
       '<div class="fw-int-tx"><b>Craft library</b><span>Open-source video skills (motion, editing, story, Shorts) fetched from their authors for Framewise to learn from. Kept on this computer; for your team only.</span></div></div>' +
       '<div class="fw-int-foot">' + pill + (d.busy ? '' : '<button class="' + (d.ready ? 'b2' : 'b1') + ' s" onclick="studioCraftx()">' + (d.ready ? 'Refresh' : 'Fetch') + '</button>') + '</div></div>';
   }
+  // one setup for every download (voices, models, the 3D kit, sounds, the craft library): Home says when something is
+  // missing, Settings > Storage lists each pack; everything lands in the one editor folder
+  var res = { d: null, at: 0 };
+  function gb(mb) { return mb >= 1000 ? (mb / 1000).toFixed(1) + ' GB' : mb + ' MB'; }
+  function resLoad() { res.at = Date.now(); get('/studio/resources').then(function (d) { var was = JSON.stringify(res.d); res.d = d; if (was !== JSON.stringify(d)) redraw(); if (d.busy) setTimeout(resLoad, 4000); }).catch(function () {}); }
+  window.studioSetup = function (ids) { if (res.d) res.d.busy = true; redraw(); send('/studio/resources', ids ? { ids: ids } : {}).then(function () { setTimeout(resLoad, 1500); }); };
+  function resNow(d) { var b = (d.packs || []).filter(function (p) { return p.busy; })[0]; return b ? 'Downloading: ' + b.name : 'Getting ready'; }
+  window.studioResLine = function () {
+    if (!res.d || Date.now() - res.at > 60000) resLoad();
+    var d = res.d; if (!d || d.ready || !(d.packs || []).length) return '';
+    if (d.busy) return '<button class="cf-wait" style="margin-top:10px" onclick="rgo(\'settings\')"><i></i>Setting up: ' + esc(resNow(d)) + '<span style="white-space:nowrap">' + gb(d.left_mb) + ' to go</span></button>';
+    return '<button class="cf-wait" style="margin-top:10px" onclick="studioSetup()">Setup is not finished: ' + gb(d.left_mb) + ' left to download<span style="white-space:nowrap">Launch setup</span></button>';
+  };
+  function resCard() {
+    if (!res.d || Date.now() - res.at > 30000) resLoad();
+    var d = res.d || { packs: [] };
+    var rows = (d.packs || []).map(function (p) {
+      var st = p.ready ? '<span class="fw-pill ok">On this computer</span>' : p.busy ? '<span class="fw-pill">Downloading…</span>' : p.waiting ? '<span class="fw-pill">Next</span>' :
+        p.error ? '<span class="fw-pill bad" title="' + esc(p.error) + '">Did not download</span>' : '<span class="fw-pill">Not downloaded</span>';
+      return '<div class="srow"><div><div>' + esc(p.name) + '</div><div class="t2" style="white-space:normal">' + esc(p.about) + ' · ' + gb(p.mb) + (p.error && !p.ready ? ' · ' + esc(p.error) : '') + '</div></div>' + st + '</div>';
+    }).join('');
+    var head = d.ready ? 'Everything is on this computer.' : d.busy ? esc(resNow(d)) + ', ' + gb(d.left_mb) + ' to go.' : gb(d.left_mb || 0) + ' not downloaded yet.';
+    return '<div class="scd"><div class="srow"><div><div>Tools and resources</div><div class="t2" style="white-space:normal">' + head + ' Each computer downloads its own copies from their publishers into one folder: ' +
+      esc(d.folder || '') + '. What came from where is in SOURCES.md there.</div></div>' +
+      (d.ready || d.busy ? '' : '<button class="b1 s" onclick="studioSetup()">Launch setup</button>') + '</div>' + rows + '</div>';
+  }
   window.studioSettingsView = function () {
     var by = {}; KEYS.concat(STUDIO_KEYS).forEach(function (k) { by[k.id] = k; });
     var pick = function (ids) { return ids.filter(function (i) { return by[i]; }).map(function (i) { return conn(by[i]); }).join(''); };
@@ -349,7 +376,7 @@
       },
       publishing: function () { return '<div class="fw-sec-h"><h2>Publishing</h2><p>Post finished videos to your social accounts.</p></div>' + stPost(); },
       storage: function () {
-        return '<div class="fw-sec-h"><h2>Storage</h2><p>Where your videos live, and what Framewise may look through.</p></div>' + stFolder() +
+        return '<div class="fw-sec-h"><h2>Storage</h2><p>Where your videos live, what Framewise downloaded, and what it may look through.</p></div>' + stFolder() + resCard() +
           '<div class="scd"><label class="srow" style="cursor:pointer"><div><div>Recent clips</div><div class="t2">Show clips from Movies, Desktop and Downloads when you start a video</div></div><input type="checkbox" class="st-check" ' + (R && R.scan_home ? 'checked' : '') + ' onchange="scanHome(this.checked)"></label></div>';
       },
       appearance: function () { return '<div class="fw-sec-h"><h2>Appearance</h2><p>The look of the app and the keys the editor uses.</p></div>' + stLook() + stKeys(); },

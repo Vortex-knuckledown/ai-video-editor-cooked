@@ -210,6 +210,23 @@ def studio_craftx(do=None):
     return {"ready": n > 0 and (d / "INDEX.md").is_file(), "projects": n, "busy": bool(p and p.poll() is None)}
 
 
+# studio: one setup for everything the studio downloads (voices, models, the 3D kit, sounds, the craft library), all into
+# the one editor folder, so the app stays small and each computer fetches its own copies from their publishers.
+def studio_resources(do=None, ids=None):
+    t = studio_script("animated-video", "resources.py")
+    if not t:
+        return {"packs": [], "ready": True, "busy": False}
+    if do == "setup":
+        subprocess.Popen([sys.executable, str(t), "setup", *[str(i) for i in ids or []][:12]], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
+        time.sleep(0.6)
+    try:
+        r = subprocess.run([sys.executable, str(t), "status"], capture_output=True, text=True, encoding="utf-8", timeout=20)
+        return json.loads(r.stdout)
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return {"packs": [], "ready": True, "busy": False}
+
+
 # studio: topic ideas. The app goes on YouTube for a niche: what is being watched on it now (the most-viewed of the
 # top results and of the newest), so the user picks a topic that has an audience instead of guessing.
 _IDEAS = {}
@@ -2512,6 +2529,8 @@ def make_handler(token):
                 except Exception:   # noqa: BLE001
                     ok = False
                 return self.send(200, f.read_bytes(), "image/jpeg", cache="private, max-age=86400") if ok else self.send(404, {})
+            if path == "/studio/resources":   # studio: what is downloaded on this computer, and what is left
+                return self.send(200, studio_resources())
             if path == "/studio/craftx":   # studio: is the wider craft library on this computer
                 return self.send(200, studio_craftx())
             if path == "/studio/clips":   # studio: the clip downloader's clips
@@ -2731,6 +2750,8 @@ def make_handler(token):
                     return self.send(400, {})
                 subprocess.Popen(library.reveal_cmd(p), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 return self.send(200, {})
+            if path == "/studio/resources":   # studio: fetch everything that is missing (or the packs named), in the background
+                return self.send(200, studio_resources("setup", body.get("ids") if isinstance(body, dict) else None))
             if path == "/studio/craftx":   # studio: fetch the wider craft library in the background
                 return self.send(200, studio_craftx("install"))
             if path == "/studio/ideas":   # studio: what is being watched on a niche
@@ -3168,6 +3189,7 @@ def make_handler(token):
                 if any(j["type"] == "setup" and j["state"] in ("queued", "taken") for j in d["jobs"]):
                     return self.send(200, {"id": latest(d, "setup")["id"]})
                 args = {}
+                studio_resources("setup")   # studio: the same press fetches the studio's downloads too; they wait for this setup where they need it
             elif kind == "style-change":   # "Tell it what to change": Claude turns the words into rules at that style's scope
                 text = re.sub(r"\s+", " ", str(b.get("text") or "")).strip()[:1000]
                 try:
@@ -3819,6 +3841,7 @@ def demo():
         subprocess.run, _run.venv_python = real_run, real_vp
     assert ran and ran[0][-2:] == ["/x/clip.mov", "--pre"], ran
     # the self-check never touches the real Trash: "trashed" files are removed from the temp folder instead
+    globals()["STUDIO_AUTO"] = False   # studio: no real downloads from the self-check
     globals()["trash"] = lambda p: (shutil.rmtree(p) if Path(p).is_dir() else Path(p).unlink(missing_ok=True)) or not Path(p).exists()
     for v in keys.VARS.values():
         os.environ.pop(v, None)

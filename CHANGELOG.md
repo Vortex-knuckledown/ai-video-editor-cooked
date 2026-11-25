@@ -4,6 +4,12 @@ What changed for every user, newest first.
 
 ## Unreleased (studio)
 
+- **One setup that downloads everything, into one folder.** The app stays about 25 MB. Start setup on a new computer
+  (or "Launch setup" on Home when something is missing) now also fetches the studio's own downloads: the narrator
+  voice, the Studio voice, the thumbnail cut-out model and font, the 3D engine and kit, the sound effects and the
+  craft library, about 2 GB, each from its publisher into `~/.ai-video-editor`. Settings > Storage lists every pack
+  with its size and state. `SOURCES.md` in that folder records what was fetched, from where and under which licence.
+- The craft library's index no longer hangs on an oddly formatted skill file.
 - **A wider craft library, on your computer only.** Settings > Connections > Craft fetches the text of about 94
   open-source video skill projects (those graded safe with 300 stars or more on awesome-claude-video-skills) straight
   from their authors into `~/.ai-video-editor/craft-ext`, and indexes every skill. The director, the script writer

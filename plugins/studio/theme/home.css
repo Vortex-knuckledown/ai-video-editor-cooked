@@ -371,7 +371,7 @@ body.fw-ask #askq.on { display: flex !important; }
 .fw-int-tx b { font-size: 15.5px; font-weight: 620; letter-spacing: -.012em; }
 .fw-int-tx span { font-size: 13.5px; line-height: 19px; color: var(--t3); }
 .fw-int-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: auto; }
-.fw-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--t3); }
+.fw-pill { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; flex: none; font-size: 12.5px; color: var(--t3); }
 .fw-pill::before { content: ""; width: 7px; height: 7px; border-radius: 4px; background: var(--t4); }
 .fw-pill.ok { color: var(--ok); } .fw-pill.ok::before { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
 .fw-pill.bad { color: #FF9F7A; } .fw-pill.bad::before { background: #FF9F7A; }
