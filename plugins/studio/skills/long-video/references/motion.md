@@ -22,14 +22,14 @@ word it lands on (the brief gives every word's time).
 
 ## 2. How each thing moves
 
-- **Arrive**: 0.35 to 0.6 s (never over 0.8 s), `power3.out` or `expo.out`, two or three properties at once
+- **Arrive**: 0.35 to 0.6 s (never over 0.8 s), `power3.out` (`power4.out` for a fast arrival), two or three properties at once
   (position and opacity and blur, or scale and opacity), never opacity alone, never linear on a move.
 - **Leave**: 65 to 75% of the arrival's time, `power3.in`.
 - **Groups**: 40 to 80 ms between items, the whole stagger under 0.5 s; from the ninth item on, they arrive together.
 - **Who follows whom**: a child trails its parent by 50 to 150 ms; a shadow or label lands 50 to 100 ms after its
   panel; a secondary part moves 30 to 50% as far as the main one; the ground moves 20 to 30% the other way.
-- **Overshoot**: none on glass, panels, data, numbers or bars (an overshoot reads as a real value). `back.out(1.4)`
-  for at most one playful accent in a film. Never `bounce` or `elastic`.
+- **Overshoot**: none. An overshoot on a number or a bar reads as a real value, and on a panel it reads as a toy.
+  `back`, `elastic`, `expo` and bounce are refused by `check`.
 - **Numbers and charts**: a count-up 0.8 to 1.2 s `power2.out`; bars grow about 1 s each, 0.3 to 0.45 s apart, on the
   same axis; a line draws itself (`strokeDashoffset`) in 1 to 1.5 s; a marker sweep takes about 1 s a line.
 - **Live insides, not breathing.** A thing that stays on screen is kept alive by what it IS doing: water rising,
@@ -58,7 +58,7 @@ two things at rest.
   its fade finished in the first 30% of the travel); the new one is already moving the same way when it appears
   (`power4.out`, from the same distance, starting at opacity 0.35).
 - **Through the lens** for a text or panel swap: out with scale 1 to 1.2 and blur 0 to 10 px in 0.2 s (`power3.in`),
-  in from 0.75 to 1 and blur 10 to 0 in 0.5 s (`expo.out`). The scale keeps growing across the cut.
+  in from 0.75 to 1 and blur 10 to 0 in 0.5 s (`power4.out`). The scale keeps growing across the cut.
 - Two or three kinds of cut in a film, repeated; not a new one each time.
 
 ## 5. Measure, then fix

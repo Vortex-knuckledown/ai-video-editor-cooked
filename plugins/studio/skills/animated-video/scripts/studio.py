@@ -1005,7 +1005,7 @@ def motion_note(run, edit, key, dur):
             "each further piece ARRIVES on the word that names it. Nothing sits finished while the voice is still explaining it.\n"
             "  - One camera on one wrapper, moving with intent from the first frame to the last and going to each new subject as it is named; three depth layers under it. "
             "What stays on screen is alive by what it does (filling, drawing, counting, flowing), never by breathing or floating. Swaps inside the scene are cut at speed, "
-            "same direction, never crossfaded. Arrivals 0.35 to 0.6 s `power3.out` or `expo.out` on two or three properties; no bounce, no elastic, no overshoot on numbers.\n"
+            "same direction, never crossfaded. Arrivals 0.35 to 0.6 s `power3.out` on two or three properties; no overshoot (`back`, `elastic`, `expo` fail the check).\n"
             f"  - After `check` passes, MEASURE it: `python3 \"{run}\" \"{lv}\" look \"{edit}\" --only {key}`. It must print `ok`: a median change of 2.0 a frame or more "
             "and no whole second under 1.0. A `FIX` names the quiet seconds: give them the next event, a camera arrival or a live inside (never grain, flicker or a wobble), "
             "then check and measure again. Do not hand the scene back while it prints `FIX`.\n")
