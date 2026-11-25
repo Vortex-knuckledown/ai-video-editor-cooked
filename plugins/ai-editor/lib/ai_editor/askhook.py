@@ -463,6 +463,14 @@ def relay(payload, timeout=None, poll=0.5):
                     sent.remove(u)
                     if hide:        # fork: the app restarted under a waiting question: offer it again at once, not at the next check
                         beat = 0
+                if hide and result and not result.get("answers"):   # fork: "Answer in Claude Code instead" from a hidden Claude leads to a
+                    result = None                                    # terminal box nobody can see: the question stays in the app
+                    try:
+                        _call(u, "/ask/clear", {"id": qid})
+                    except Exception:
+                        pass
+                    sent.remove(u)
+                    beat = 0
                 if result:
                     break
             if not sent and not hide:
